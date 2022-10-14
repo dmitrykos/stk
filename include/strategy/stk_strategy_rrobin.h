@@ -14,12 +14,21 @@
 
 namespace stk {
 
+/*! \class SwitchStrategyRoundRobin
+    \brief Task switching strategy concrete implementation - Round-Robin.
+
+    Tasks are given an equal amount of time.
+*/
 class SwitchStrategyRoundRobin : public ITaskSwitchStrategy
 {
 public:
+	/*! \brief     Get next task.
+		\param[in] current: Pointer to the current task.
+		\return    Pointer to the next task.
+	*/
 	IKernelTask *GetNext(IKernelTask *current)
 	{
-		return current->GetNext();
+	    return current->GetNext();
 	}
 };
 

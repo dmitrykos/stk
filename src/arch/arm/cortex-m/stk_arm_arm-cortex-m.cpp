@@ -7,6 +7,10 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
+#include "stk_config.h"
+
+#ifdef _STK_ARCH_ARM_CORTEX_M
+
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
 using namespace stk;
@@ -22,282 +26,285 @@ using namespace stk;
 
 //! If defined, assume CPU may support FPU.
 #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
-	#define STK_CORTEX_M_EXPECT_FPU
+    #define STK_CORTEX_M_EXPECT_FPU
 #endif
 
 //! If defined, manage Link Register (LR) per task.
 #if defined(__CORTEX_M) && (__CORTEX_M >= 3)
-	#define STK_CORTEX_M_MANAGE_LR
+    #define STK_CORTEX_M_MANAGE_LR
 #endif
 
 //! Number of registers kept in stack.
 #ifdef STK_CORTEX_M_MANAGE_LR
-	#define STK_CORTEX_M_REGISTER_COUNT 17
+    #define STK_CORTEX_M_REGISTER_COUNT 17
 #else
-	#define STK_CORTEX_M_REGISTER_COUNT 16
+    #define STK_CORTEX_M_REGISTER_COUNT 16
 #endif
 
-static IPlatform::EventHandler *g_KernelHandler = NULL;
+static IPlatform::IEventHandler *g_KernelHandler = NULL;
 static Stack *g_TaskStackIdle = NULL;
 static Stack *g_TaskStackActive = NULL;
 
-extern "C" void SysTick_Handler()
+extern "C" void _STK_SYSTICK_HANDLER()
 {
-	g_KernelHandler->OnSysTick(&g_TaskStackIdle, &g_TaskStackActive);
+    g_KernelHandler->OnSysTick(&g_TaskStackIdle, &g_TaskStackActive);
 }
 
-extern "C" __stk_attr_naked void PendSV_Handler()
+extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 {
-	STK_CORTEX_M_DISABLE_INTERRUPTS();
+    STK_CORTEX_M_DISABLE_INTERRUPTS();
 
-	// get Process Stack Pointer (PSP) of the current stack
-	__asm volatile("MRS	r0, psp");
+    // get Process Stack Pointer (PSP) of the current stack
+    __asm volatile("MRS r0, psp");
 
-	// save FP general registers
+    // save FP general registers
 #ifdef STK_CORTEX_M_EXPECT_FPU
-	__asm volatile(
-	"TST		LR, #16			\n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
-	"IT			EQ				\n"
-	"VSTMDBEQ 	r0!, {s16-s31}	\n" // store 16 SP registers
-	);
+    __asm volatile(
+    "TST        LR, #16         \n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
+    "IT         EQ              \n"
+    "VSTMDBEQ   r0!, {s16-s31}  \n" // store 16 SP registers
+    );
 #endif
 
-	// save general registers to the stack memory
-	// note: for Cortex-M3 and higher save LR to keep correct Thread state of the task when it is restored
+    // save general registers to the stack memory
+    // note: for Cortex-M3 and higher save LR to keep correct Thread state of the task when it is restored
 #ifdef STK_CORTEX_M_MANAGE_LR
-	__asm volatile("STMDB	r0!, {r4-r11, LR}");
+    __asm volatile("STMDB   r0!, {r4-r11, LR}");
 #else
-	// note: STMIA is limited to r0-r7 range, therefore save via stack memory
-	__asm volatile(
-	"SUB	r0, #16			\n"
-	"STMIA	r0!, {r4-r7}	\n"
-	"MOV	r4, r8			\n"
-	"MOV	r5, r9			\n"
-	"MOV	r6, r10			\n"
-	"MOV	r7, r11			\n"
-	"SUB	r0, #32			\n"
-	"STMIA	r0!, {r4-r7}	\n"
-	"SUB	r0, #16			\n");
+    // note: STMIA is limited to r0-r7 range, therefore save via stack memory
+    __asm volatile(
+    "SUB    r0, #16         \n"
+    "STMIA  r0!, {r4-r7}    \n"
+    "MOV    r4, r8          \n"
+    "MOV    r5, r9          \n"
+    "MOV    r6, r10         \n"
+    "MOV    r7, r11         \n"
+    "SUB    r0, #32         \n"
+    "STMIA  r0!, {r4-r7}    \n"
+    "SUB    r0, #16         \n");
 #endif
 
-	// save stack memory to the idle stack
-	__asm volatile(
-	"LDR	r1, %[stack]	\n"
-	"STR	r0, [r1]		\n"
-	::
-	[stack] "o" (g_TaskStackIdle));
+    // save stack memory to the idle stack
+    __asm volatile(
+    "LDR    r1, %[stack]    \n"
+    "STR    r0, [r1]        \n"
+    ::
+    [stack] "o" (g_TaskStackIdle));
 
-	// set active stack
-	__asm volatile(
-	"LDR	r1, %[stack]	\n"
-	"LDR	r0, [r1]		\n" // load
-	::
-	[stack] "o" (g_TaskStackActive));
+    // set active stack
+    __asm volatile(
+    "LDR    r1, %[stack]    \n"
+    "LDR    r0, [r1]        \n" // load
+    ::
+    [stack] "o" (g_TaskStackActive));
 
-	// load general registers from the active stack
+    // load general registers from the active stack
 #ifdef STK_CORTEX_M_MANAGE_LR
-	__asm volatile("LDMIA	r0!, {r4-r11, LR}");
+    __asm volatile("LDMIA   r0!, {r4-r11, LR}");
 #else
-	// note: LDMIA is limited to r0-r7 range, therefore load via stack memory
-	__asm volatile(
-	"LDMIA	r0!,{r4-r7}	\n"
-	"MOV	r8, r4		\n"
-	"MOV	r9, r5		\n"
-	"MOV	r10, r6		\n"
-	"MOV	r11, r7		\n"
-	"LDMIA	r0!,{r4-r7}	\n");
+    // note: LDMIA is limited to r0-r7 range, therefore load via stack memory
+    __asm volatile(
+    "LDMIA  r0!,{r4-r7} \n"
+    "MOV    r8, r4      \n"
+    "MOV    r9, r5      \n"
+    "MOV    r10, r6     \n"
+    "MOV    r11, r7     \n"
+    "LDMIA  r0!,{r4-r7} \n");
 #endif
 
-	// load FP general registers
+    // load FP general registers
 #ifdef STK_CORTEX_M_EXPECT_FPU
-	__asm volatile(
-	"TST		LR, #16			\n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
-	"IT			EQ				\n" // if result is positive
-	"VLDMIAEQ 	r0!, {s16-s31}	\n" // restore FP registers
-	);
+    __asm volatile(
+    "TST        LR, #16         \n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
+    "IT         EQ              \n" // if result is positive
+    "VLDMIAEQ   r0!, {s16-s31}  \n" // restore FP registers
+    );
 #endif
 
-	// set Process Stack Pointer (PSP) of the new active stack
-	__asm volatile("MSR	psp, r0");
+    // set Process Stack Pointer (PSP) of the new active stack
+    __asm volatile("MSR psp, r0");
 
-	STK_CORTEX_M_ENABLE_INTERRUPTS();
+    STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-	__asm volatile("BX	LR");
+    __asm volatile("BX  LR");
 }
 
 static __stk_attr_naked void OnTaskRun()
 {
-	STK_CORTEX_M_DISABLE_INTERRUPTS();
+    STK_CORTEX_M_DISABLE_INTERRUPTS();
 
-	// set active stack
-	__asm volatile(
-	"LDR	r1, %[stack]	\n"
-	"LDR	r0, [r1]		\n"
-	::
-	[stack] "o" (g_TaskStackActive));
+    // set active stack
+    __asm volatile(
+    "LDR    r1, %[stack]    \n"
+    "LDR    r0, [r1]        \n"
+    ::
+    [stack] "o" (g_TaskStackActive));
 
-	// load general registers from the active stack
+    // load general registers from the active stack
 #ifdef STK_CORTEX_M_MANAGE_LR
-	__asm volatile("LDMIA	r0!, {r4-r11, LR}");
+    __asm volatile("LDMIA   r0!, {r4-r11, LR}");
 #else
-	// note: LDMIA is limited to r0-r7 range, therefore load via stack memory
-	__asm volatile(
-	"LDMIA	r0!, {r4-r7}	\n"
-	"MOV	r8, r4			\n"
-	"MOV	r9, r5			\n"
-	"MOV	r10, r6			\n"
-	"MOV	r11, r7			\n"
-	"LDMIA	r0!, {r4-r7}	\n");
+    // note: LDMIA is limited to r0-r7 range, therefore load via stack memory
+    __asm volatile(
+    "LDMIA  r0!, {r4-r7}    \n"
+    "MOV    r8, r4          \n"
+    "MOV    r9, r5          \n"
+    "MOV    r10, r6         \n"
+    "MOV    r11, r7         \n"
+    "LDMIA  r0!, {r4-r7}    \n");
 
-	// return to the Thread mode, use PSP state & stack
-	__asm volatile("LDR	LR, =%0" :: "i" (STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE));
+    // return to the Thread mode, use PSP state & stack
+    __asm volatile("LDR LR, =%0" :: "i" (STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE));
 #endif
 
-	// set Process Stack Pointer (PSP) of the new active stack
-	__asm volatile("MSR	psp, r0");
+    // set Process Stack Pointer (PSP) of the new active stack
+    __asm volatile("MSR psp, r0");
 
-	STK_CORTEX_M_ENABLE_INTERRUPTS();
+    STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-	__asm volatile("BX	LR");
+    __asm volatile("BX  LR");
 }
 
 static __stk_forceinline void StartFirstTask()
 {
-    __asm volatile("SVC	#0");
+    __asm volatile("SVC #0");
 }
 
 static __stk_forceinline void ClearFpuState()
 {
 #ifdef STK_CORTEX_M_EXPECT_FPU
-	__set_CONTROL(__get_CONTROL() & ~CONTROL_FPCA_Msk);
+    __set_CONTROL(__get_CONTROL() & ~CONTROL_FPCA_Msk);
 #endif
 }
 
 static __stk_forceinline void EnableFullFpuAccess()
 {
 #ifdef STK_CORTEX_M_EXPECT_FPU
-	// enable FPU CP10/CP11 Secure and Non-secure register access
-	SCB->CPACR |= 0x3 << 20 | 0x3 << 22;
+    // enable FPU CP10/CP11 Secure and Non-secure register access
+    SCB->CPACR |= 0x3 << 20 | 0x3 << 22;
 #endif
 }
 
 extern "C" void SVC_Handler_Main(size_t *svc_args)
 {
-	// Stack contains: r0, r1, r2, r3, r12, r14, the return address and xPSR, First argument (r0) is svc_args[0]
-	char svc_number = ((char *)svc_args[6])[-2];
+    // Stack contains: r0, r1, r2, r3, r12, r14, the return address and xPSR, First argument (r0) is svc_args[0]
+    char svc_number = ((char *)svc_args[6])[-2];
 
-	switch (svc_number)
-	{
-	case 0: {
-		// FPU
-		EnableFullFpuAccess();
+    switch (svc_number)
+    {
+    case 0: {
+        // FPU
+        EnableFullFpuAccess();
 
-		// clear FPU usage status if FPU was used before kernel start
-		ClearFpuState();
+        // clear FPU usage status if FPU was used before kernel start
+        ClearFpuState();
 
-		// notify kernel
-		g_KernelHandler->OnStart();
+        // notify kernel
+        g_KernelHandler->OnStart();
 
-		// execute first task
-		OnTaskRun();
-		break; }
-	default:
-		assert(false);
-		break;
-	}
+        // execute first task
+        OnTaskRun();
+        break; }
+    default:
+        assert(false);
+        break;
+    }
 }
 
 // source:
 // ARM: How to Write an SVC Function, https://developer.arm.com/documentation/ka004005/latest
 extern "C" __stk_attr_naked void SVC_Handler()
 {
-	__asm volatile(
-	".global SVC_Handler_Main	\n"
-	"TST	LR, #4				\n"
-	"ITE	EQ					\n"
-	"MRSEQ	r0, MSP				\n"
-	"MRSNE	r0, PSP				\n"
-	"B		SVC_Handler_Main	\n");
+    __asm volatile(
+    ".global SVC_Handler_Main   \n"
+    "TST    LR, #4              \n"
+    "ITE    EQ                  \n"
+    "MRSEQ  r0, MSP             \n"
+    "MRSNE  r0, PSP             \n"
+    "B      SVC_Handler_Main    \n");
 }
 
 static void OnTaskExit()
 {
-	volatile static int i = 0;
-	while (true)
-	{
-		++i;
-		__asm volatile("NOP");
-	}
+    volatile static int i = 0;
+    while (true)
+    {
+        ++i;
+        __asm volatile("NOP");
+    }
 }
 
-void PlatformArmCortexM::Start(EventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
+void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
 {
-	m_systick_resolution = resolution_us;
-	
-	g_KernelHandler = event_handler;
-	g_TaskStackIdle = first_task->GetUserStack();
-	g_TaskStackActive = first_task->GetUserStack();
+    m_systick_resolution = resolution_us;
+    
+    g_KernelHandler = event_handler;
+    g_TaskStackIdle = first_task->GetUserStack();
+    g_TaskStackActive = first_task->GetUserStack();
 
-	NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
-	NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+    NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+    NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
-	uint32_t result = SysTick_Config(SystemCoreClock / resolution_us);
-	assert(result == 0);
+    uint32_t result = SysTick_Config(SystemCoreClock / resolution_us);
+    assert(result == 0);
+    (void)result;
 
-	StartFirstTask();
+    StartFirstTask();
 }
 
 bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
 {
-	uint32_t stack_size = user_task->GetStackSize();
-	if (stack_size <= STK_CORTEX_M_REGISTER_COUNT)
-		return false;
+    uint32_t stack_size = user_task->GetStackSize();
+    if (stack_size <= STK_CORTEX_M_REGISTER_COUNT)
+        return false;
 
-	size_t *stack_top = user_task->GetStack() + stack_size;
+    size_t *stack_top = user_task->GetStack() + stack_size;
 
-	// initialize stack memory
-	for (int32_t i = -stack_size; i <= -4; ++i)
-	{
-		stack_top[i] = 0; //(size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef);
-	}
+    // initialize stack memory
+    for (int32_t i = -stack_size; i <= -4; ++i)
+    {
+        stack_top[i] = (size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef);
+    }
 
-	size_t xPSR = 0x01000000;
-	size_t PC   = (size_t)user_task->GetFunc() & ~0x1UL; // clear bit 0 for Cortex-M compliance
-	size_t LR   = (size_t)OnTaskExit;
-	size_t R0   = (size_t)user_task->GetFuncUserData();
+    size_t xPSR = 0x01000000;
+    size_t PC   = (size_t)user_task->GetFunc() & ~0x1UL; // clear bit 0 for Cortex-M compliance
+    size_t LR   = (size_t)OnTaskExit;
+    size_t R0   = (size_t)user_task->GetFuncUserData();
 
-	// xPSR, PC, LR, R12, R3, R2, R1, R0
-	// -1    -2  -3  -4   -5  -6  -7  -8
-	stack_top[-1] = xPSR;
-	stack_top[-2] = PC;
-	stack_top[-3] = LR;
-	stack_top[-8] = R0;
+    // xPSR, PC, LR, R12, R3, R2, R1, R0
+    // -1    -2  -3  -4   -5  -6  -7  -8
+    stack_top[-1] = xPSR;
+    stack_top[-2] = PC;
+    stack_top[-3] = LR;
+    stack_top[-8] = R0;
 
-	// Exception exit value (LR) if FP is present
+    // Exception exit value (LR) if FP is present
 #ifdef STK_CORTEX_M_MANAGE_LR
-	stack_top[-9] = STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE;
+    stack_top[-9] = STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE;
 #endif
 
-	// initialize Stack Pointer (SP)
-	stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
+    // initialize Stack Pointer (SP)
+    stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
 
-	return true;
+    return true;
 }
 
 void PlatformArmCortexM::SwitchContext()
 {
-	SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 }
 
 int32_t PlatformArmCortexM::GetSysTickResolution() const
 {
-	return m_systick_resolution;
+    return m_systick_resolution;
 }
 
 void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
 {
-	if (mode == ACCESS_PRIVILEGED)
-		STK_CORTEX_M_PRIVILEGED_MODE_ON();
-	else
-		STK_CORTEX_M_PRIVILEGED_MODE_OFF();
+    if (mode == ACCESS_PRIVILEGED)
+        STK_CORTEX_M_PRIVILEGED_MODE_ON();
+    else
+        STK_CORTEX_M_PRIVILEGED_MODE_OFF();
 }
+
+#endif // _STK_ARCH_ARM_CORTEX_M

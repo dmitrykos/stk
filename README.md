@@ -34,7 +34,7 @@ in total which are switching LEDs with 1 second periodicity.
 #include <stk.h>
 #include "board.h"
 
-static uint8_t g_TaskSwitch = 0;
+static volatile uint8_t g_TaskSwitch = 0;
 
 template <stk::EAccessMode _AccessMode>
 class Task : public stk::UserTask<256, _AccessMode>

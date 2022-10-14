@@ -19,33 +19,37 @@
 #include "stk_config.h"
 
 #ifdef __GNUC__
-	#define __stk_unreachable() __builtin_unreachable()
+    #define __stk_unreachable() __builtin_unreachable()
 #endif
 
 #ifdef __GNUC__
-	#define __stk_attr_noreturn __attribute__((__noreturn__))
+    #define __stk_attr_noreturn __attribute__((__noreturn__))
 #elif defined(__ICCARM__)
-	#define __stk_attr_noreturn __attribute__((noreturn))
+    #define __stk_attr_noreturn __attribute__((noreturn))
 #endif
 
 #ifdef __GNUC__
-	#define __stk_attr_naked __attribute__((naked))
+    #define __stk_attr_naked __attribute__((naked))
 #elif defined(__ICCARM__)
-	#define __stk_attr_naked __attribute__((naked))
+    #define __stk_attr_naked __attribute__((naked))
 #endif
 
 #ifdef __GNUC__
-	#define __stk_aligned(x) __attribute__((aligned(x)))
+    #define __stk_aligned(x) __attribute__((aligned(x)))
 #elif defined(__ICCARM__)
-	#define __stk_aligned(x) __attribute__((aligned(x)))
+    #define __stk_aligned(x) __attribute__((aligned(x)))
 #endif
 
 #ifdef __GNUC__
-	#define __stk_forceinline __attribute__((always_inline)) inline
+    #define __stk_forceinline __attribute__((always_inline)) inline
 #elif defined(__ICCARM__)
-	#define __stk_forceinline __forceinline
+    #define __stk_forceinline __forceinline
 #endif
 
+/*! \fn    forced_cast
+    \brief Force-cast value of one type to another. Overcomes compiler error or warning when trying
+           to cast in normal way.
+*/
 template <class _To, class _From> static inline _To forced_cast(_From from)
 {
     union { _From from; _To to; } cast;

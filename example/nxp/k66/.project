@@ -72,6 +72,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/stk_defs.h</locationURI>
 		</link>
 		<link>
+			<name>stk/include/stk_helper.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/stk_helper.h</locationURI>
+		</link>
+		<link>
 			<name>stk/include/stk_linked_list.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/stk_linked_list.h</locationURI>

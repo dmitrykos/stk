@@ -12,4 +12,3 @@
 using namespace stk;
 
 IKernelService *stk::g_Kernel = NULL;
-

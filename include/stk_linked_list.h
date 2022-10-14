@@ -27,9 +27,9 @@ public:
     typedef DListHead<_Ty>  HeadT;
 
 private:
-    HeadT  *m_head;
-    EntryT *m_prev;
-    EntryT *m_next;
+    HeadT  *m_head; //!< list head
+    EntryT *m_prev; //!< previous list entry
+    EntryT *m_next; //!< next list entry
 
 public:
     DListEntry() : m_head(NULL), m_prev(NULL), m_next(NULL)

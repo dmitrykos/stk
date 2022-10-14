@@ -14,17 +14,20 @@
 
 namespace stk {
 
+/*! \class PlatformArmCortexM
+    \brief Concrete implementation of the platform driver for Arm Cortex-M0, M3, M4, M7 processors.
+*/
 class PlatformArmCortexM : public IPlatform
 {
 public:
-	void Start(EventHandler *event_handler, uint32_t resolution_us, IKernelTask *firstTask);
-	bool InitStack(Stack *stack, ITask *userTask);
-	void SwitchContext();
-	int32_t GetSysTickResolution() const;
-	void SetAccessMode(EAccessMode mode);
+    void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *firstTask);
+    bool InitStack(Stack *stack, ITask *userTask);
+    void SwitchContext();
+    int32_t GetSysTickResolution() const;
+    void SetAccessMode(EAccessMode mode);
 
 private:
-	int32_t m_systick_resolution; //!< system tick resolution (microseconds)
+    int32_t m_systick_resolution; //!< system tick resolution (microseconds)
 };
 
 } // namespace stk
