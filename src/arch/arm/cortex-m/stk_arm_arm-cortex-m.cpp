@@ -181,7 +181,7 @@ static __stk_forceinline void EnableFullFpuAccess()
 {
 #ifdef STK_CORTEX_M_EXPECT_FPU
     // enable FPU CP10/CP11 Secure and Non-secure register access
-    SCB->CPACR |= 0x3 << 20 | 0x3 << 22;
+    SCB->CPACR |= (0b11 << 20) | (0b11 << 22);
 #endif
 }
 

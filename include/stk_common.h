@@ -11,99 +11,233 @@
 #define STK_COMMON_H_
 
 #include "stk_defs.h"
+#include "stk_linked_list.h"
 
 namespace stk {
 
+/*! \typedef RunFuncT
+    \brief   User task main entry function prototype.
+*/
 typedef void (*RunFuncT) (void *userData);
 
+/*! \enum  EAccessMode
+    \brief Hardware access mode by the user task.
+*/
 enum EAccessMode
 {
-	ACCESS_USER = 0, //!< Unprivileged access mode (access to some hardware is restricted, see CPU manual for details).
-	ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
+    ACCESS_USER = 0,  //!< Unprivileged access mode (access to some hardware is restricted, see CPU manual for details).
+    ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
 };
 
+/*! \class Stack
+    \brief Stack descriptor.
+*/
 struct Stack
 {
-	size_t SP; // SP register
+    size_t SP; //!< Stack Pointer (SP) register
 };
 
+/*! \class ITask
+    \brief Interface of the user task.
+
+    Kernel task hosts user task.
+
+    Usage example:
+    \code
+    Task<ACCESS_USER> task1(0);
+    Task<ACCESS_USER> task2(1);
+
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    \endcode
+*/
 class ITask
 {
 public:
-	virtual RunFuncT GetFunc() = 0;
-	virtual void *GetFuncUserData() = 0;
-	virtual size_t *GetStack() = 0;
-	virtual uint32_t GetStackSize() const = 0;
-	virtual EAccessMode GetAccessMode() const = 0;
+    /*! \brief     Get user task's main entry function.
+    */
+    virtual RunFuncT GetFunc() = 0;
+
+    /*! \brief     Get user data which is supplied to the user task's main entry function.
+    */
+    virtual void *GetFuncUserData() = 0;
+
+    /*! \brief     Get pointer to the stack memory of the user task.
+    */
+    virtual size_t *GetStack() = 0;
+
+    /*! \brief     Get size of the stack memory array (number of size_t elements in the array, see UserTask).
+    */
+    virtual uint32_t GetStackSize() const = 0;
+
+    /*! \brief     Get hardware access mode of the user task.
+    */
+    virtual EAccessMode GetAccessMode() const = 0;
 };
 
-template <uint32_t _StackSize, EAccessMode _AccessMode>
-class UserTask : public ITask
+/*! \class IKernelTask
+    \brief Interface of the kernel task.
+
+    Kernel task hosts user task.
+*/
+class IKernelTask : public util::DListEntry<IKernelTask>
 {
 public:
-	size_t *GetStack() { return Stack; }
-	uint32_t GetStackSize() const { return _StackSize; }
-	EAccessMode GetAccessMode() const { return _AccessMode; }
+    /*! \typedef   ListHeadType
+        \brief     List head type for IKernelTask elements.
+    */
+    typedef util::DListHead<IKernelTask> ListHeadType;
 
-private:
-	__stk_aligned(8) size_t Stack[_StackSize];
+    /*! \typedef   ListEntryType
+        \brief     List entry type of IKernelTask elements.
+    */
+    typedef util::DListEntry<IKernelTask> ListEntryType;
+
+    /*! \brief     Get user task.
+    */
+    virtual ITask *GetUserTask() = 0;
+
+    /*! \brief     Get pointer to the user task's stack.
+    */
+    virtual Stack *GetUserStack() = 0;
 };
 
-class IKernelTask
-{
-public:
-	virtual IKernelTask *GetNext() = 0;
-	virtual ITask *GetUserTask() = 0;
-	virtual Stack *GetUserStack() = 0;
-};
+/*! \class IPlatform
+    \brief Interface of the platform driver.
 
+    Platform driver represents an underlying hardware and implements the following logic:
+     - time tick
+     - context switching
+     - hardware access from the user task
+
+    All functions are called by the kernel implementation.
+*/
 class IPlatform
 {
 public:
-	class EventHandler
-	{
-	public:
-		virtual void OnStart() = 0;
-		virtual void OnSysTick(Stack **idle, Stack **active) = 0;
-	};
+    /*! \class IEventHandler
+        \brief Interface of the back-end event handler.
 
-	virtual void Start(IPlatform::EventHandler *eventHandler, uint32_t resolution_us, IKernelTask *firstTask) = 0;
-	virtual bool InitStack(Stack *stack, ITask *userTask) = 0;
-	virtual void SwitchContext() = 0;
-	virtual int32_t GetSysTickResolution() const = 0;
-	virtual void SetAccessMode(EAccessMode mode) = 0;
+        It is inherited by the kernel implementation and delivers events from ISR.
+    */
+    class IEventHandler
+    {
+    public:
+        virtual void OnStart() = 0;
+        virtual void OnSysTick(Stack **idle, Stack **active) = 0;
+    };
+
+    /*! \brief     Start scheduling.
+        \param[in] event_handler: Event handler.
+        \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
+        \param[in] first_task: First kernel task which will be called upon start.
+        \note      This function never returns!
+    */
+    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task) = 0;
+
+    /*! \brief     Initialize stack memory of the user task.
+        \param[in] stack: Stack descriptor.
+        \param[in] user_task: User task to which Stack belongs.
+    */
+    virtual bool InitStack(Stack *stack, ITask *user_task) = 0;
+
+    /*! \brief     Switches context of the tasks.
+    */
+    virtual void SwitchContext() = 0;
+
+    /*! \brief     Get resolution of the system tick (SystTick) timer in microseconds.
+                   Resolution means a number of microseconds between system tick timer ISRs.
+        \return    Microseconds.
+    */
+    virtual int32_t GetSysTickResolution() const = 0;
+
+    /*! \brief     Set hardware access mode for the Thread mode.
+        \note      In case of Arm processor see its manual (Processor mode and privilege levels for software execution).
+        \param[in] mode: Access mode.
+    */
+    virtual void SetAccessMode(EAccessMode mode) = 0;
 };
 
+/*! \class ITaskSwitchStrategy
+    \brief Interface for a task switching strategy implementation.
+    \note  Strategy and Iterator design patterns.
+
+    Inherit this interface by your concrete implementation of the task switching strategy.
+*/
 class ITaskSwitchStrategy
 {
 public:
-	virtual IKernelTask *GetNext(IKernelTask *current) = 0;
+    /*! \brief     Add task.
+        \note      Kernel tasks are added by the concrete implementation of IKernel.
+        \param[in] task: Pointer to the task to add.
+    */
+    virtual void AddTask(IKernelTask *task) = 0;
+
+    /*! \brief     Get first task.
+    */
+    virtual IKernelTask *GetFirst() = 0;
+
+    /*! \brief     Get next linked task.
+        \param[in] current: Pointer to the current task.
+        \return    Pointer to the next task.
+    */
+    virtual IKernelTask *GetNext(IKernelTask *current) = 0;
 };
 
+/*! \class IKernel
+    \brief Interface for the implementation of the kernel (see Kernel).
+    \note  Strategy design pattern (see ITaskSwitchStrategy).
+*/
 class IKernel
 {
 public:
-	virtual void Initialize(IPlatform *platformDriver, ITaskSwitchStrategy *switchStrategy) = 0;
-	virtual void AddTask(ITask *userTask) = 0;
-	virtual void Start(uint32_t resolutionMs) = 0;
+    /*! \brief     Initialize kernel.
+        \param[in] driver: Pointer to the platform driver implementation.
+        \param[in] switch_strategy: Pointer to the task switching strategy.
+    */
+    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy) = 0;
+
+    /*! \brief     Add user task.
+        \param[in] user_task: Pointer to the user task to add to the kernel.
+    */
+    virtual void AddTask(ITask *user_task) = 0;
+
+    /*! \brief     Start kernel.
+        \param[in] resolution_us: Resolution of the system tick (SysTick) timer in microseconds, (see IPlatform::GetSysTickResolution).
+    */
+    virtual void Start(uint32_t resolution_us) = 0;
 };
 
+/*! \class IKernelService
+    \brief Interface for the kernel services exposed to the user processes.
+*/
 class IKernelService
 {
 public:
-	virtual int64_t GetTicks() const = 0;
-	virtual int32_t GetTicksResolution() const = 0;
+    /*! \brief     Get number of microseconds elapsed since the start of the kernel.
+    */
+    virtual int64_t GetTicks() const = 0;
 
-	int64_t GetDeadlineTicks(int64_t deadline_ms) const
-	{
-		return GetTicks() + deadline_ms * GetTicksResolution() / 1000;
-	}
+    /*! \brief     Get number of microseconds between system timer ISRs.
+    */
+    virtual int32_t GetTicksResolution() const = 0;
 
-	void Delay(uint32_t delay_ms)
-	{
-		int64_t ticks = GetDeadlineTicks(delay_ms);
-		while (GetTicks() < ticks);
-	}
+    /*! \brief     Get the deadline expressed in the number of microseconds.
+        \param[in] deadline_ms: Deadline in milliseconds.
+    */
+    int64_t GetDeadlineTicks(int64_t deadline_ms) const
+    {
+        return GetTicks() + deadline_ms * GetTicksResolution() / 1000;
+    }
+
+    /*! \brief     Delay calling user process by spinning in a loop and checking for a deadline expiry.
+        \param[in] delay_ms: Delay in milliseconds.
+    */
+    void DelaySpin(uint32_t delay_ms) const
+    {
+        volatile int64_t ticks = GetDeadlineTicks(delay_ms); // volatile is required for O3 optimization level
+        while (GetTicks() < ticks);
+    }
 };
 
 } // namespace stk

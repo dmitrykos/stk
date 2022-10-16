@@ -408,7 +408,7 @@
 									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include\platform&quot;"/>
 								</option>
 								<option id="gnu.cpp.compiler.option.include.files.2003847688" name="Include files (-include)" superClass="gnu.cpp.compiler.option.include.files" useByScannerDiscovery="false"/>
-								<option id="gnu.cpp.compiler.option.optimization.flags.1746577981" name="Other optimization flags" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common" valueType="string"/>
+								<option id="gnu.cpp.compiler.option.optimization.flags.1746577981" name="Other optimization flags" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing" valueType="string"/>
 								<option id="gnu.cpp.compiler.option.debugging.other.564316248" name="Other debugging flags" superClass="gnu.cpp.compiler.option.debugging.other" useByScannerDiscovery="false"/>
 								<option id="gnu.cpp.compiler.option.debugging.prof.99655707" name="Generate prof information (-p)" superClass="gnu.cpp.compiler.option.debugging.prof" useByScannerDiscovery="false"/>
 								<option id="gnu.cpp.compiler.option.debugging.gprof.1166629699" name="Generate gprof information (-pg)" superClass="gnu.cpp.compiler.option.debugging.gprof" useByScannerDiscovery="false"/>
@@ -461,6 +461,7 @@
 								<option id="com.crt.advproject.cpp.stackusage.1360172814" name="Generate Stack Usage Info (-fstack-usage)" superClass="com.crt.advproject.cpp.stackusage" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.cpp.config.596945744" name="Obsolete (Config)" superClass="com.crt.advproject.cpp.config" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.cpp.store.858332729" name="Obsolete (Store)" superClass="com.crt.advproject.cpp.store" useByScannerDiscovery="false"/>
+								<option id="com.crt.advproject.cpp.exe.release.option.optimization.level.820357691" name="Optimization Level" superClass="com.crt.advproject.cpp.exe.release.option.optimization.level" useByScannerDiscovery="true" value="gnu.cpp.compiler.optimization.level.more" valueType="enumerated"/>
 								<inputType id="com.crt.advproject.compiler.cpp.input.2123032641" superClass="com.crt.advproject.compiler.cpp.input"/>
 							</tool>
 							<tool id="com.crt.advproject.gcc.exe.release.1226841037" name="MCU C Compiler" superClass="com.crt.advproject.gcc.exe.release">
@@ -498,7 +499,7 @@
 									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include\platform&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.include.files.1933884347" name="Include files (-include)" superClass="gnu.c.compiler.option.include.files" useByScannerDiscovery="false"/>
-								<option id="gnu.c.compiler.option.optimization.flags.1522789508" name="Other optimization flags" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common" valueType="string"/>
+								<option id="gnu.c.compiler.option.optimization.flags.1522789508" name="Other optimization flags" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing" valueType="string"/>
 								<option id="gnu.c.compiler.option.debugging.other.851994050" name="Other debugging flags" superClass="gnu.c.compiler.option.debugging.other" useByScannerDiscovery="false"/>
 								<option id="gnu.c.compiler.option.debugging.prof.142277940" name="Generate prof information (-p)" superClass="gnu.c.compiler.option.debugging.prof" useByScannerDiscovery="false"/>
 								<option id="gnu.c.compiler.option.debugging.gprof.1191948590" name="Generate gprof information (-pg)" superClass="gnu.c.compiler.option.debugging.gprof" useByScannerDiscovery="false"/>
@@ -545,6 +546,7 @@
 								<option id="com.crt.advproject.gcc.stackusage.1344936867" name="Generate Stack Usage Info (-fstack-usage)" superClass="com.crt.advproject.gcc.stackusage" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.gcc.config.640622222" name="Obsolete (Config)" superClass="com.crt.advproject.gcc.config" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.gcc.store.2116604125" name="Obsolete (Store)" superClass="com.crt.advproject.gcc.store" useByScannerDiscovery="false"/>
+								<option id="com.crt.advproject.gcc.exe.release.option.optimization.level.690008504" name="Optimization Level" superClass="com.crt.advproject.gcc.exe.release.option.optimization.level" useByScannerDiscovery="true" value="gnu.c.optimization.level.more" valueType="enumerated"/>
 								<inputType id="com.crt.advproject.compiler.input.1092040408" superClass="com.crt.advproject.compiler.input"/>
 							</tool>
 							<tool id="com.crt.advproject.gas.exe.release.1457347614" name="MCU Assembler" superClass="com.crt.advproject.gas.exe.release">
@@ -684,16 +686,6 @@
 								<option id="com.crt.advproject.debugger.security.nonsecureimageenable.259837855" name="Enable pre-programming of Non-Secure Image" superClass="com.crt.advproject.debugger.security.nonsecureimageenable" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.debugger.security.nonsecureimage.1373225766" name="Non-Secure Project" superClass="com.crt.advproject.debugger.security.nonsecureimage" useByScannerDiscovery="false"/>
 							</tool>
-						</toolChain>
-					</folderInfo>
-					<folderInfo id="com.crt.advproject.config.exe.release.1459680146.599562043" name="/" resourcePath="stk">
-						<toolChain id="com.crt.advproject.toolchain.exe.release.2145451157" name="NXP MCU Tools" superClass="com.crt.advproject.toolchain.exe.release" unusedChildren="">
-							<tool id="com.crt.advproject.cpp.exe.release.797051603" name="MCU C++ Compiler" superClass="com.crt.advproject.cpp.exe.release.669447152"/>
-							<tool id="com.crt.advproject.gcc.exe.release.1101991833" name="MCU C Compiler" superClass="com.crt.advproject.gcc.exe.release.1226841037"/>
-							<tool id="com.crt.advproject.gas.exe.release.1618021842" name="MCU Assembler" superClass="com.crt.advproject.gas.exe.release.1457347614"/>
-							<tool id="com.crt.advproject.link.cpp.exe.release.1337608103" name="MCU C++ Linker" superClass="com.crt.advproject.link.cpp.exe.release.4057189"/>
-							<tool id="com.crt.advproject.link.exe.release.1455476858" name="MCU Linker" superClass="com.crt.advproject.link.exe.release.1031876585"/>
-							<tool id="com.crt.advproject.tool.debug.release.269856365" name="MCU Debugger" superClass="com.crt.advproject.tool.debug.release.2124153140"/>
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>

@@ -82,7 +82,7 @@ private:
                 break;
             }
 
-            stk::g_Kernel->Delay(1000);
+            stk::g_Kernel->DelaySpin(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)
