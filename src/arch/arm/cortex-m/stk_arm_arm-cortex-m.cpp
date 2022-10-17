@@ -41,13 +41,27 @@ using namespace stk;
     #define STK_CORTEX_M_REGISTER_COUNT 16
 #endif
 
-static IPlatform::IEventHandler *g_KernelHandler = NULL;
-static Stack *g_TaskStackIdle = NULL;
-static Stack *g_TaskStackActive = NULL;
+//! Internal context.
+static struct Context
+{
+    void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t systick_resolution)
+    {
+        m_handler            = handler;
+        m_stack_idle         = first_stack;
+        m_stack_active       = first_stack;
+        m_systick_resolution = systick_resolution;
+    }
+
+    IPlatform::IEventHandler *m_handler; //!< kernel event handler
+    Stack *m_stack_idle;                 //!< idle task stack
+    Stack *m_stack_active;               //!< active task stack
+    int32_t m_systick_resolution;        //!< system tick resolution (microseconds)
+}
+g_Context;
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
-    g_KernelHandler->OnSysTick(&g_TaskStackIdle, &g_TaskStackActive);
+    g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
 }
 
 extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
@@ -89,14 +103,14 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
     "LDR    r1, %[stack]    \n"
     "STR    r0, [r1]        \n"
     ::
-    [stack] "o" (g_TaskStackIdle));
+    [stack] "o" (g_Context.m_stack_idle));
 
     // set active stack
     __asm volatile(
     "LDR    r1, %[stack]    \n"
     "LDR    r0, [r1]        \n" // load
     ::
-    [stack] "o" (g_TaskStackActive));
+    [stack] "o" (g_Context.m_stack_active));
 
     // load general registers from the active stack
 #ifdef STK_CORTEX_M_MANAGE_LR
@@ -138,7 +152,7 @@ static __stk_attr_naked void OnTaskRun()
     "LDR    r1, %[stack]    \n"
     "LDR    r0, [r1]        \n"
     ::
-    [stack] "o" (g_TaskStackActive));
+    [stack] "o" (g_Context.m_stack_active));
 
     // load general registers from the active stack
 #ifdef STK_CORTEX_M_MANAGE_LR
@@ -200,7 +214,7 @@ extern "C" void SVC_Handler_Main(size_t *svc_args)
         ClearFpuState();
 
         // notify kernel
-        g_KernelHandler->OnStart();
+        g_Context.m_handler->OnStart();
 
         // execute first task
         OnTaskRun();
@@ -236,12 +250,8 @@ static void OnTaskExit()
 
 void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
 {
-    m_systick_resolution = resolution_us;
+    g_Context.Initialize(event_handler, first_task->GetUserStack(), resolution_us);
     
-    g_KernelHandler = event_handler;
-    g_TaskStackIdle = first_task->GetUserStack();
-    g_TaskStackActive = first_task->GetUserStack();
-
     NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
@@ -296,7 +306,7 @@ void PlatformArmCortexM::SwitchContext()
 
 int32_t PlatformArmCortexM::GetSysTickResolution() const
 {
-    return m_systick_resolution;
+    return g_Context.m_systick_resolution;
 }
 
 void PlatformArmCortexM::SetAccessMode(EAccessMode mode)

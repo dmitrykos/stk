@@ -104,6 +104,7 @@ public:
 
 /*! \class IPlatform
     \brief Interface of the platform driver.
+    \note  Bridge design pattern. Do not put implementation details in the header of the concrete class to avoid breaking this pattern.
 
     Platform driver represents an underlying hardware and implements the following logic:
      - time tick
@@ -180,13 +181,14 @@ public:
     /*! \brief     Get next linked task.
         \param[in] current: Pointer to the current task.
         \return    Pointer to the next task.
+        \note      Some implementations may return NULL that denotes the end of the iteration.
     */
     virtual IKernelTask *GetNext(IKernelTask *current) = 0;
 };
 
 /*! \class IKernel
     \brief Interface for the implementation of the kernel (see Kernel).
-    \note  Strategy design pattern (see ITaskSwitchStrategy).
+    \note  Mediator design pattern.
 */
 class IKernel
 {
@@ -209,7 +211,8 @@ public:
 };
 
 /*! \class IKernelService
-    \brief Interface for the kernel services exposed to the user processes.
+    \brief Interface for the kernel services exposed to the user processes during run-time when Kernel started scheduling the processes.
+    \note  State design pattern.
 */
 class IKernelService
 {

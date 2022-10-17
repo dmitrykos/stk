@@ -25,9 +25,6 @@ public:
     void SwitchContext();
     int32_t GetSysTickResolution() const;
     void SetAccessMode(EAccessMode mode);
-
-private:
-    int32_t m_systick_resolution; //!< system tick resolution (microseconds)
 };
 
 } // namespace stk

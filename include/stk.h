@@ -19,10 +19,10 @@
 
 namespace stk {
 
-// Forward declarations:
-template <uint32_t Size> class Kernel;
-
-//! Kernel singleton;
+/*! \var   g_Kernel
+    \brief Pointer to the kernel service which becomes available when Kernel instance is initialized with Kernel::Initialize.
+    \note  Singleton design pattern.
+*/
 extern IKernelService *g_Kernel;
 
 /*! \class Kernel
@@ -47,11 +47,11 @@ extern IKernelService *g_Kernel;
     kernel.Start(1000);
     \endcode
 */
-template <uint32_t Size>
-class Kernel : public IKernel, public IKernelService, private IPlatform::IEventHandler
+template <uint32_t _Size>
+class Kernel : public IKernel, private IPlatform::IEventHandler
 {
     /*! \class KernelTask
-        \brief Concrete implementation of the kernel task.
+        \brief Concrete implementation of the kernel task interface (IKernelTask).
     */
     class KernelTask : public IKernelTask
     {
@@ -70,14 +70,38 @@ class Kernel : public IKernel, public IKernelService, private IPlatform::IEventH
         bool IsBusy() const { return (m_user != NULL); }
 
     private:
-        Stack  m_stack;
-        ITask *m_user;
+        Stack  m_stack; //!< stack descriptor
+        ITask *m_user;  //!< user task
+    };
+
+    /*! \class KernelService
+        \brief Concrete implementation of the run-time kernel service interface (IKernelService).
+    */
+    class KernelService : public IKernelService
+    {
+        friend class Kernel;
+
+    public:
+        KernelService() : m_kernel(NULL)
+        { }
+
+        void Initialize(Kernel *kernel)
+        {
+            m_kernel = kernel;
+        }
+
+        int64_t GetTicks() const { return m_kernel->m_ticks; }
+
+        int32_t GetTicksResolution() const { return m_kernel->m_platform->GetSysTickResolution(); }
+
+    private:
+        Kernel *m_kernel; //!< kernel
     };
 
 public:
     enum EConsts
     {
-        TASKS_NUM_MAX = Size
+        TASKS_MAX = _Size //!< Max number of tasks supported by the Kernel definition.
     };
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
@@ -95,8 +119,6 @@ public:
         m_task_now        = NULL;
         m_task_next       = NULL;
         m_ticks           = 0;
-
-        g_Kernel = this;
     }
 
     void AddTask(ITask *user_task)
@@ -117,15 +139,17 @@ public:
         if (m_task_now == NULL)
             return;
 
+        InitializeService();
+
         m_platform->Start(this, resolution_us, m_task_now);
     }
 
-    int64_t GetTicks() const { return m_ticks; }
-
-    int32_t GetTicksResolution() const { return m_platform->GetSysTickResolution(); }
-
 protected:
-    typedef KernelTask TaskStorageT[TASKS_NUM_MAX];
+    void InitializeService()
+    {
+        m_service.Initialize(this);
+        g_Kernel = &m_service;
+    }
 
     KernelTask *AllocateNewTask(ITask *user_task)
     {
@@ -133,7 +157,7 @@ protected:
 
         // look for a free kernel task
         KernelTask *kernel_task = NULL;
-        for (uint32_t i = 0; i < TASKS_NUM_MAX; ++i)
+        for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
             if (task->IsBusy())
@@ -175,6 +199,14 @@ protected:
         return kernel_task;
     }
 
+    void UpdateAccessMode(KernelTask *now, KernelTask *next)
+    {
+        EAccessMode next_access_mode = next->GetUserTask()->GetAccessMode();
+
+        if (now->GetUserTask()->GetAccessMode() != next_access_mode)
+            m_platform->SetAccessMode(next_access_mode);
+    }
+
     void OnStart()
     {
         m_platform->SetAccessMode(m_task_now->GetUserTask()->GetAccessMode());
@@ -200,17 +232,15 @@ protected:
         }
     }
 
-    void UpdateAccessMode(KernelTask *now, KernelTask *next)
-    {
-        EAccessMode next_access_mode = next->GetUserTask()->GetAccessMode();
+    /*! \class TaskStorageType
+        \brief KernelTask array type used as a storage for the KernelTask instances.
+    */
+    typedef KernelTask TaskStorageType[TASKS_MAX];
 
-        if (now->GetUserTask()->GetAccessMode() != next_access_mode)
-            m_platform->SetAccessMode(next_access_mode);
-    }
-
+    KernelService        m_service;         //!< run-time kernel service
     IPlatform           *m_platform;        //!< platform driver
     ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
-    TaskStorageT         m_task_storage;    //!< task storage
+    TaskStorageType      m_task_storage;    //!< task storage
     KernelTask          *m_task_now;        //!< current task task
     KernelTask          *m_task_next;       //!< next task for a context switch
     int64_t              m_ticks;           //!< CPU ticks elapsed
