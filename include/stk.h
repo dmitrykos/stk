@@ -133,7 +133,7 @@ public:
         assert(resolution_us != 0);
         assert(m_platform != NULL);
 
-        m_task_now = (KernelTask *)m_switch_strategy->GetFirst();
+        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         assert(m_task_now != NULL);
         if (m_task_now == NULL)
             return;
@@ -214,7 +214,7 @@ protected:
     void OnSysTick(Stack **idle, Stack **active)
     {
         KernelTask *now = m_task_now;
-        KernelTask *next = (KernelTask *)m_switch_strategy->GetNext(now);
+        KernelTask *next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now));
 
         ++m_ticks;
 
