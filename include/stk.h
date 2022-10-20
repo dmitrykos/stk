@@ -10,7 +10,6 @@
 #ifndef STK_H_
 #define STK_H_
 
-#include "stk_common.h"
 #include "stk_helper.h"
 #include "stk_arch.h"
 
@@ -101,7 +100,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 public:
     enum EConsts
     {
-        TASKS_MAX = _Size //!< Max number of tasks supported by the Kernel definition.
+        TASKS_MAX = _Size //!< Max number of tasks supported by the instance of the Kernel.
     };
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
@@ -243,7 +242,7 @@ protected:
     TaskStorageType      m_task_storage;    //!< task storage
     KernelTask          *m_task_now;        //!< current task task
     KernelTask          *m_task_next;       //!< next task for a context switch
-    int64_t              m_ticks;           //!< CPU ticks elapsed
+    volatile int64_t     m_ticks;           //!< CPU ticks elapsed (volatile is required for GCC O3 [at least] to avoid partial reads of the value by the consumer)
 };
 
 } // namespace stk

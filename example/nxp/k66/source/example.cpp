@@ -12,21 +12,25 @@
 
 static volatile uint8_t g_TaskSwitch = 0;
 
-/*#if 0
-static void Delay(uint32_t delay_ms)
+#if 0
+static void DelaySpin(uint32_t delay_ms)
 {
     // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
 
-    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 2 + 1) * 8));
+    // ldr     r3, [sp, #4]
+    // subs    r3, #1
+    // cmp     r3, #0
+    // str     r3, [sp, #4]
+
+    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 1 + 2) * 4));
     while (--i > 0);
 }
 #else
-static void Delay(uint32_t delay_msec)
+static inline void DelaySpin(uint32_t delay_ms)
 {
-    int64_t deadline_msec = stk::g_Kernel->GetDeadlineTicks(delay_msec);
-    while (stk::g_Kernel->GetTicks() < deadline_msec);
+    stk::g_Kernel->DelaySpin(delay_ms);
 }
-#endif*/
+#endif
 
 template <stk::EAccessMode _AccessMode>
 class Task : public stk::UserTask<256, _AccessMode>
@@ -37,7 +41,7 @@ public:
     Task(uint8_t taskId) : m_taskId(taskId)
     { }
 
-    stk::RunFuncT GetFunc() { return &Run; }
+    stk::RunFuncType GetFunc() { return &Run; }
     void *GetFuncUserData() { return this; }
 
 private:
@@ -82,7 +86,7 @@ private:
                 break;
             }
 
-            stk::g_Kernel->DelaySpin(1000);
+            DelaySpin(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)

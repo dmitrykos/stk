@@ -15,10 +15,10 @@
 
 namespace stk {
 
-/*! \typedef RunFuncT
+/*! \typedef RunFuncType
     \brief   User task main entry function prototype.
 */
-typedef void (*RunFuncT) (void *userData);
+typedef void (*RunFuncType) (void *userData);
 
 /*! \enum  EAccessMode
     \brief Hardware access mode by the user task.
@@ -56,7 +56,7 @@ class ITask
 public:
     /*! \brief     Get user task's main entry function.
     */
-    virtual RunFuncT GetFunc() = 0;
+    virtual RunFuncType GetFunc() = 0;
 
     /*! \brief     Get user data which is supplied to the user task's main entry function.
     */
@@ -238,8 +238,8 @@ public:
     */
     void DelaySpin(uint32_t delay_ms) const
     {
-        volatile int64_t ticks = GetDeadlineTicks(delay_ms); // volatile is required for O3 optimization level
-        while (GetTicks() < ticks);
+        int64_t deadline = GetDeadlineTicks(delay_ms);
+        while (GetTicks() < deadline);
     }
 };
 

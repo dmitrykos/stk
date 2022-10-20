@@ -10,8 +10,6 @@
 #ifndef STK_LINKED_LIST_H_
 #define STK_LINKED_LIST_H_
 
-#include <assert.h>
-
 namespace stk {
 namespace util {
 
