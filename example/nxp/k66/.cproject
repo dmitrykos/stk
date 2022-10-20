@@ -732,7 +732,7 @@
 	<storageModule moduleId="com.nxp.mcuxpresso.core.datamodels">
 		<sdkName>SDK_2.x_FRDM-K66F</sdkName>
 		<sdkVersion>2.10.0</sdkVersion>
-		<sdkComponents>middleware.baremetal.MK66F18;platform.drivers.clock.MK66F18;platform.drivers.rtc.MK66F18;platform.drivers.port.MK66F18;platform.drivers.smc.MK66F18;platform.drivers.gpio.MK66F18;platform.drivers.uart.MK66F18;platform.drivers.i2c.MK66F18;platform.drivers.common.MK66F18;platform.drivers.adc16.MK66F18;platform.drivers.crc.MK66F18;platform.drivers.pit.MK66F18;platform.drivers.rnga.MK66F18;platform.drivers.tpm.MK66F18;platform.drivers.wdog.MK66F18;component.uart_adapter.MK66F18;utility.debug_console.MK66F18;component.serial_manager_uart.MK66F18;component.serial_manager.MK66F18;component.lists.MK66F18;device.MK66F18_startup.MK66F18;CMSIS_Include_core_cm.MK66F18;device.MK66F18_CMSIS.MK66F18;device.MK66F18_system.MK66F18;project_template.frdmk66f.MK66F18;</sdkComponents>
+		<sdkComponents>middleware.baremetal.MK66F18;platform.drivers.clock.MK66F18;platform.drivers.rtc.MK66F18;platform.drivers.port.MK66F18;platform.drivers.smc.MK66F18;platform.drivers.gpio.MK66F18;platform.drivers.uart.MK66F18;platform.drivers.i2c.MK66F18;platform.drivers.common.MK66F18;component.uart_adapter.MK66F18;utility.debug_console.MK66F18;component.serial_manager_uart.MK66F18;component.serial_manager.MK66F18;component.lists.MK66F18;device.MK66F18_startup.MK66F18;CMSIS_Include_core_cm.MK66F18;device.MK66F18_CMSIS.MK66F18;device.MK66F18_system.MK66F18;project_template.frdmk66f.MK66F18;</sdkComponents>
 		<boardId>frdmk66f</boardId>
 		<package>MK66FN2M0VMD18</package>
 		<core>cm4</core>
