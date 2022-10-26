@@ -18,7 +18,7 @@ namespace stk {
 /*! \typedef RunFuncType
     \brief   User task main entry function prototype.
 */
-typedef void (*RunFuncType) (void *userData);
+typedef void (*RunFuncType) (void *user_data);
 
 /*! \enum  EAccessMode
     \brief Hardware access mode by the user task.
@@ -124,7 +124,15 @@ public:
     class IEventHandler
     {
     public:
+        /*! \brief     Called by ISR handler to notify that scheduling is about to start.
+            \note      This event can be used to change hardware access mode for the first task.
+        */
         virtual void OnStart() = 0;
+
+        /*! \brief      Called by ISR handler to notify about the next system tick.
+            \param[out] idle: Stack of the task which shall go into Idle state.
+            \param[out] active:  Stack of the task which shall go into Active state (to which context will switch).
+        */
         virtual void OnSysTick(Stack **idle, Stack **active) = 0;
     };
 

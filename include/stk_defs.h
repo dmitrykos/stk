@@ -14,10 +14,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-// note: If missing, this header must be customized (get it in the root of the source folder) and
-//       copied to the /include folder manually.
-#include "stk_config.h"
-
 #ifdef __GNUC__
     #define __stk_unreachable() __builtin_unreachable()
 #endif

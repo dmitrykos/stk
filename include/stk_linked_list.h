@@ -117,7 +117,7 @@ public:
 
         while (!this->IsEmpty())
         {
-            to.PushBack(this->PopFront());
+            to.LinkBack(this->PopFront());
         }
     }
 

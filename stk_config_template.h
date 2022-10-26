@@ -18,7 +18,7 @@
 //#include "MK66F18.h"
 //#include "core_cm4.h"
 
-// Undefine if MCU is Arm Cortex-M4
+// Undefine for Arm Cortex-M4 MCU
 //#define _STK_ARCH_ARM_CORTEX_M
 
 #ifdef _STK_ARCH_ARM_CORTEX_M
@@ -30,5 +30,8 @@
     //#define _STK_PENDSV_HANDLER PendSV_Handler
 
 #endif
+
+// Undefine for x86, Windows
+//#define _STK_ARCH_WIN32_M
 
 #endif /* STK_CONFIG_H_ */

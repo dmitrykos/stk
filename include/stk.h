@@ -122,6 +122,8 @@ public:
 
     void AddTask(ITask *user_task)
     {
+        assert(m_switch_strategy != NULL);
+
         KernelTask *task = AllocateNewTask(user_task);
         assert(task != NULL);
 

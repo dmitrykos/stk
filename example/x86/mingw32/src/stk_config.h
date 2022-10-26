@@ -7,14 +7,9 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#ifndef STK_ARCH_H_
-#define STK_ARCH_H_
+#ifndef STK_CONFIG_H_
+#define STK_CONFIG_H_
 
-#ifdef _STK_ARCH_ARM_CORTEX_M
-#include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
-#endif
-#ifdef _STK_ARCH_WIN32_M
-#include "arch/x86/win32/stk_arch_x86-win32.h"
-#endif
+#define _STK_ARCH_WIN32_M
 
-#endif /* STK_ARCH_H_ */
+#endif /* STK_CONFIG_H_ */

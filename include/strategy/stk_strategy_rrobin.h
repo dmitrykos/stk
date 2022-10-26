@@ -22,20 +22,9 @@ namespace stk {
 class SwitchStrategyRoundRobin : public ITaskSwitchStrategy
 {
 public:
-    void AddTask(IKernelTask *task)
-    {
-        m_tasks.LinkBack(task);
-    }
-
-    IKernelTask *GetNext(IKernelTask *current)
-    {
-        return (* current->GetNext());
-    }
-
-    IKernelTask *GetFirst()
-    {
-        return (* m_tasks.GetFirst());
-    }
+    void AddTask(IKernelTask *task) { m_tasks.LinkBack(task); }
+    IKernelTask *GetNext(IKernelTask *current) { return (* current->GetNext()); }
+    IKernelTask *GetFirst() { return (* m_tasks.GetFirst()); }
 
 private:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling

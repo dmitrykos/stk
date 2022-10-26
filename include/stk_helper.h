@@ -50,12 +50,13 @@ template <uint32_t _StackSize, EAccessMode _AccessMode>
 class UserTask : public ITask
 {
 public:
-    size_t *GetStack() { return Stack; }
+	virtual ~UserTask() { }
+    size_t *GetStack() { return m_stack; }
     uint32_t GetStackSize() const { return _StackSize; }
     EAccessMode GetAccessMode() const { return _AccessMode; }
 
 private:
-    __stk_aligned(16) size_t Stack[_StackSize];
+    __stk_aligned(16) size_t m_stack[_StackSize];
 };
 
 } // namespace stk

@@ -7,31 +7,11 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#define _STK_ARCH_ARM_CORTEX_M
+#define _STK_ARCH_WIN32_M
+#include <stdio.h>
 #include <stk.h>
-#include "board.h"
 
 static volatile uint8_t g_TaskSwitch = 0;
-
-#if 0
-static void DelaySpin(uint32_t delay_ms)
-{
-    // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
-
-    // ldr     r3, [sp, #4]
-    // subs    r3, #1
-    // cmp     r3, #0
-    // str     r3, [sp, #4]
-
-    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 1 + 2) * 4));
-    while (--i > 0);
-}
-#else
-static inline void DelaySpin(uint32_t delay_ms)
-{
-    stk::g_Kernel->DelaySpin(delay_ms);
-}
-#endif
 
 template <stk::EAccessMode _AccessMode>
 class Task : public stk::UserTask<256, _AccessMode>
@@ -68,26 +48,9 @@ private:
 
             ++count;
 
-            switch (task_id)
-            {
-            case 0:
-                LED_RED_ON();
-                LED_GREEN_OFF();
-                LED_BLUE_OFF();
-                break;
-            case 1:
-                LED_RED_OFF();
-                LED_GREEN_ON();
-                LED_BLUE_OFF();
-                break;
-            case 2:
-                LED_RED_OFF();
-                LED_GREEN_OFF();
-                LED_BLUE_ON();
-                break;
-            }
+            printf("task: %d\n", task_id);
 
-            DelaySpin(1000);
+            stk::g_Kernel->DelaySpin(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)
@@ -96,21 +59,12 @@ private:
     }
 };
 
-static void InitLeds()
-{
-    LED_RED_INIT(LOGIC_LED_OFF);
-    LED_GREEN_INIT(LOGIC_LED_OFF);
-    LED_BLUE_INIT(LOGIC_LED_OFF);
-}
-
 void RunExample()
 {
     using namespace stk;
 
-    InitLeds();
-
     static Kernel<10> kernel;
-    static PlatformArmCortexM platform;
+    static PlatformX86Win32 platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
     static Task<ACCESS_PRIVILEGED> task1(0);
@@ -125,6 +79,12 @@ void RunExample()
 
     kernel.Start(1000);
 
-    assert(false);
+    //assert(false);
     while (true);
+}
+
+int main()
+{
+	RunExample();
+	return 0;
 }

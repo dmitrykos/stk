@@ -7,6 +7,8 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
+// note: If missing, this header must be customized (get it in the root of the source folder) and
+//       copied to the /include folder manually.
 #include "stk_config.h"
 
 #ifdef _STK_ARCH_ARM_CORTEX_M
