@@ -102,6 +102,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>stk/include/arch/x86</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>stk/include/strategy/stk_strategy_rrobin.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/strategy/stk_strategy_rrobin.h</locationURI>
@@ -112,7 +117,17 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>stk/src/arch/x86</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>stk/include/arch/arm/cortex-m</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>stk/include/arch/x86/win32</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -122,14 +137,29 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>stk/src/arch/x86/win32</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</locationURI>
 		</link>
 		<link>
+			<name>stk/include/arch/x86/win32/stk_arch_x86-win32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
+		</link>
+		<link>
 			<name>stk/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</locationURI>
+		</link>
+		<link>
+			<name>stk/src/arch/x86/win32/stk_arm_x86-win32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/arch/x86/win32/stk_arm_x86-win32.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

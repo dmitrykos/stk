@@ -18,11 +18,12 @@
 
 namespace stk {
 
-/*! \var   g_Kernel
-    \brief Pointer to the kernel service which becomes available when Kernel instance is initialized with Kernel::Initialize.
+/*! \def   g_KernelService
+    \brief Pointer to the IKernelService instance which becomes available when scheduling
+           is started with Kernel::Start().
     \note  Singleton design pattern.
 */
-extern IKernelService *g_Kernel;
+#define g_KernelService stk::Singleton<stk::IKernelService *>::Get()
 
 /*! \class Kernel
     \brief Concrete implementation of the thread scheduling kernel.
@@ -50,14 +51,16 @@ template <uint32_t _Size>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
     /*! \class KernelTask
-        \brief Concrete implementation of the kernel task interface (IKernelTask).
+        \brief Concrete implementation of the IKernelTask interface.
     */
     class KernelTask : public IKernelTask
     {
         friend class Kernel;
 
     public:
-        KernelTask()
+        /*! \brief Default initializer.
+        */
+        explicit KernelTask()
         {
             m_user = NULL;
         }
@@ -74,19 +77,41 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     };
 
     /*! \class KernelService
-        \brief Concrete implementation of the run-time kernel service interface (IKernelService).
+        \brief Concrete implementation of the IKernelService interface.
     */
     class KernelService : public IKernelService
     {
         friend class Kernel;
 
+        /*! \class Instance
+            \brief Exposes IKernelService to the user space during scheduler start and acts as a singleton
+                   instance binder.
+                   IKernelService instance becomes available before user tasks are started.
+            \note  Participator of the Singleton design pattern (see Singleton).
+        */
+        class Instance : private Singleton<IKernelService *>
+        {
+            // only Kernel concrete implementation has access to the Instance::Bind() function
+            template <uint32_t _Size0> friend class Kernel;
+        };
+
     public:
-        KernelService() : m_kernel(NULL)
+        /*! \brief     Default initializer.
+        */
+        explicit KernelService() : m_kernel(NULL)
         { }
 
+        /*! \brief     Initialize instance.
+            \note      When call completes Singleton<IKernelService *> will start referencing this
+                       instance (see g_KernelService).
+            \param[in] kernel: Pointer to the Kernel instance.
+        */
         void Initialize(Kernel *kernel)
         {
             m_kernel = kernel;
+
+            // make instance accessible for user
+            Instance::Bind(this);
         }
 
         int64_t GetTicks() const { return m_kernel->m_ticks; }
@@ -140,18 +165,12 @@ public:
         if (m_task_now == NULL)
             return;
 
-        InitializeService();
+        m_service.Initialize(this);
 
         m_platform->Start(this, resolution_us, m_task_now);
     }
 
 protected:
-    void InitializeService()
-    {
-        m_service.Initialize(this);
-        g_Kernel = &m_service;
-    }
-
     KernelTask *AllocateNewTask(ITask *user_task)
     {
         assert(user_task != NULL);

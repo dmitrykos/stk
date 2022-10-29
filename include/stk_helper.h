@@ -14,7 +14,7 @@
 
 namespace stk {
 
-/*! \class UserTask
+/*! \class Task
     \brief Partial implementation of the user task.
 
     To implement final concrete version of the user task inherit your implementation from this class.
@@ -22,7 +22,7 @@ namespace stk {
     Usage example:
     \code
     template <stk::EAccessMode _AccessMode>
-    class Task : public stk::UserTask<256, _AccessMode>
+    class MyTask : public stk::Task<256, _AccessMode>
     {
     public:
         stk::RunFuncT GetFunc() { return &Run; }
@@ -31,7 +31,7 @@ namespace stk {
     private:
         static void Run(void *user_data)
         {
-            ((Task *)user_data)->RunInner();
+            ((MyTask *)user_data)->RunInner();
         }
 
         void RunInner()
@@ -43,14 +43,13 @@ namespace stk {
         }
     };
 
-    Task<ACCESS_PRIVILEGED> my_task;
+    MyTask<ACCESS_PRIVILEGED> my_task;
     \endcode
 */
 template <uint32_t _StackSize, EAccessMode _AccessMode>
-class UserTask : public ITask
+class Task : public ITask
 {
 public:
-	virtual ~UserTask() { }
     size_t *GetStack() { return m_stack; }
     uint32_t GetStackSize() const { return _StackSize; }
     EAccessMode GetAccessMode() const { return _AccessMode; }

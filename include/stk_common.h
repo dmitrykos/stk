@@ -37,6 +37,53 @@ struct Stack
     size_t SP; //!< Stack Pointer (SP) register
 };
 
+/*! \class Singleton
+    \brief Provides access to the referenced instance via a single method Singleton<_InstanceType>::Get().
+    \note  Singleton design pattern (see KernelService for a practical example).
+
+    Usage example:
+    \code
+    // initialize in a source file:
+    class MyClass : private Singleton<MyClass *>
+    {
+        MyClass()
+        {
+            Singleton<MyClass *>::Bind(this);
+        }
+    };
+
+    // initialize in a source file:
+    template <> MyClass *Singleton<MyClass *>::m_instance = NULL;
+
+    // use anywhere after MyClass was instantiated
+    Singleton<MyClass *>::Get()->SomeUsefulMethod();
+    \endcode
+*/
+template <class _InstanceType> class Singleton
+{
+public:
+
+    /*! \brief  Get IKernelService instance.
+        \note   IKernelService instance is available only after kernel was started with Kernel::Start().
+    */
+    static __stk_forceinline _InstanceType Get() { return m_instance; }
+
+protected:
+    /*! \brief     Bind instance to the singleton.
+        \note      Assuming that
+        \param[in] mode: Access mode.
+    */
+    static void Bind(const _InstanceType &instance)
+    {
+        assert(instance != NULL);
+        assert(m_instance == NULL);
+
+        m_instance = instance;
+    }
+
+    static _InstanceType m_instance; //!< referenced single instance
+};
+
 /*! \class ITask
     \brief Interface of the user task.
 
@@ -195,7 +242,7 @@ public:
 };
 
 /*! \class IKernel
-    \brief Interface for the implementation of the kernel (see Kernel).
+    \brief Interface for the implementation of the kernel of the scheduler.
     \note  Mediator design pattern.
 */
 class IKernel

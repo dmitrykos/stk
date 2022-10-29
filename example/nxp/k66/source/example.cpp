@@ -27,19 +27,19 @@ static void DelaySpin(uint32_t delay_ms)
     while (--i > 0);
 }
 #else
-static inline void DelaySpin(uint32_t delay_ms)
+static __stk_forceinline void DelaySpin(uint32_t delay_ms)
 {
-    stk::g_Kernel->DelaySpin(delay_ms);
+    g_KernelService->DelaySpin(delay_ms);
 }
 #endif
 
 template <stk::EAccessMode _AccessMode>
-class Task : public stk::UserTask<256, _AccessMode>
+class MyTask : public stk::Task<256, _AccessMode>
 {
     uint8_t m_taskId;
 
 public:
-    Task(uint8_t taskId) : m_taskId(taskId)
+    MyTask(uint8_t taskId) : m_taskId(taskId)
     { }
 
     stk::RunFuncType GetFunc() { return &Run; }
@@ -48,7 +48,7 @@ public:
 private:
     static void Run(void *user_data)
     {
-        ((Task *)user_data)->RunInner();
+        ((MyTask *)user_data)->RunInner();
     }
 
     void RunInner()
@@ -113,9 +113,9 @@ void RunExample()
     static PlatformArmCortexM platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
-    static Task<ACCESS_PRIVILEGED> task1(0);
-    static Task<ACCESS_USER> task2(1);
-    static Task<ACCESS_USER> task3(2);
+    static MyTask<ACCESS_PRIVILEGED> task1(0);
+    static MyTask<ACCESS_USER> task2(1);
+    static MyTask<ACCESS_USER> task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 

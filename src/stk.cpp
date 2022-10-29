@@ -11,4 +11,5 @@
 
 using namespace stk;
 
-IKernelService *stk::g_Kernel = NULL;
+// initialize IKernelService instance singleton
+template <> IKernelService *Singleton<IKernelService *>::m_instance = NULL;
