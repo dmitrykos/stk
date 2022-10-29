@@ -60,10 +60,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     public:
         /*! \brief Default initializer.
         */
-        explicit KernelTask()
-        {
-            m_user = NULL;
-        }
+        explicit KernelTask() : m_user(NULL)
+        { }
 
         ITask *GetUserTask() { return m_user; }
 
@@ -72,8 +70,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         bool IsBusy() const { return (m_user != NULL); }
 
     private:
-        Stack  m_stack; //!< stack descriptor
         ITask *m_user;  //!< user task
+        Stack  m_stack; //!< stack descriptor
     };
 
     /*! \class KernelService
@@ -98,35 +96,45 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     public:
         /*! \brief     Default initializer.
         */
-        explicit KernelService() : m_kernel(NULL)
+        explicit KernelService() : m_platform(0), m_ticks(0)
         { }
 
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
                        instance (see g_KernelService).
-            \param[in] kernel: Pointer to the Kernel instance.
+            \param[in] platform: Pointer to the IPlatform instance.
         */
-        void Initialize(Kernel *kernel)
+        void Initialize(IPlatform *platform)
         {
-            m_kernel = kernel;
+            m_platform = platform;
 
             // make instance accessible for user
             Instance::Bind(this);
         }
 
-        int64_t GetTicks() const { return m_kernel->m_ticks; }
+        int64_t GetTicks() const { return m_ticks; }
 
-        int32_t GetTicksResolution() const { return m_kernel->m_platform->GetSysTickResolution(); }
+        int32_t GetTicksResolution() const { return m_platform->GetSysTickResolution(); }
 
     private:
-        Kernel *m_kernel; //!< kernel
+        void IncrementTick() { ++m_ticks; }
+
+        IPlatform       *m_platform; //!< platform
+        volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile is required for GCC O3 [at least] to avoid partial reads of the value by the consumer)
     };
 
 public:
+    /*! \brief Constants.
+    */
     enum EConsts
     {
         TASKS_MAX = _Size //!< Max number of tasks supported by the instance of the Kernel.
     };
+
+    /*! \brief Default initializer.
+    */
+    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_task_next(NULL)
+    { }
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
     {
@@ -142,7 +150,6 @@ public:
         m_switch_strategy = switch_strategy;
         m_task_now        = NULL;
         m_task_next       = NULL;
-        m_ticks           = 0;
     }
 
     void AddTask(ITask *user_task)
@@ -165,7 +172,7 @@ public:
         if (m_task_now == NULL)
             return;
 
-        m_service.Initialize(this);
+        m_service.Initialize(m_platform);
 
         m_platform->Start(this, resolution_us, m_task_now);
     }
@@ -237,7 +244,7 @@ protected:
         KernelTask *now = m_task_now;
         KernelTask *next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now));
 
-        ++m_ticks;
+        m_service.IncrementTick();
 
         if (next != now)
         {
@@ -263,7 +270,6 @@ protected:
     TaskStorageType      m_task_storage;    //!< task storage
     KernelTask          *m_task_now;        //!< current task task
     KernelTask          *m_task_next;       //!< next task for a context switch
-    volatile int64_t     m_ticks;           //!< CPU ticks elapsed (volatile is required for GCC O3 [at least] to avoid partial reads of the value by the consumer)
 };
 
 } // namespace stk

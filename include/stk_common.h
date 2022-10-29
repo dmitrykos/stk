@@ -39,7 +39,7 @@ struct Stack
 
 /*! \class Singleton
     \brief Provides access to the referenced instance via a single method Singleton<_InstanceType>::Get().
-    \note  Singleton design pattern (see KernelService for a practical example).
+    \note  Singleton design pattern (see Kernel::KernelService for a practical example).
 
     Usage example:
     \code
