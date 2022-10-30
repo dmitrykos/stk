@@ -13,6 +13,10 @@
 #include "stk_defs.h"
 #include "stk_linked_list.h"
 
+/*! \file  stk_common.h
+    \brief Contains interface definitions of the library.
+*/
+
 namespace stk {
 
 /*! \typedef RunFuncType
@@ -70,8 +74,7 @@ public:
 
 protected:
     /*! \brief     Bind instance to the singleton.
-        \note      Assuming that
-        \param[in] mode: Access mode.
+        \param[in] instance: Instance to bind.
     */
     static void Bind(const _InstanceType &instance)
     {
@@ -81,6 +84,7 @@ protected:
         m_instance = instance;
     }
 
+private:
     static _InstanceType m_instance; //!< referenced single instance
 };
 
@@ -201,11 +205,11 @@ public:
     */
     virtual void SwitchContext() = 0;
 
-    /*! \brief     Get resolution of the system tick (SystTick) timer in microseconds.
+    /*! \brief     Get resolution of the system tick timer in microseconds.
                    Resolution means a number of microseconds between system tick timer ISRs.
         \return    Microseconds.
     */
-    virtual int32_t GetSysTickResolution() const = 0;
+    virtual int32_t GetTickResolution() const = 0;
 
     /*! \brief     Set hardware access mode for the Thread mode.
         \note      In case of Arm processor see its manual (Processor mode and privilege levels for software execution).

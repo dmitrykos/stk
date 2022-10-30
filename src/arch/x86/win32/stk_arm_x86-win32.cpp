@@ -11,7 +11,7 @@
 //       copied to the /include folder manually.
 #include "stk_config.h"
 
-#ifdef _STK_ARCH_WIN32_M
+#ifdef _STK_ARCH_X86_WIN32
 
 #include "arch/x86/win32/stk_arch_x86-win32.h"
 #define WIN32_LEAN_AND_MEAN
@@ -67,7 +67,7 @@ void PlatformX86Win32::SwitchContext()
 
 }
 
-int32_t PlatformX86Win32::GetSysTickResolution() const
+int32_t PlatformX86Win32::GetTickResolution() const
 {
     return g_Context.m_systick_resolution;
 }
@@ -77,4 +77,4 @@ void PlatformX86Win32::SetAccessMode(EAccessMode mode)
 
 }
 
-#endif // _STK_ARCH_WIN32_M
+#endif // _STK_ARCH_X86_WIN32

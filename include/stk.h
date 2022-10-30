@@ -13,6 +13,10 @@
 #include "stk_helper.h"
 #include "stk_arch.h"
 
+/*! \file  stk.h
+    \brief Contains core implementation (Kernel) of the task scheduler.
+*/
+
 // Scheduling strategies:
 #include "strategy/stk_strategy_rrobin.h"
 
@@ -81,15 +85,15 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     {
         friend class Kernel;
 
-        /*! \class Instance
-            \brief Exposes IKernelService to the user space during scheduler start and acts as a singleton
-                   instance binder.
-                   IKernelService instance becomes available before user tasks are started.
-            \note  Participator of the Singleton design pattern (see Singleton).
+        /*! \class SingletonBinder
+            \brief Exposes IKernelService instance through the Singleton<IKernelService *>::Get().
+                   Acts as a singleton instance binder at run-time. IKernelService instance becomes
+                   available before user tasks are started.
+            \note  Singleton design pattern (see Singleton).
         */
-        class Instance : private Singleton<IKernelService *>
+        class SingletonBinder : private Singleton<IKernelService *>
         {
-            // only Kernel concrete implementation has access to the Instance::Bind() function
+            //! \note Only Kernel's internal environment has access to the SingletonBinder::Bind() function.
             template <uint32_t _Size0> friend class Kernel;
         };
 
@@ -109,12 +113,12 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             m_platform = platform;
 
             // make instance accessible for user
-            Instance::Bind(this);
+            SingletonBinder::Bind(this);
         }
 
         int64_t GetTicks() const { return m_ticks; }
 
-        int32_t GetTicksResolution() const { return m_platform->GetSysTickResolution(); }
+        int32_t GetTicksResolution() const { return m_platform->GetTickResolution(); }
 
     private:
         void IncrementTick() { ++m_ticks; }
@@ -133,7 +137,7 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_task_next(NULL)
+    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL)
     { }
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
@@ -149,7 +153,6 @@ public:
         m_platform        = platform;
         m_switch_strategy = switch_strategy;
         m_task_now        = NULL;
-        m_task_next       = NULL;
     }
 
     void AddTask(ITask *user_task)
@@ -269,7 +272,6 @@ protected:
     ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
     TaskStorageType      m_task_storage;    //!< task storage
     KernelTask          *m_task_now;        //!< current task task
-    KernelTask          *m_task_next;       //!< next task for a context switch
 };
 
 } // namespace stk

@@ -7,19 +7,19 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#define _STK_ARCH_WIN32_M
+#define _STK_ARCH_X86_WIN32
 #include <stdio.h>
 #include <stk.h>
 
 static volatile uint8_t g_TaskSwitch = 0;
 
 template <stk::EAccessMode _AccessMode>
-class Task : public stk::UserTask<256, _AccessMode>
+class MyTask : public stk::Task<256, _AccessMode>
 {
     uint8_t m_taskId;
 
 public:
-    Task(uint8_t taskId) : m_taskId(taskId)
+    MyTask(uint8_t taskId) : m_taskId(taskId)
     { }
 
     stk::RunFuncType GetFunc() { return &Run; }
@@ -28,7 +28,7 @@ public:
 private:
     static void Run(void *user_data)
     {
-        ((Task *)user_data)->RunInner();
+        ((MyTask *)user_data)->RunInner();
     }
 
     void RunInner()
@@ -50,7 +50,7 @@ private:
 
             printf("task: %d\n", task_id);
 
-            stk::g_Kernel->DelaySpin(1000);
+            g_KernelService->DelaySpin(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)
@@ -67,9 +67,9 @@ void RunExample()
     static PlatformX86Win32 platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
-    static Task<ACCESS_PRIVILEGED> task1(0);
-    static Task<ACCESS_USER> task2(1);
-    static Task<ACCESS_USER> task3(2);
+    static MyTask<ACCESS_PRIVILEGED> task1(0);
+    static MyTask<ACCESS_USER> task2(1);
+    static MyTask<ACCESS_USER> task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 

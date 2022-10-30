@@ -23,7 +23,7 @@ public:
     void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *firstTask);
     bool InitStack(Stack *stack, ITask *userTask);
     void SwitchContext();
-    int32_t GetSysTickResolution() const;
+    int32_t GetTickResolution() const;
     void SetAccessMode(EAccessMode mode);
 };
 

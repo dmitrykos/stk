@@ -14,43 +14,81 @@
 #include <stdint.h>
 #include <assert.h>
 
-#ifdef __GNUC__
-    #define __stk_unreachable() __builtin_unreachable()
-#endif
+/*! \file  stk_defs.h
+    \brief Contains compiler low-level definitions.
+*/
 
-#ifdef __GNUC__
-    #define __stk_attr_noreturn __attribute__((__noreturn__))
-#elif defined(__ICCARM__)
-    #define __stk_attr_noreturn __attribute__((noreturn))
-#endif
-
-#ifdef __GNUC__
-    #define __stk_attr_naked __attribute__((naked))
-#elif defined(__ICCARM__)
-    #define __stk_attr_naked __attribute__((naked))
-#endif
-
-#ifdef __GNUC__
-    #define __stk_aligned(x) __attribute__((aligned(x)))
-#elif defined(__ICCARM__)
-    #define __stk_aligned(x) __attribute__((aligned(x)))
-#endif
-
+/*! \def   __stk_forceinline
+    \brief Inlines function (function prefix).
+*/
 #ifdef __GNUC__
     #define __stk_forceinline __attribute__((always_inline)) inline
 #elif defined(__ICCARM__)
     #define __stk_forceinline __forceinline
+#else
+    #define __stk_forceinline
 #endif
+
+/*! \def   __stk_aligned
+    \param[in] x: Alignment value in bytes.
+    \brief Aligns data structure to the x bytes (data instance prefix).
+*/
+#ifdef __GNUC__
+    #define __stk_aligned(x) __attribute__((aligned(x)))
+#elif defined(__ICCARM__)
+    #define __stk_aligned(x) __attribute__((aligned(x)))
+#else
+    #define __stk_aligned(x)
+#endif
+
+/*! \def   __stk_attr_naked
+    \brief Instructs compiler that function does not have prologue and epilogue (function prefix).
+*/
+#ifdef __GNUC__
+    #define __stk_attr_naked __attribute__((naked))
+#elif defined(__ICCARM__)
+    #define __stk_attr_naked __attribute__((naked))
+#else
+    #define __stk_attr_naked
+#endif
+
+/*! \def   __stk_attr_noreturn
+    \brief Instructs compiler that function never returns (function prefix).
+*/
+#ifdef __GNUC__
+    #define __stk_attr_noreturn __attribute__((__noreturn__))
+#elif defined(__ICCARM__)
+    #define __stk_attr_noreturn __attribute__((noreturn))
+#else
+    #define __stk_attr_noreturn
+#endif
+
+/*! \def   __stk_unreachable
+    \brief Instructs compiler that code below it is unreachable (in-code statement).
+*/
+#ifdef __GNUC__
+    #define __stk_unreachable() __builtin_unreachable()
+#else
+    #define __stk_unreachable()
+#endif
+
+/*! \namespace stk
+    \brief     Namespace of STK package.
+ */
+namespace stk {
 
 /*! \fn    forced_cast
     \brief Force-cast value of one type to another. Overcomes compiler error or warning when trying
            to cast in normal way.
 */
-template <class _To, class _From> static inline _To forced_cast(_From from)
+template <class _To, class _From>
+static __stk_forceinline _To forced_cast(const _From &from)
 {
     union { _From from; _To to; } cast;
     cast.from = from;
     return cast.to;
 }
+
+} // namespace stk
 
 #endif /* STK_DEFS_H_ */

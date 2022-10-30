@@ -12,6 +12,10 @@
 
 #include "stk_common.h"
 
+/*! \file  stk_helper.h
+    \brief Contains helper implementations which simplify user-side code.
+*/
+
 namespace stk {
 
 /*! \class Task

@@ -10,12 +10,18 @@
 #ifndef STK_LINKED_LIST_H_
 #define STK_LINKED_LIST_H_
 
+/*! \file  stk_linked_list.h
+    \brief Contains linked list implementation.
+*/
+
 namespace stk {
 namespace util {
 
 template <class _Ty> class DListHead;
 
-//! Double linked intrusive list entry.
+/*! \class DListEntry
+    \brief Double linked intrusive list entry.
+*/
 template <class _Ty> class DListEntry
 {
     friend class DListHead<_Ty>;
@@ -69,7 +75,9 @@ private:
     EntryType *m_prev; //!< previous list entry
 };
 
-//! Double linked intrusive list head.
+/*! \class DListHead
+    \brief Double linked intrusive list head.
+*/
 template <class _Ty> class DListHead
 {
     friend class DListEntry<_Ty>;

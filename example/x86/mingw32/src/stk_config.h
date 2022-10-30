@@ -10,6 +10,6 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-#define _STK_ARCH_WIN32_M
+#define _STK_ARCH_X86_WIN32
 
 #endif /* STK_CONFIG_H_ */

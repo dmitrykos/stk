@@ -46,18 +46,20 @@ using namespace stk;
 //! Internal context.
 static struct Context
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t systick_resolution)
+    void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
     {
-        m_handler            = handler;
-        m_stack_idle         = first_stack;
-        m_stack_active       = first_stack;
-        m_systick_resolution = systick_resolution;
+        m_handler         = handler;
+        m_stack_idle      = first_stack;
+        m_stack_active    = first_stack;
+        m_tick_resolution = tick_resolution;
+        m_started         = false;
     }
 
     IPlatform::IEventHandler *m_handler; //!< kernel event handler
-    Stack *m_stack_idle;                 //!< idle task stack
-    Stack *m_stack_active;               //!< active task stack
-    int32_t m_systick_resolution;        //!< system tick resolution (microseconds)
+    Stack  *m_stack_idle;                //!< idle task stack
+    Stack  *m_stack_active;              //!< active task stack
+    int32_t m_tick_resolution;           //!< system tick resolution (microseconds)
+    bool    m_started;                   //!< started state
 }
 g_Context;
 
@@ -209,6 +211,13 @@ extern "C" void SVC_Handler_Main(size_t *svc_args)
     switch (svc_number)
     {
     case 0: {
+        // disallow any duplicate attempt
+        assert(!g_Context.m_started);
+        if (g_Context.m_started)
+            return;
+
+        g_Context.m_started = true;
+
         // FPU
         EnableFullFpuAccess();
 
@@ -250,14 +259,14 @@ static void OnTaskExit()
     }
 }
 
-void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
+void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resolution, IKernelTask *first_task)
 {
-    g_Context.Initialize(event_handler, first_task->GetUserStack(), resolution_us);
+    g_Context.Initialize(event_handler, first_task->GetUserStack(), tick_resolution);
     
     NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
-    uint32_t result = SysTick_Config(SystemCoreClock / resolution_us);
+    uint32_t result = SysTick_Config(SystemCoreClock / tick_resolution);
     assert(result == 0);
     (void)result;
 
@@ -306,9 +315,9 @@ void PlatformArmCortexM::SwitchContext()
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 }
 
-int32_t PlatformArmCortexM::GetSysTickResolution() const
+int32_t PlatformArmCortexM::GetTickResolution() const
 {
-    return g_Context.m_systick_resolution;
+    return g_Context.m_tick_resolution;
 }
 
 void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
