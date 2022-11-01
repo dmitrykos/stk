@@ -84,6 +84,24 @@ protected:
         m_instance = instance;
     }
 
+#ifdef _STK_UNDER_TEST
+    /*! \brief     Unbind instance from the singleton.
+        \note      It is only enabled when STK is under a test, should not be in production.
+        \param[in] instance: Instance to unbind.
+    */
+    static void Unbind(const _InstanceType &instance)
+    {
+        STK_ASSERT(instance != NULL);
+
+        // allow if not bound
+    	if (m_instance == NULL)
+    		return;
+
+        STK_ASSERT(m_instance == instance);
+        m_instance = NULL;
+    }
+#endif
+
 private:
     static _InstanceType m_instance; //!< referenced single instance
 };

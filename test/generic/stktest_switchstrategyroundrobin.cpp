@@ -25,8 +25,8 @@ TEST(TestSwitchStrategyRoundRobin, EndlessNext)
 	Kernel<2> kernel;
 	PlatformTestMock platform;
 	SwitchStrategyRoundRobin switch_strategy;
-	TaskMock<stk::ACCESS_USER> task1;
-	TaskMock<stk::ACCESS_USER> task2;
+	TaskMock<ACCESS_USER> task1;
+	TaskMock<ACCESS_USER> task2;
 
 	kernel.Initialize(&platform, &switch_strategy);
 	kernel.AddTask(&task1);

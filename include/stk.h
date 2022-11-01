@@ -104,6 +104,17 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         explicit KernelService() : m_platform(0), m_ticks(0)
         { }
 
+	#ifdef _STK_UNDER_TEST
+        /*! \brief     Destructor.
+            \note      It is used only when STK is under a test, should not be in production.
+        */
+        ~KernelService()
+        {
+        	// allow in multiple tests
+        	SingletonBinder::Unbind(this);
+        }
+	#endif
+
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
                        instance (see g_KernelService).
@@ -133,7 +144,9 @@ public:
     */
     enum EConsts
     {
-        TASKS_MAX = _Size //!< Max number of tasks supported by the instance of the Kernel.
+    	TASKS_MAX       = _Size,    //!< Maximum number of tasks supported by the instance of the Kernel.
+        PERIODICITY_MAX = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
+		PERIODICITY_DEFAULT = 1000, //!< Default reasonable periodicity (microseconds), 1 millisecond.
     };
 
     /*! \brief Default initializer.
@@ -168,6 +181,7 @@ public:
     void Start(uint32_t resolution_us)
     {
         STK_ASSERT(resolution_us != 0);
+        STK_ASSERT(resolution_us < PERIODICITY_MAX);
         STK_ASSERT(IsInitialized());
 
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());

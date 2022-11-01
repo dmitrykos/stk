@@ -96,7 +96,7 @@ TEST(TestKernel, InitDoubleFail)
 TEST(TestKernel, AddTaskNoInit)
 {
 	Kernel<10> kernel;
-	TaskMock<stk::ACCESS_USER> task;
+	TaskMock<ACCESS_USER> task;
 
 	try
 	{
@@ -115,7 +115,7 @@ TEST(TestKernel, AddTask)
 	Kernel<10> kernel;
 	PlatformTestMock platform;
 	SwitchStrategyRoundRobin switch_strategy;
-	TaskMock<stk::ACCESS_USER> task;
+	TaskMock<ACCESS_USER> task;
 
 	kernel.Initialize(&platform, &switch_strategy);
 
@@ -130,14 +130,28 @@ TEST(TestKernel, AddTask)
 	CHECK_TRUE_TEXT(ktask->GetUserTask() == &task, "Expecting just added user task");
 }
 
+TEST(TestKernel, AddTaskInitStack)
+{
+	Kernel<10> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_USER> task;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task);
+
+	CHECK_EQUAL(&task, platform.m_user_task_InitStack);
+	CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_InitStack->SP);
+}
+
 TEST(TestKernel, AddTaskMaxOut)
 {
 	Kernel<2> kernel;
 	PlatformTestMock platform;
 	SwitchStrategyRoundRobin switch_strategy;
-	TaskMock<stk::ACCESS_USER> task1;
-	TaskMock<stk::ACCESS_USER> task2;
-	TaskMock<stk::ACCESS_USER> task3;
+	TaskMock<ACCESS_USER> task1;
+	TaskMock<ACCESS_USER> task2;
+	TaskMock<ACCESS_USER> task3;
 
 	kernel.Initialize(&platform, &switch_strategy);
 
@@ -161,7 +175,7 @@ TEST(TestKernel, AddSameTask)
 	Kernel<2> kernel;
 	PlatformTestMock platform;
 	SwitchStrategyRoundRobin switch_strategy;
-	TaskMock<stk::ACCESS_USER> task;
+	TaskMock<ACCESS_USER> task;
 
 	kernel.Initialize(&platform, &switch_strategy);
 
@@ -177,4 +191,188 @@ TEST(TestKernel, AddSameTask)
 		CHECK(true);
 		g_TestContext.ExpectAssert(false);
 	}
+}
+
+TEST(TestKernel, StartInvalidPeriodicity)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_USER> task;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task);
+
+	try
+	{
+		g_TestContext.ExpectAssert(true);
+		kernel.Start(0);
+		CHECK_TEXT(false, "expecting to fail with 0 periodicity");
+	}
+	catch (TestAssertPassed &pass)
+	{
+		CHECK(true);
+		g_TestContext.ExpectAssert(false);
+	}
+
+	try
+	{
+		g_TestContext.ExpectAssert(true);
+		kernel.Start(Kernel<2>::PERIODICITY_MAX + 1);
+		CHECK_TEXT(false, "expecting to fail with too large periodicity");
+	}
+	catch (TestAssertPassed &pass)
+	{
+		CHECK(true);
+		g_TestContext.ExpectAssert(false);
+	}
+}
+
+TEST(TestKernel, StartNotIntialized)
+{
+	Kernel<2> kernel;
+
+	try
+	{
+		g_TestContext.ExpectAssert(true);
+		kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+		CHECK_TEXT(false, "expecting to fail when not initialized");
+	}
+	catch (TestAssertPassed &pass)
+	{
+		CHECK(true);
+		g_TestContext.ExpectAssert(false);
+	}
+}
+
+TEST(TestKernel, StartNoTasks)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+
+	kernel.Initialize(&platform, &switch_strategy);
+
+	try
+	{
+		g_TestContext.ExpectAssert(true);
+		kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+		CHECK_TEXT(false, "expecting to fail without tasks");
+	}
+	catch (TestAssertPassed &pass)
+	{
+		CHECK(true);
+		g_TestContext.ExpectAssert(false);
+	}
+}
+
+TEST(TestKernel, Start)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_USER> task;
+	const uint32_t periodicity = Kernel<2>::PERIODICITY_MAX - 1;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task);
+
+	kernel.Start(periodicity);
+
+	CHECK_TRUE(platform.m_started);
+	CHECK_TRUE(platform.m_event_handler != NULL);
+	CHECK_TRUE(g_KernelService != NULL);
+	CHECK_EQUAL(&task, platform.m_first_task_Start->GetUserTask());
+	CHECK_EQUAL(periodicity, platform.GetTickResolution());
+}
+
+TEST(TestKernel, StartBeginISR)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_PRIVILEGED> task;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task);
+	kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+
+	// ISR calls OnStart
+	platform.m_event_handler->OnStart();
+
+	// expect that first task's access mode is requested by kernel
+	CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
+}
+
+TEST(TestKernel, ContextSwitchOnSysTickISR)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_USER> task1;
+	TaskMock<ACCESS_USER> task2;
+	Stack *idle, *active;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task1);
+	kernel.AddTask(&task2);
+	kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+
+	// ISR calls OnStart
+	platform.m_event_handler->OnStart();
+
+	// ISR calls OnSysTick 1-st time
+	{
+		platform.m_event_handler->OnSysTick(&idle, &active);
+
+		// 1-st task is switched from Active and becomes Idle
+		CHECK_EQUAL(idle->SP, (size_t)task1.GetStack());
+
+		// 2-nd task becomes Active
+		CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
+
+		// context switch requested
+		CHECK_EQUAL(1, platform.m_context_switch_nr);
+	}
+
+	// ISR calls OnSysTick 2-nd time
+	{
+		platform.m_event_handler->OnSysTick(&idle, &active);
+
+		// 2-st task is switched from Active and becomes Idle
+		CHECK_EQUAL(idle->SP, (size_t)task2.GetStack());
+
+		// 1-nd task becomes Active
+		CHECK_EQUAL(active->SP, (size_t)task1.GetStack());
+
+		// context switch requested
+		CHECK_EQUAL(2, platform.m_context_switch_nr);
+	}
+}
+
+TEST(TestKernel, ContextSwitchAccessModeChange)
+{
+	Kernel<2> kernel;
+	PlatformTestMock platform;
+	SwitchStrategyRoundRobin switch_strategy;
+	TaskMock<ACCESS_USER> task1;
+	TaskMock<ACCESS_PRIVILEGED> task2;
+	Stack *idle, *active;
+
+	kernel.Initialize(&platform, &switch_strategy);
+	kernel.AddTask(&task1);
+	kernel.AddTask(&task2);
+	kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+
+	// ISR calls OnStart
+	platform.m_event_handler->OnStart();
+
+	// 1-st task
+	CHECK_EQUAL(ACCESS_USER, platform.m_access_mode);
+
+	// ISR calls OnSysTick
+	platform.m_event_handler->OnSysTick(&idle, &active);
+
+	// 2-st task
+	CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
 }
