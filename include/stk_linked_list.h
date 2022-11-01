@@ -104,8 +104,8 @@ public:
 
     void Unlink(EntryType *entry)
     {
-        assert(entry->IsLinked());
-        assert(entry->GetHead() == this);
+        STK_ASSERT(entry->IsLinked());
+        STK_ASSERT(entry->GetHead() == this);
 
         if (m_first == entry)
             m_first = entry->GetNext();
@@ -121,7 +121,7 @@ public:
 
     void RelinkTo(DListHead &to)
     {
-        assert(&to != this);
+        STK_ASSERT(&to != this);
 
         while (!this->IsEmpty())
         {
@@ -132,7 +132,7 @@ public:
 private:
     void Link(EntryType *entry, EntryType *next = NULL, EntryType *prev = NULL)
     {
-        assert(!entry->IsLinked());
+        STK_ASSERT(!entry->IsLinked());
 
         if (prev == NULL)
             next = m_first;

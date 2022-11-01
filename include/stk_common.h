@@ -78,8 +78,8 @@ protected:
     */
     static void Bind(const _InstanceType &instance)
     {
-        assert(instance != NULL);
-        assert(m_instance == NULL);
+        STK_ASSERT(instance != NULL);
+        STK_ASSERT(m_instance == NULL);
 
         m_instance = instance;
     }

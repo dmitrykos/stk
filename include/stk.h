@@ -31,6 +31,7 @@ namespace stk {
 
 /*! \class Kernel
     \brief Concrete implementation of the thread scheduling kernel.
+    \note  Kernel expects at least 1 task, e.g. Kernel<N> where N != 0.
 
     Usage example:
     \code
@@ -142,13 +143,11 @@ public:
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
     {
-        assert(platform != NULL);
-        assert(switch_strategy != NULL);
+        STK_ASSERT(platform != NULL);
+        STK_ASSERT(switch_strategy != NULL);
 
         // allow initialization only once
-        assert(m_platform == NULL);
-        if (m_platform != NULL)
-            return;
+        STK_ASSERT(!IsInitialized());
 
         m_platform        = platform;
         m_switch_strategy = switch_strategy;
@@ -157,21 +156,22 @@ public:
 
     void AddTask(ITask *user_task)
     {
-        assert(m_switch_strategy != NULL);
+    	// must be initialized first
+        STK_ASSERT(IsInitialized());
 
         KernelTask *task = AllocateNewTask(user_task);
-        assert(task != NULL);
+        STK_ASSERT(task != NULL);
 
         m_switch_strategy->AddTask(task);
     }
 
     void Start(uint32_t resolution_us)
     {
-        assert(resolution_us != 0);
-        assert(m_platform != NULL);
+        STK_ASSERT(resolution_us != 0);
+        STK_ASSERT(IsInitialized());
 
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
-        assert(m_task_now != NULL);
+        STK_ASSERT(m_task_now != NULL);
         if (m_task_now == NULL)
             return;
 
@@ -183,7 +183,7 @@ public:
 protected:
     KernelTask *AllocateNewTask(ITask *user_task)
     {
-        assert(user_task != NULL);
+        STK_ASSERT(user_task != NULL);
 
         // look for a free kernel task
         KernelTask *kernel_task = NULL;
@@ -193,12 +193,12 @@ protected:
             if (task->IsBusy())
             {
                 // avoid task collision
-                assert(task->m_user != user_task);
+                STK_ASSERT(task->m_user != user_task);
                 if (task->m_user == user_task)
                     return NULL;
 
                 // avoid stack collision
-                assert(task->m_user->GetStack() != user_task->GetStack());
+                STK_ASSERT(task->m_user->GetStack() != user_task->GetStack());
                 if (task->m_user->GetStack() == user_task->GetStack())
                     return NULL;
             }
@@ -212,14 +212,14 @@ protected:
         // if NULL - exceeded max supported kernel task count
         if (kernel_task == NULL)
         {
-            assert(false);
+            STK_ASSERT(false);
             return NULL;
         }
 
         // init stack of the user task
         if (!m_platform->InitStack(&kernel_task->m_stack, user_task))
         {
-            assert(false);
+            STK_ASSERT(false);
             return NULL;
         }
 
@@ -261,6 +261,14 @@ protected:
             m_platform->SwitchContext();
         }
     }
+
+    bool IsInitialized() const
+    {
+    	return (m_platform != NULL) && (m_switch_strategy != NULL);
+    }
+
+    // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
+	STK_STATIC_ASSERT(TASKS_MAX > 0);
 
     /*! \class TaskStorageType
         \brief KernelTask array type used as a storage for the KernelTask instances.

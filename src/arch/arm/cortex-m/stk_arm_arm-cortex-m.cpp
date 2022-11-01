@@ -212,7 +212,7 @@ extern "C" void SVC_Handler_Main(size_t *svc_args)
     {
     case 0: {
         // disallow any duplicate attempt
-        assert(!g_Context.m_started);
+    	STK_ASSERT(!g_Context.m_started);
         if (g_Context.m_started)
             return;
 
@@ -231,7 +231,7 @@ extern "C" void SVC_Handler_Main(size_t *svc_args)
         OnTaskRun();
         break; }
     default:
-        assert(false);
+    	STK_ASSERT(false);
         break;
     }
 }
@@ -267,7 +267,7 @@ void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resol
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
     uint32_t result = SysTick_Config(SystemCoreClock / tick_resolution);
-    assert(result == 0);
+    STK_ASSERT(result == 0);
     (void)result;
 
     StartFirstTask();
