@@ -1,0 +1,110 @@
+/*
+ * stktest.h
+ *
+ *  Created on: 1 Nov 2022
+ *      Author: Dmitry Kostjuchenko
+ */
+
+#ifndef STKTEST_H_
+#define STKTEST_H_
+
+#include <stdio.h>
+#include <exception>
+
+// lib: cpputest
+#include <CppUTest/TestHarness.h>
+
+// lib: stk
+#define _STK_ARCH_X86_WIN32
+#include <stk.h>
+
+/*! \class TestAssertPassed
+    \brief Throwable class for catching assertions from _STK_ASSERT_IMPL().
+*/
+struct TestAssertPassed : public std::exception
+{
+	const char *what() const noexcept { return "STK test suite exception (TestAssertPassed) thrown!"; }
+};
+
+/*! \class TestContext
+    \brief Common context for executed tests.
+*/
+class TestContext
+{
+public:
+	TestContext() : m_expect_assert(false)
+	{ }
+
+	void ExpectAssert(bool expect) { m_expect_assert = expect; }
+	bool IsExpectingAssert() const { return m_expect_assert; }
+
+private:
+	static TestContext m_instance;
+	bool m_expect_assert;
+};
+
+/*! \var   g_TestContext
+    \brief Global instance of the test context.
+*/
+extern TestContext g_TestContext;
+
+/*! \class PlatformTestMock
+    \brief IPlatform mock.
+*/
+class PlatformTestMock : public stk::IPlatform
+{
+public:
+	PlatformTestMock() : m_resolution(0), m_access_mode(stk::ACCESS_USER)
+	{ }
+	virtual ~PlatformTestMock()
+	{ }
+    void Start(IEventHandler *event_handler, uint32_t resolution_us, stk::IKernelTask *firstTask)
+    {
+    	m_resolution = resolution_us;
+    }
+    bool InitStack(stk::Stack *stack, stk::ITask *userTask)
+    {
+    	return true;
+    }
+    void SwitchContext()
+    {
+
+    }
+    int32_t GetTickResolution() const
+    {
+    	return m_resolution;
+    }
+    void SetAccessMode(stk::EAccessMode mode)
+    {
+    	m_access_mode = mode;
+    }
+
+    int32_t          m_resolution;
+    stk::EAccessMode m_access_mode;
+};
+
+/*! \class TaskMock
+    \brief User task mock.
+*/
+template <stk::EAccessMode _AccessMode>
+class TaskMock : public stk::Task<256, _AccessMode>
+{
+public:
+	TaskMock() : m_started(false) { }
+    stk::RunFuncType GetFunc() { return &Run; }
+    void *GetFuncUserData() { return this; }
+
+    bool m_started;
+private:
+    static void Run(void *user_data)
+    {
+        ((TaskMock *)user_data)->RunInner();
+    }
+
+    void RunInner()
+    {
+    	m_started = 0;
+    }
+};
+
+#endif /* STKTEST_H_ */
