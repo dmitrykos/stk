@@ -55,10 +55,10 @@ TEST(TestKernelService, GetDeadlineTicks)
 	mock.m_ticks = 1;
 
 	mock.m_resolution = 1;
-	CHECK_EQUAL(2, mock.GetDeadlineTicks(1000));
+	CHECK_EQUAL(2, (int32_t)mock.GetDeadlineTicks(1000));
 
 	mock.m_resolution = 100;
-	CHECK_EQUAL(101, mock.GetDeadlineTicks(1000));
+	CHECK_EQUAL(101, (int32_t)mock.GetDeadlineTicks(1000));
 }
 
 TEST(TestKernelService, DelaySpin)
@@ -70,7 +70,7 @@ TEST(TestKernelService, DelaySpin)
 
 	mock.DelaySpin(1000);
 
-	CHECK_EQUAL(2, mock.m_ticks);
+	CHECK_EQUAL(2, (int32_t)mock.m_ticks);
 }
 
 TEST(TestKernelService, GetTicksResolution)
@@ -107,9 +107,9 @@ TEST(TestKernelService, GetTicks)
 
 	// ISR calls OnSysTick 1-st time
 	platform.m_event_handler->OnSysTick(&idle, &active);
-	CHECK_EQUAL(1, g_KernelService->GetTicks());
+	CHECK_EQUAL(1, (int32_t)g_KernelService->GetTicks());
 
 	// ISR calls OnSysTick 2-nd time
 	platform.m_event_handler->OnSysTick(&idle, &active);
-	CHECK_EQUAL(2, g_KernelService->GetTicks());
+	CHECK_EQUAL(2, (int32_t)g_KernelService->GetTicks());
 }
