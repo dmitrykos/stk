@@ -14,7 +14,11 @@ TestContext g_TestContext;
 
 int main(int argc, char **argv)
 {
-	return RUN_ALL_TESTS(argc, argv);
+	printf("STKTEST-START\n");
+
+	int result = RUN_ALL_TESTS(argc, argv);
+
+	printf("STKTEST-FAILED: %d\n", result);
 }
 
 /*! \fn    _STK_ASSERT_IMPL

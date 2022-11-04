@@ -31,7 +31,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend</name>
+			<name>test/deps</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -61,7 +61,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest</name>
+			<name>test/deps/cpputest</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -131,12 +131,12 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/stk.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include</name>
+			<name>test/deps/cpputest/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src</name>
+			<name>test/deps/cpputest/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -166,32 +166,27 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest</name>
+			<name>test/deps/cpputest/include/CppUTest</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt</name>
+			<name>test/deps/cpputest/include/CppUTestExt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/Platforms</name>
+			<name>test/deps/cpputest/src/CppUTest</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest</name>
+			<name>test/deps/cpputest/src/CppUTestExt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>test/depend/cpputest/src/Platforms</name>
+			<name>test/deps/cpputest/src/Platforms</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -216,422 +211,417 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/CommandLineArguments.h</name>
+			<name>test/deps/cpputest/include/CppUTest/CommandLineArguments.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/CommandLineArguments.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/CommandLineArguments.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/CommandLineTestRunner.h</name>
+			<name>test/deps/cpputest/include/CppUTest/CommandLineTestRunner.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/CommandLineTestRunner.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/CommandLineTestRunner.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/CppUTestConfig.h</name>
+			<name>test/deps/cpputest/include/CppUTest/CppUTestConfig.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/CppUTestConfig.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/CppUTestConfig.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/CppUTestGeneratedConfig.h</name>
+			<name>test/deps/cpputest/include/CppUTest/CppUTestGeneratedConfig.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/CppUTestGeneratedConfig.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/CppUTestGeneratedConfig.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/JUnitTestOutput.h</name>
+			<name>test/deps/cpputest/include/CppUTest/JUnitTestOutput.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/JUnitTestOutput.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/JUnitTestOutput.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/MemoryLeakDetector.h</name>
+			<name>test/deps/cpputest/include/CppUTest/MemoryLeakDetector.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/MemoryLeakDetector.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/MemoryLeakDetector.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/MemoryLeakDetectorMallocMacros.h</name>
+			<name>test/deps/cpputest/include/CppUTest/MemoryLeakDetectorMallocMacros.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/MemoryLeakDetectorMallocMacros.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/MemoryLeakDetectorMallocMacros.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/MemoryLeakDetectorNewMacros.h</name>
+			<name>test/deps/cpputest/include/CppUTest/MemoryLeakDetectorNewMacros.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/MemoryLeakDetectorNewMacros.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/MemoryLeakDetectorNewMacros.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/MemoryLeakWarningPlugin.h</name>
+			<name>test/deps/cpputest/include/CppUTest/MemoryLeakWarningPlugin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/MemoryLeakWarningPlugin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/MemoryLeakWarningPlugin.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/PlatformSpecificFunctions.h</name>
+			<name>test/deps/cpputest/include/CppUTest/PlatformSpecificFunctions.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/PlatformSpecificFunctions.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/PlatformSpecificFunctions.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/PlatformSpecificFunctions_c.h</name>
+			<name>test/deps/cpputest/include/CppUTest/PlatformSpecificFunctions_c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/PlatformSpecificFunctions_c.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/PlatformSpecificFunctions_c.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/SimpleMutex.h</name>
+			<name>test/deps/cpputest/include/CppUTest/SimpleMutex.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/SimpleMutex.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/SimpleMutex.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/SimpleString.h</name>
+			<name>test/deps/cpputest/include/CppUTest/SimpleString.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/SimpleString.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/SimpleString.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/SimpleStringInternalCache.h</name>
+			<name>test/deps/cpputest/include/CppUTest/SimpleStringInternalCache.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/SimpleStringInternalCache.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/SimpleStringInternalCache.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/StandardCLibrary.h</name>
+			<name>test/deps/cpputest/include/CppUTest/StandardCLibrary.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/StandardCLibrary.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/StandardCLibrary.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TeamCityTestOutput.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TeamCityTestOutput.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TeamCityTestOutput.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TeamCityTestOutput.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestFailure.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestFailure.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestFailure.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestFailure.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestFilter.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestFilter.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestFilter.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestFilter.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestHarness.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestHarness.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestHarness.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestHarness.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestHarness_c.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestHarness_c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestHarness_c.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestHarness_c.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestMemoryAllocator.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestMemoryAllocator.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestMemoryAllocator.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestMemoryAllocator.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestOutput.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestOutput.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestOutput.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestOutput.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestPlugin.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestPlugin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestPlugin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestPlugin.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestRegistry.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestRegistry.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestRegistry.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestRegistry.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestResult.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestResult.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestResult.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestResult.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/TestTestingFixture.h</name>
+			<name>test/deps/cpputest/include/CppUTest/TestTestingFixture.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/TestTestingFixture.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/TestTestingFixture.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/Utest.h</name>
+			<name>test/deps/cpputest/include/CppUTest/Utest.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/Utest.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/Utest.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTest/UtestMacros.h</name>
+			<name>test/deps/cpputest/include/CppUTest/UtestMacros.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTest/UtestMacros.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTest/UtestMacros.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/CodeMemoryReportFormatter.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/CodeMemoryReportFormatter.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/CodeMemoryReportFormatter.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/CodeMemoryReportFormatter.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/GMock.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/GMock.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/GMock.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/GMock.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/GTest.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/GTest.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/GTest.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/GTest.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/GTestConvertor.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/GTestConvertor.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/GTestConvertor.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/GTestConvertor.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/GTestSupport.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/GTestSupport.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/GTestSupport.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/GTestSupport.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/IEEE754ExceptionsPlugin.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/IEEE754ExceptionsPlugin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/IEEE754ExceptionsPlugin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/IEEE754ExceptionsPlugin.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MemoryReportAllocator.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MemoryReportAllocator.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MemoryReportAllocator.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MemoryReportAllocator.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MemoryReportFormatter.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MemoryReportFormatter.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MemoryReportFormatter.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MemoryReportFormatter.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MemoryReporterPlugin.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MemoryReporterPlugin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MemoryReporterPlugin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MemoryReporterPlugin.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockActualCall.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockActualCall.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockActualCall.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockActualCall.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockCheckedActualCall.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockCheckedActualCall.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockCheckedActualCall.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockCheckedActualCall.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockCheckedExpectedCall.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockCheckedExpectedCall.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockCheckedExpectedCall.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockCheckedExpectedCall.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockExpectedCall.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockExpectedCall.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockExpectedCall.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockExpectedCall.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockExpectedCallsList.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockExpectedCallsList.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockExpectedCallsList.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockExpectedCallsList.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockFailure.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockFailure.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockFailure.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockFailure.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockNamedValue.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockNamedValue.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockNamedValue.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockNamedValue.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockSupport.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockSupport.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockSupport.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockSupport.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockSupportPlugin.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockSupportPlugin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockSupportPlugin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockSupportPlugin.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/MockSupport_c.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/MockSupport_c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/MockSupport_c.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/MockSupport_c.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/CppUTestExt/OrderedTest.h</name>
+			<name>test/deps/cpputest/include/CppUTestExt/OrderedTest.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/CppUTestExt/OrderedTest.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/include/CppUTestExt/OrderedTest.h</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/Platforms/c2000</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>test/depend/cpputest/src/CppUTest/CommandLineArguments.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/CommandLineArguments.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/CommandLineArguments.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/CommandLineArguments.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/CommandLineTestRunner.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/CommandLineTestRunner.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/CommandLineTestRunner.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/CommandLineTestRunner.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/JUnitTestOutput.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/JUnitTestOutput.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/JUnitTestOutput.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/JUnitTestOutput.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/MemoryLeakDetector.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/MemoryLeakDetector.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/MemoryLeakDetector.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/MemoryLeakDetector.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/MemoryLeakWarningPlugin.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/MemoryLeakWarningPlugin.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/MemoryLeakWarningPlugin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/MemoryLeakWarningPlugin.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/SimpleMutex.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/SimpleMutex.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/SimpleMutex.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/SimpleMutex.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/SimpleString.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/SimpleString.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/SimpleString.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/SimpleString.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/SimpleStringInternalCache.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/SimpleStringInternalCache.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/SimpleStringInternalCache.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/SimpleStringInternalCache.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TeamCityTestOutput.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TeamCityTestOutput.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TeamCityTestOutput.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TeamCityTestOutput.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestFailure.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestFailure.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestFailure.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestFailure.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestFilter.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestFilter.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestFilter.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestFilter.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestHarness_c.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestHarness_c.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestHarness_c.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestHarness_c.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestMemoryAllocator.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestMemoryAllocator.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestMemoryAllocator.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestMemoryAllocator.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestOutput.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestOutput.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestOutput.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestOutput.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestPlugin.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestPlugin.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestPlugin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestPlugin.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestRegistry.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestRegistry.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestRegistry.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestRegistry.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestResult.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestResult.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestResult.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestResult.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/TestTestingFixture.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/TestTestingFixture.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/TestTestingFixture.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/TestTestingFixture.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTest/Utest.cpp</name>
+			<name>test/deps/cpputest/src/CppUTest/Utest.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTest/Utest.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTest/Utest.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/CodeMemoryReportFormatter.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/CodeMemoryReportFormatter.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/CodeMemoryReportFormatter.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/CodeMemoryReportFormatter.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/GTest.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/GTest.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/GTest.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/GTest.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/IEEE754ExceptionsPlugin.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/IEEE754ExceptionsPlugin.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/IEEE754ExceptionsPlugin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/IEEE754ExceptionsPlugin.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MemoryReportAllocator.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MemoryReportAllocator.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MemoryReportAllocator.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MemoryReportAllocator.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MemoryReportFormatter.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MemoryReportFormatter.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MemoryReportFormatter.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MemoryReportFormatter.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MemoryReporterPlugin.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MemoryReporterPlugin.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MemoryReporterPlugin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MemoryReporterPlugin.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockActualCall.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockActualCall.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockActualCall.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockActualCall.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockExpectedCall.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockExpectedCall.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockExpectedCall.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockExpectedCall.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockExpectedCallsList.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockExpectedCallsList.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockExpectedCallsList.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockExpectedCallsList.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockFailure.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockFailure.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockFailure.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockFailure.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockNamedValue.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockNamedValue.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockNamedValue.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockNamedValue.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockSupport.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockSupport.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockSupport.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockSupport.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockSupportPlugin.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockSupportPlugin.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockSupportPlugin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockSupportPlugin.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/MockSupport_c.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/MockSupport_c.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/MockSupport_c.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/MockSupport_c.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/CppUTestExt/OrderedTest.cpp</name>
+			<name>test/deps/cpputest/src/CppUTestExt/OrderedTest.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/CppUTestExt/OrderedTest.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/CppUTestExt/OrderedTest.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/src/Platforms/Gcc</name>
+			<name>test/deps/cpputest/src/Platforms/Gcc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -656,14 +646,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/arch/x86/win32/stk_arm_x86-win32.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/depend/cpputest/include/Platforms/c2000/stdint.h</name>
+			<name>test/deps/cpputest/src/Platforms/Gcc/UtestPlatform.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/include/Platforms/c2000/stdint.h</locationURI>
-		</link>
-		<link>
-			<name>test/depend/cpputest/src/Platforms/Gcc/UtestPlatform.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/depend/cpputest/src/Platforms/Gcc/UtestPlatform.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/deps/cpputest/src/Platforms/Gcc/UtestPlatform.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
