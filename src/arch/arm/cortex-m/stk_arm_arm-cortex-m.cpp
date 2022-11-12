@@ -65,7 +65,17 @@ g_Context;
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
-    g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+#if (defined(STM32F0) || defined(STM32F3) || defined(STM32F4)) && defined(HAL_MODULE_ENABLED)
+	HAL_IncTick();
+	// unfortunately STM32 HAL is starting SysTick on its initialization that
+	// will cause a crash on NULL, therefore use additional check
+	if (g_Context.m_started)
+#else
+	// make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
+	STK_ASSERT(g_Context.m_started);
+	STK_ASSERT(g_Context.m_handler != NULL);
+#endif
+	g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
 }
 
 extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
@@ -287,8 +297,8 @@ bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
         stack_top[i] = (size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef);
     }
 
-    size_t xPSR = 0x01000000;
-    size_t PC   = (size_t)user_task->GetFunc() & ~0x1UL; // clear bit 0 for Cortex-M compliance
+    size_t xPSR = (1 << 24); // set T bit of EPSR sub-regiser to enable execution of instructions (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/special-purpose-program-status-registers--xpsr-)
+    size_t PC   = (size_t)user_task->GetFunc() & ~0x1UL; // "Bit [0] is always 0, so instructions are always aligned to halfword boundaries" (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/general-purpose-registers)
     size_t LR   = (size_t)OnTaskExit;
     size_t R0   = (size_t)user_task->GetFuncUserData();
 
