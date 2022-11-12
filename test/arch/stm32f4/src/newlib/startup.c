@@ -248,6 +248,8 @@ __data_end_guard = DATA_END_GUARD_VALUE;
 void __attribute__ ((section(".after_vectors"),noreturn,weak))
 _start (void)
 {
+  // STK: Disable interrupts
+  __asm volatile ("cpsid i");
 
   // Initialise hardware right after reset, to switch clock to higher
   // frequency and have the rest of the initialisations run faster.
@@ -335,6 +337,9 @@ _start (void)
   // Call the standard library initialisation (mandatory for C++ to
   // execute the constructors for the static objects).
   __run_init_array ();
+
+  // STK: Reenable interrupts
+  __asm volatile ("cpsie i");
 
   // Call the main entry point, and save the exit code.
   int code = main (argc, argv);

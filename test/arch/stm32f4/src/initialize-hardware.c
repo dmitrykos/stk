@@ -188,7 +188,8 @@ SystemClock_Config(void)
   HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
 #endif
 
-  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
+  // STK: disabled SysTick, used by scheduler
+  //HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000);
 
   HAL_SYSTICK_CLKSourceConfig(SYSTICK_CLKSOURCE_HCLK);
 }
