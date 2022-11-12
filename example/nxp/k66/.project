@@ -32,6 +32,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>source/blinky</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>stk/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -45,6 +50,16 @@
 			<name>stk/stk_config_template.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/stk_config_template.h</locationURI>
+		</link>
+		<link>
+			<name>source/blinky/example.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/blinky/example.cpp</locationURI>
+		</link>
+		<link>
+			<name>source/blinky/example.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/blinky/example.h</locationURI>
 		</link>
 		<link>
 			<name>stk/include/arch</name>

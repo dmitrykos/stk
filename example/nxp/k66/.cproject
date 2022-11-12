@@ -51,6 +51,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/component/lists}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CMSIS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/device}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../blinky&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include/platform&quot;"/>
 								</option>
@@ -144,8 +145,9 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/component/lists}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CMSIS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/device}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include\platform&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../blinky&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include/platform&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.include.files.1854804315" name="Include files (-include)" superClass="gnu.c.compiler.option.include.files" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.gcc.exe.debug.option.optimization.level.307650291" name="Optimization Level" superClass="com.crt.advproject.gcc.exe.debug.option.optimization.level" useByScannerDiscovery="true"/>
@@ -404,6 +406,7 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/component/lists}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CMSIS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/device}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../blinky&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include/platform&quot;"/>
 								</option>
@@ -495,8 +498,9 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/component/lists}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/CMSIS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/device}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;D:\SVN\private\stk\include\platform&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../blinky&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../include/platform&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.include.files.1933884347" name="Include files (-include)" superClass="gnu.c.compiler.option.include.files" useByScannerDiscovery="false"/>
 								<option id="gnu.c.compiler.option.optimization.flags.1522789508" name="Other optimization flags" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing" valueType="string"/>

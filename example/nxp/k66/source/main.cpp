@@ -43,6 +43,32 @@
 #include "example.h"
 /* TODO: insert other definitions and declarations here. */
 
+void LED_INIT(ELed led, bool init_state)
+{
+    uint8_t logic_state = (init_state ? LOGIC_LED_ON : LOGIC_LED_OFF);
+
+    switch (led)
+    {
+    case LED_RED: LED_RED_INIT(logic_state); break;
+    case LED_GREEN: LED_GREEN_INIT(logic_state); break;
+    case LED_BLUE: LED_BLUE_INIT(logic_state); break;
+    default:
+        assert(false);
+    }
+}
+
+void LED_SET_STATE(ELed led, bool state)
+{
+    switch (led)
+    {
+    case LED_RED: (state ? LED_RED_ON() : LED_RED_OFF()); break;
+    case LED_GREEN: (state ? LED_GREEN_ON() : LED_GREEN_OFF()); break;
+    case LED_BLUE: (state ? LED_BLUE_ON() : LED_BLUE_OFF()); break;
+    default:
+        assert(false);
+    }
+}
+
 /*
  * @brief   Application entry point.
  */

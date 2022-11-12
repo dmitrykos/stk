@@ -10,6 +10,16 @@
 #ifndef EXAMPLE_H_
 #define EXAMPLE_H_
 
+#include <assert.h>
+
+enum ELed
+{
+	LED_RED, LED_GREEN, LED_BLUE
+};
+
+void LED_INIT(ELed led, bool init_state);
+void LED_SET_STATE(ELed led, bool state);
+
 extern void RunExample();
 
 #endif /* EXAMPLE_H_ */

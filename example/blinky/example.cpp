@@ -7,9 +7,9 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#define _STK_ARCH_ARM_CORTEX_M
+#include <stk_config.h>
 #include <stk.h>
-#include "board.h"
+#include "example.h"
 
 static volatile uint8_t g_TaskSwitch = 0;
 
@@ -71,19 +71,19 @@ private:
             switch (task_id)
             {
             case 0:
-                LED_RED_ON();
-                LED_GREEN_OFF();
-                LED_BLUE_OFF();
+            	LED_SET_STATE(LED_RED, true);
+            	LED_SET_STATE(LED_GREEN, false);
+            	LED_SET_STATE(LED_BLUE, false);
                 break;
             case 1:
-                LED_RED_OFF();
-                LED_GREEN_ON();
-                LED_BLUE_OFF();
+            	LED_SET_STATE(LED_RED, false);
+            	LED_SET_STATE(LED_GREEN, true);
+            	LED_SET_STATE(LED_BLUE, false);
                 break;
             case 2:
-                LED_RED_OFF();
-                LED_GREEN_OFF();
-                LED_BLUE_ON();
+            	LED_SET_STATE(LED_RED, false);
+            	LED_SET_STATE(LED_GREEN, false);
+            	LED_SET_STATE(LED_BLUE, true);
                 break;
             }
 
@@ -98,9 +98,9 @@ private:
 
 static void InitLeds()
 {
-    LED_RED_INIT(LOGIC_LED_OFF);
-    LED_GREEN_INIT(LOGIC_LED_OFF);
-    LED_BLUE_INIT(LOGIC_LED_OFF);
+    LED_INIT(LED_RED, false);
+    LED_INIT(LED_GREEN, false);
+    LED_INIT(LED_BLUE, false);
 }
 
 void RunExample()
@@ -128,3 +128,4 @@ void RunExample()
     assert(false);
     while (true);
 }
+
