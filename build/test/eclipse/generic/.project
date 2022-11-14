@@ -88,32 +88,32 @@
 		<link>
 			<name>deps/stk/include/stk.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_arch.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk_arch.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk_arch.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_common.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk_common.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk_common.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_defs.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk_defs.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk_defs.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_helper.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk_helper.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk_helper.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_linked_list.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/stk_linked_list.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/stk_linked_list.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/strategy</name>
@@ -128,7 +128,7 @@
 		<link>
 			<name>deps/stk/src/stk.cpp</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/stk.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/stk.cpp</locationURI>
 		</link>
 		<link>
 			<name>test/deps/cpputest/include</name>
@@ -146,6 +146,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/arch/stk_arch_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/arch/stk_arch_common.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include/arch/x86</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -153,7 +158,7 @@
 		<link>
 			<name>deps/stk/include/strategy/stk_strategy_rrobin.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/strategy/stk_strategy_rrobin.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/strategy/stk_strategy_rrobin.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm</name>
@@ -628,22 +633,22 @@
 		<link>
 			<name>deps/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/x86/win32/stk_arch_x86-win32.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/x86/win32/stk_arm_x86-win32.cpp</name>
 			<type>1</type>
-			<locationURI>copy_PARENT/src/arch/x86/win32/stk_arm_x86-win32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/arch/x86/win32/stk_arm_x86-win32.cpp</locationURI>
 		</link>
 		<link>
 			<name>test/deps/cpputest/src/Platforms/Gcc/UtestPlatform.cpp</name>

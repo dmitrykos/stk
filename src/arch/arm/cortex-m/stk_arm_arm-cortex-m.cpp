@@ -13,6 +13,7 @@
 
 #ifdef _STK_ARCH_ARM_CORTEX_M
 
+#include "arch/stk_arch_common.h"
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
 using namespace stk;
@@ -44,22 +45,16 @@ using namespace stk;
 #endif
 
 //! Internal context.
-static struct Context
+static struct Context : public PlatformContext
 {
     void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
     {
-        m_handler         = handler;
-        m_stack_idle      = first_stack;
-        m_stack_active    = first_stack;
-        m_tick_resolution = tick_resolution;
-        m_started         = false;
+        PlatformContext::Initialize(handler, first_stack, tick_resolution);
+
+        m_started = false;
     }
 
-    IPlatform::IEventHandler *m_handler; //!< kernel event handler
-    Stack  *m_stack_idle;                //!< idle task stack
-    Stack  *m_stack_active;              //!< active task stack
-    int32_t m_tick_resolution;           //!< system tick resolution (microseconds)
-    bool    m_started;                   //!< started state
+    bool m_started; //!< started state
 }
 g_Context;
 
@@ -276,7 +271,7 @@ void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resol
     NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
-    uint32_t result = SysTick_Config(SystemCoreClock / tick_resolution);
+    uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * tick_resolution / 1000000));
     STK_ASSERT(result == 0);
     (void)result;
 

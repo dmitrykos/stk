@@ -2,5 +2,6 @@
 Debug
 Release
 .settings
+.idea
 doxydoc
 *.launch

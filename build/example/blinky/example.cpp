@@ -42,7 +42,11 @@ public:
     MyTask(uint8_t taskId) : m_taskId(taskId)
     { }
 
+#if 0
+    stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&MyTask::RunInner); }
+#else
     stk::RunFuncType GetFunc() { return &Run; }
+#endif
     void *GetFuncUserData() { return this; }
 
 private:
@@ -71,23 +75,24 @@ private:
             switch (task_id)
             {
             case 0:
-            	LED_SET_STATE(LED_RED, true);
-            	LED_SET_STATE(LED_GREEN, false);
-            	LED_SET_STATE(LED_BLUE, false);
+                LED_SET_STATE(LED_RED, true);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, false);
                 break;
             case 1:
-            	LED_SET_STATE(LED_RED, false);
-            	LED_SET_STATE(LED_GREEN, true);
-            	LED_SET_STATE(LED_BLUE, false);
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, true);
+                LED_SET_STATE(LED_BLUE, false);
                 break;
             case 2:
-            	LED_SET_STATE(LED_RED, false);
-            	LED_SET_STATE(LED_GREEN, false);
-            	LED_SET_STATE(LED_BLUE, true);
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, true);
                 break;
             }
 
             DelaySpin(1000);
+            //Sleep(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)
@@ -110,7 +115,13 @@ void RunExample()
     InitLeds();
 
     static Kernel<10> kernel;
+#if defined(_STK_ARCH_ARM_CORTEX_M)
     static PlatformArmCortexM platform;
+#elif defined(_STK_ARCH_X86_WIN32)
+    static PlatformX86Win32 platform;
+#else
+    #error Unimplemented platform!
+#endif
     static SwitchStrategyRoundRobin tsstrategy;
 
     static MyTask<ACCESS_PRIVILEGED> task1(0);
@@ -123,7 +134,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(1000);
+    kernel.Start(10000);
 
     assert(false);
     while (true);

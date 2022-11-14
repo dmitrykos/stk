@@ -16,28 +16,28 @@ using namespace stk;
 
 TEST_GROUP(TestSwitchStrategyRoundRobin)
 {
-	void setup() {}
-	void teardown() {}
+    void setup() {}
+    void teardown() {}
 };
 
 TEST(TestSwitchStrategyRoundRobin, EndlessNext)
 {
-	Kernel<2> kernel;
-	PlatformTestMock platform;
-	SwitchStrategyRoundRobin switch_strategy;
-	TaskMock<ACCESS_USER> task1;
-	TaskMock<ACCESS_USER> task2;
+    Kernel<2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task1;
+    TaskMock<ACCESS_USER> task2;
 
-	kernel.Initialize(&platform, &switch_strategy);
-	kernel.AddTask(&task1);
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task1);
 
-	IKernelTask *next = switch_strategy.GetFirst();
-	CHECK_TRUE_TEXT(switch_strategy.GetNext(next) == next, "Expecting the same next task (endless looping)");
+    IKernelTask *next = switch_strategy.GetFirst();
+    CHECK_TRUE_TEXT(switch_strategy.GetNext(next) == next, "Expecting the same next task (endless looping)");
 
-	kernel.AddTask(&task2);
+    kernel.AddTask(&task2);
 
-	next = switch_strategy.GetNext(next);
-	CHECK_TRUE_TEXT(next->GetUserTask() == &task2, "Expecting the next 2-nd task");
+    next = switch_strategy.GetNext(next);
+    CHECK_TRUE_TEXT(next->GetUserTask() == &task2, "Expecting the next 2-nd task");
 
-	CHECK_TRUE_TEXT(switch_strategy.GetNext(next)->GetUserTask() == &task1, "Expecting the next 1-st task (endless looping)");
+    CHECK_TRUE_TEXT(switch_strategy.GetNext(next)->GetUserTask() == &task1, "Expecting the next 1-st task (endless looping)");
 }

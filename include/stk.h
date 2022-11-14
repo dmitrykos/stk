@@ -12,13 +12,11 @@
 
 #include "stk_helper.h"
 #include "stk_arch.h"
+#include "strategy/stk_strategy_rrobin.h"
 
 /*! \file  stk.h
     \brief Contains core implementation (Kernel) of the task scheduler.
 */
-
-// Scheduling strategies:
-#include "strategy/stk_strategy_rrobin.h"
 
 namespace stk {
 

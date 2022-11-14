@@ -24,7 +24,7 @@
 */
 struct TestAssertPassed : public std::exception
 {
-	const char *what() const noexcept { return "STK test suite exception (TestAssertPassed) thrown!"; }
+    const char *what() const noexcept { return "STK test suite exception (TestAssertPassed) thrown!"; }
 };
 
 /*! \class TestContext
@@ -33,15 +33,15 @@ struct TestAssertPassed : public std::exception
 class TestContext
 {
 public:
-	TestContext() : m_expect_assert(false)
-	{ }
+    TestContext() : m_expect_assert(false)
+    { }
 
-	void ExpectAssert(bool expect) { m_expect_assert = expect; }
-	bool IsExpectingAssert() const { return m_expect_assert; }
+    void ExpectAssert(bool expect) { m_expect_assert = expect; }
+    bool IsExpectingAssert() const { return m_expect_assert; }
 
 private:
-	static TestContext m_instance;
-	bool m_expect_assert;
+    static TestContext m_instance;
+    bool m_expect_assert;
 };
 
 /*! \var   g_TestContext
@@ -55,45 +55,45 @@ extern TestContext g_TestContext;
 class PlatformTestMock : public stk::IPlatform
 {
 public:
-	explicit PlatformTestMock()
-	{
-		m_event_handler       = NULL;
-		m_started             = false;
-		m_first_task_Start    = NULL;
-		m_stack_InitStack     = NULL;
-		m_user_task_InitStack = NULL;
-		m_resolution          = 0;
-		m_access_mode         = stk::ACCESS_USER;
-		m_context_switch_nr   = 0;
-	}
-	virtual ~PlatformTestMock()
-	{ }
+    explicit PlatformTestMock()
+    {
+        m_event_handler       = NULL;
+        m_started             = false;
+        m_first_task_Start    = NULL;
+        m_stack_InitStack     = NULL;
+        m_user_task_InitStack = NULL;
+        m_resolution          = 0;
+        m_access_mode         = stk::ACCESS_USER;
+        m_context_switch_nr   = 0;
+    }
+    virtual ~PlatformTestMock()
+    { }
     void Start(IEventHandler *event_handler, uint32_t resolution_us, stk::IKernelTask *first_task)
     {
-    	m_event_handler    = event_handler;
-    	m_started          = true;
-    	m_resolution       = resolution_us;
-    	m_first_task_Start = first_task;
+        m_event_handler    = event_handler;
+        m_started          = true;
+        m_resolution       = resolution_us;
+        m_first_task_Start = first_task;
     }
     bool InitStack(stk::Stack *stack, stk::ITask *user_task)
     {
-    	m_stack_InitStack     = stack;
-    	m_user_task_InitStack = user_task;
+        m_stack_InitStack     = stack;
+        m_user_task_InitStack = user_task;
 
-    	stack->SP = (size_t)user_task->GetStack();
-    	return true;
+        stack->SP = (size_t)user_task->GetStack();
+        return true;
     }
     void SwitchContext()
     {
-    	++m_context_switch_nr;
+        ++m_context_switch_nr;
     }
     int32_t GetTickResolution() const
     {
-    	return m_resolution;
+        return m_resolution;
     }
     void SetAccessMode(stk::EAccessMode mode)
     {
-    	m_access_mode = mode;
+        m_access_mode = mode;
     }
 
     IEventHandler    *m_event_handler;

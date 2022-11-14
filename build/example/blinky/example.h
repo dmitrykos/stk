@@ -14,7 +14,7 @@
 
 enum ELed
 {
-	LED_RED, LED_GREEN, LED_BLUE
+    LED_RED, LED_GREEN, LED_BLUE
 };
 
 void LED_INIT(ELed led, bool init_state);

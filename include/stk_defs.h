@@ -82,24 +82,38 @@
     #define __stk_unreachable()
 #endif
 
+
+/*! \def   ____stk_relax_cpu
+    \brief Emits CPU relaxing instruction for usage inside a hot-spinning loop.
+*/
+#ifdef __GNUC__
+    #if defined(__i386__) || defined(__x86_64__)
+        #define __stk_relax_cpu() __builtin_ia32_pause()
+    #else
+        #define __stk_relax_cpu() __sync_synchronize()
+    #endif
+#else
+    #define __stk_relax_cpu()
+#endif
+
 /*! \def   stk_assert
     \brief A shortcut to the assert() function. Can be overridden by the alternative _STK_ASSERT_FUNC if _STK_ASSERT_REDIRECT is defined.
 */
 #ifdef _STK_ASSERT_REDIRECT
-	extern void _STK_ASSERT_IMPL(const char *, const char *, int32_t);
-	#define STK_ASSERT(e) ((e) ? (void)0 : _STK_ASSERT_IMPL(#e, __FILE__, __LINE__))
+    extern void _STK_ASSERT_IMPL(const char *, const char *, int32_t);
+    #define STK_ASSERT(e) ((e) ? (void)0 : _STK_ASSERT_IMPL(#e, __FILE__, __LINE__))
 #else
-	#include <assert.h>
-	#define STK_ASSERT(e) assert(e)
+    #include <assert.h>
+    #define STK_ASSERT(e) assert(e)
 #endif
 
 /*! \def   STK_STATIC_ASSERT_N
-	\brief Complie-time assert with user-defined name.
+    \brief Complie-time assert with user-defined name.
 */
 #define STK_STATIC_ASSERT_N(NAME, X) typedef char __stk_static_assert_##NAME[(X) ? 1 : -1] __stk_attr_unused
 
 /*! \def   STK_STATIC_ASSERT
-	\brief Complie-time assert.
+    \brief Complie-time assert.
 */
 #define STK_STATIC_ASSERT(X) STK_STATIC_ASSERT_N(_, X)
 
@@ -107,6 +121,11 @@
     \brief     Namespace of STK package.
  */
 namespace stk {
+
+/*! \namespace platform
+    \brief     Namespace for platform-specific inventory.
+ */
+namespace platform { }
 
 /*! \fn    forced_cast
     \brief Force-cast value of one type to another. Overcomes compiler error or warning when trying

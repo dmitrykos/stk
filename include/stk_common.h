@@ -294,20 +294,21 @@ public:
 class IKernelService
 {
 public:
-    /*! \brief     Get number of microseconds elapsed since the start of the kernel.
+    /*! \brief     Get number of ticks elapsed since the start of the kernel.
     */
     virtual int64_t GetTicks() const = 0;
 
-    /*! \brief     Get number of microseconds between system timer ISRs.
+    /*! \brief     Get number of microseconds in one tick.
+        \note      Tick is a periodicity of the system timer expressed in microseconds.
     */
     virtual int32_t GetTicksResolution() const = 0;
 
-    /*! \brief     Get the deadline expressed in the number of microseconds.
+    /*! \brief     Get deadline expressed in ticks.
         \param[in] deadline_ms: Deadline in milliseconds.
     */
     int64_t GetDeadlineTicks(int64_t deadline_ms) const
     {
-        return GetTicks() + deadline_ms * GetTicksResolution() / 1000;
+        return GetTicks() + deadline_ms * 1000 / GetTicksResolution();
     }
 
     /*! \brief     Delay calling user process by spinning in a loop and checking for a deadline expiry.
@@ -316,7 +317,10 @@ public:
     void DelaySpin(uint32_t delay_ms) const
     {
         int64_t deadline = GetDeadlineTicks(delay_ms);
-        while (GetTicks() < deadline);
+        while (GetTicks() < deadline)
+        {
+        	__stk_relax_cpu();
+        }
     }
 };
 
