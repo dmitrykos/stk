@@ -14,11 +14,13 @@ TestContext g_TestContext;
 
 int main(int argc, char **argv)
 {
-    printf("STKTEST-START\n");
+	printf("STKTEST-START\n");
 
-    int result = RUN_ALL_TESTS(argc, argv);
+	int result = RUN_ALL_TESTS(argc, argv);
 
-    printf("STKTEST-FAILED: %d\n", result);
+	printf("STKTEST-FAILED: %d\n", result);
+
+	return 0;
 }
 
 /*! \fn    _STK_ASSERT_IMPL
@@ -26,16 +28,16 @@ int main(int argc, char **argv)
 */
 extern void _STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)
 {
-    if (g_TestContext.IsExpectingAssert())
-        throw TestAssertPassed();
+	if (g_TestContext.IsExpectingAssert())
+		throw TestAssertPassed();
 
-    SimpleString what = "Assertion failed!\n";
-    what += "\twhat: ";
-    what += message;
-    what += "\n\tfile: ";
-    what += file;
-    what += "\n\tline: ";
-    what += StringFrom(line);
+	SimpleString what = "Assertion failed!\n";
+	what += "\twhat: ";
+	what += message;
+	what += "\n\tfile: ";
+	what += file;
+	what += "\n\tline: ";
+	what += StringFrom(line);
 
-    CHECK_TEXT(false, what.asCharString());
+	CHECK_TEXT(false, what.asCharString());
 }

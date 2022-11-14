@@ -55,10 +55,10 @@ TEST(TestKernelService, GetDeadlineTicks)
     mock.m_ticks = 1;
 
     mock.m_resolution = 1;
-    CHECK_EQUAL(1000001, (int32_t)mock.GetDeadlineTicks(1000));
+    CHECK_EQUAL(10001, (int32_t)mock.GetDeadlineTicks(10));
 
     mock.m_resolution = 100;
-    CHECK_EQUAL(10001, (int32_t)mock.GetDeadlineTicks(1000));
+    CHECK_EQUAL(101, (int32_t)mock.GetDeadlineTicks(10));
 }
 
 TEST(TestKernelService, DelaySpin)
@@ -68,9 +68,9 @@ TEST(TestKernelService, DelaySpin)
     mock.m_ticks      = 0;
     mock.m_resolution = 1;
 
-    mock.DelaySpin(1000);
+    mock.DelaySpin(10);
 
-    CHECK_EQUAL(1000001, (int32_t)mock.m_ticks);
+    CHECK_EQUAL(10001, (int32_t)mock.m_ticks);
 }
 
 TEST(TestKernelService, GetTicksResolution)

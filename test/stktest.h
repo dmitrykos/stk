@@ -108,9 +108,10 @@ public:
 
 /*! \class TaskMock
     \brief User task mock.
+    \note  QEMU allocates small stack for the function, therefore stack size is limited to 16 for tests to pass (256 was causing a hard fault).
 */
 template <stk::EAccessMode _AccessMode>
-class TaskMock : public stk::Task<256, _AccessMode>
+class TaskMock : public stk::Task<16, _AccessMode>
 {
 public:
     stk::RunFuncType GetFunc() { return &Run; }

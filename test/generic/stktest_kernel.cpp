@@ -376,3 +376,24 @@ TEST(TestKernel, ContextSwitchAccessModeChange)
     // 2-st task
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
 }
+
+TEST(TestKernel, AbiCompatibility)
+{
+    class TaskMockAbiCheck : public Task<16, ACCESS_USER>
+    {
+    public:
+        TaskMockAbiCheck() : m_result(0) {}
+        RunFuncType GetFunc() { return forced_cast<stk::RunFuncType>(&TaskMockAbiCheck::Run); }
+        void *GetFuncUserData() { return this; }
+        uint32_t m_result;
+    private:
+        void Run() { ++m_result; }
+    };
+
+    TaskMockAbiCheck mock;
+
+    mock.GetFunc()(mock.GetFuncUserData());
+    mock.GetFunc()(mock.GetFuncUserData());
+
+    CHECK_EQUAL(2, mock.m_result);
+}
