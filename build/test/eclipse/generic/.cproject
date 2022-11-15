@@ -63,10 +63,19 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<folderInfo id="cdt.managedbuild.config.gnu.mingw.exe.debug.2067395849.985670591" name="/" resourcePath="stk">
+						<toolChain id="cdt.managedbuild.toolchain.gnu.mingw.exe.debug.609693955" name="MinGW GCC" superClass="cdt.managedbuild.toolchain.gnu.mingw.exe.debug" unusedChildren="">
+							<tool id="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug.2083640330" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.mingw.exe.debug.141892938"/>
+							<tool id="cdt.managedbuild.tool.gnu.archiver.mingw.base.1006588527" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.mingw.base.1209944921"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug.445288912" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.mingw.exe.debug.1096546876"/>
+							<tool id="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug.804818752" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.debug.94845044"/>
+							<tool id="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug.1669578003" name="MinGW C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.debug.509525375"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.654353738" name="MinGW C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.mingw.exe.debug.243925246"/>
+						</toolChain>
+					</folderInfo>
 					<sourceEntries>
-						<entry excluding="cpputest|stk|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="deps"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="deps/stk"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="stk"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="test"/>
 					</sourceEntries>
 				</configuration>
@@ -135,8 +144,6 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="stk|src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="deps"/>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="deps/stk"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
