@@ -82,6 +82,14 @@
     #define __stk_unreachable()
 #endif
 
+/*! \def   __stk_full_memfence
+    \brief Full memory barrier.
+*/
+#ifdef __GNUC__
+    #define __stk_full_memfence() __sync_synchronize()
+#else
+    #define __stk_full_memfence()
+#endif
 
 /*! \def   ____stk_relax_cpu
     \brief Emits CPU relaxing instruction for usage inside a hot-spinning loop.
@@ -90,7 +98,7 @@
     #if defined(__i386__) || defined(__x86_64__)
         #define __stk_relax_cpu() __builtin_ia32_pause()
     #else
-        #define __stk_relax_cpu() __sync_synchronize()
+        #define __stk_relax_cpu() __stk_full_memfence()
     #endif
 #else
     #define __stk_relax_cpu()

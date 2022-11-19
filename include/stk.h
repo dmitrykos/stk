@@ -126,15 +126,24 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             SingletonBinder::Bind(this);
         }
 
-        int64_t GetTicks() const { return m_ticks; }
+        int64_t GetTicks() const
+        {
+            return m_ticks;
+        }
 
-        int32_t GetTicksResolution() const { return m_platform->GetTickResolution(); }
+        int32_t GetTicksResolution() const
+        {
+            return m_platform->GetTickResolution();
+        }
 
     private:
-        void IncrementTick() { ++m_ticks; }
+        void IncrementTick()
+        {
+            ++m_ticks;
+        }
 
         IPlatform       *m_platform; //!< platform
-        volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile is required for GCC O3 [at least] to avoid partial reads of the value by the consumer)
+        volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile to reload value from the memory by the consumer)
     };
 
 public:

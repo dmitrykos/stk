@@ -20,8 +20,8 @@ using namespace stk;
 
 #define STK_CORTEX_M_CRITICAL_SESSION_START(SES) SES = __get_PRIMASK(); __disable_irq()
 #define STK_CORTEX_M_CRITICAL_SESSION_END(SES) __set_PRIMASK(SES)
-#define STK_CORTEX_M_DISABLE_INTERRUPTS() __asm volatile("CPSID i")
-#define STK_CORTEX_M_ENABLE_INTERRUPTS() __asm volatile("CPSIE i")
+#define STK_CORTEX_M_DISABLE_INTERRUPTS() __disable_irq()
+#define STK_CORTEX_M_ENABLE_INTERRUPTS() __enable_irq()
 #define STK_CORTEX_M_PRIVILEGED_MODE_ON() __set_CONTROL(__get_CONTROL() & ~CONTROL_nPRIV_Msk)
 #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() __set_CONTROL(__get_CONTROL() | CONTROL_nPRIV_Msk)
 #define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE 0xFFFFFFFDUL
@@ -42,6 +42,21 @@ using namespace stk;
     #define STK_CORTEX_M_REGISTER_COUNT 17
 #else
     #define STK_CORTEX_M_REGISTER_COUNT 16
+#endif
+
+//! SysTick_Handler
+#ifndef _STK_SYSTICK_HANDLER
+    #define _STK_SYSTICK_HANDLER SysTick_Handler
+#endif
+
+//! PendSV_Handler
+#ifndef _STK_PENDSV_HANDLER
+    #define _STK_PENDSV_HANDLER PendSV_Handler
+#endif
+
+//! SVC_Handler
+#ifndef _STK_SVC_HANDLER
+    #define _STK_SVC_HANDLER SVC_Handler
 #endif
 
 //! Internal context.
@@ -243,7 +258,7 @@ extern "C" void SVC_Handler_Main(size_t *svc_args)
 
 // source:
 // ARM: How to Write an SVC Function, https://developer.arm.com/documentation/ka004005/latest
-extern "C" __stk_attr_naked void SVC_Handler()
+extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 {
     __asm volatile(
     ".global SVC_Handler_Main   \n"
