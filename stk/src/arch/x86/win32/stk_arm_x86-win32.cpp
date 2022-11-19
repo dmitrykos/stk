@@ -53,8 +53,10 @@ static struct Context : public PlatformContext
 }
 g_Context;
 
-static DWORD WINAPI TimerThread(LPVOID lpParam)
+static DWORD WINAPI TimerThread(LPVOID param)
 {
+    (void)param;
+
     DWORD wait_ms = g_Context.m_tick_resolution / 1000;
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
@@ -64,9 +66,9 @@ static DWORD WINAPI TimerThread(LPVOID lpParam)
     return 0;
 }
 
-static DWORD WINAPI TaskThread(LPVOID lpParam)
+static DWORD WINAPI TaskThread(LPVOID param)
 {
-    Context::TaskContext *tctx = (Context::TaskContext *)lpParam;
+    Context::TaskContext *tctx = (Context::TaskContext *)param;
 
     tctx->m_task->GetFunc()(tctx->m_task->GetFuncUserData());
 
@@ -145,7 +147,7 @@ int32_t PlatformX86Win32::GetTickResolution() const
 
 void PlatformX86Win32::SetAccessMode(EAccessMode mode)
 {
-
+    (void)mode;
 }
 
 #endif // _STK_ARCH_X86_WIN32
