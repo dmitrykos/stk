@@ -14,8 +14,9 @@ set(CMAKE_SYSTEM_VERSION               0)
 set(CMAKE_SYSTEM_PROCESSOR             arm)
 
 # Options
-option(ENABLE_LTO                      "enable LTO"      OFF)
-option(ENABLE_HARD_FP                  "enable Hard FP"  OFF)
+option(ENABLE_LTO       "enable LTO" OFF)
+option(ENABLE_HARD_FP   "enable Hard FP" OFF)
+option(ENABLE_CORTEX_M0 "target Arm Cortex-M0 CPU" OFF)
 
 # CPU platform
 set(ARM TRUE)
@@ -129,8 +130,12 @@ else()
 endif()
 
 # CPU
-set(TOOLCHAIN_CPU "-mcpu=cortex-m4 -mthumb")
-set(TOOLCHAIN_CPU_LINKER_FLAGS "${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_CPU}")
+if (ENABLE_CORTEX_M0)
+    set(TOOLCHAIN_CPU "-mcpu=cortex-m0")
+else()
+    set(TOOLCHAIN_CPU "-mcpu=cortex-m4")    
+endif()
+set(TOOLCHAIN_CPU_LINKER_FLAGS "${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_CPU} -mthumb")
 
 # FPU
 if (ENABLE_HARD_FP)

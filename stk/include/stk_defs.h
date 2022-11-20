@@ -18,7 +18,7 @@
 */
 
 /*! \def   __stk_forceinline
-    \brief Inlines function (function prefix).
+    \brief Inline function (function prefix).
 */
 #ifdef __GNUC__
     #define __stk_forceinline __attribute__((always_inline)) inline
@@ -28,9 +28,9 @@
     #define __stk_forceinline
 #endif
 
-/*! \def   __stk_aligned
+/*! \def       __stk_aligned
+    \brief     Align data structure to the x bytes (data instance prefix).
     \param[in] x: Alignment value in bytes.
-    \brief Aligns data structure to the x bytes (data instance prefix).
 */
 #ifdef __GNUC__
     #define __stk_aligned(x) __attribute__((aligned(x)))
@@ -41,7 +41,7 @@
 #endif
 
 /*! \def   __stk_attr_naked
-    \brief Instructs compiler that function does not have prologue and epilogue (function prefix).
+    \brief Instruct compiler that function does not have prologue and epilogue (function prefix).
 */
 #ifdef __GNUC__
     #define __stk_attr_naked __attribute__((naked))
@@ -52,7 +52,7 @@
 #endif
 
 /*! \def   __stk_attr_noreturn
-    \brief Instructs compiler that function never returns (function prefix).
+    \brief Instruct compiler that function never returns (function prefix).
 */
 #ifdef __GNUC__
     #define __stk_attr_noreturn __attribute__((__noreturn__))
@@ -63,7 +63,7 @@
 #endif
 
 /*! \def   __stk_attr_unused
-    \brief Instructs compiler that marked type or object may be unused.
+    \brief Instruct compiler that marked type or object may be unused.
 */
 #ifdef __GNUC__
     #define __stk_attr_unused __attribute__((unused))
@@ -73,8 +73,19 @@
     #define __stk_attr_unused
 #endif
 
+/*! \def   __stk_attr_used
+    \brief Instruct compiler that marked type or object is used.
+*/
+#ifdef __GNUC__
+    #define __stk_attr_used __attribute__((used))
+#elif defined(__ICCARM__)
+    #define __stk_attr_used __attribute__((used))
+#else
+    #define __stk_attr_used
+#endif
+
 /*! \def   __stk_unreachable
-    \brief Instructs compiler that code below it is unreachable (in-code statement).
+    \brief Instruct compiler that code below it is unreachable (in-code statement).
 */
 #ifdef __GNUC__
     #define __stk_unreachable() __builtin_unreachable()

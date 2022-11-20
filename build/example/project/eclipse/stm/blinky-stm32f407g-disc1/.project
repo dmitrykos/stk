@@ -31,7 +31,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4</name>
+			<name>deps/stm32fx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -51,17 +51,12 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/CMakeLists.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/CMakeLists.txt</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32f4/include</name>
+			<name>deps/stm32fx/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src</name>
+			<name>deps/stm32fx/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -126,94 +121,74 @@
 			<locationURI>PARENT-6-PROJECT_LOC/stk/src/stk.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/arm</name>
+			<name>deps/stm32fx/include/arm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis</name>
+			<name>deps/stm32fx/include/cmsis</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cortexm</name>
+			<name>deps/stm32fx/include/cortexm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/diag</name>
+			<name>deps/stm32fx/include/diag</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal</name>
+			<name>deps/stm32fx/include/stm32f4-hal</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cmsis</name>
+			<name>deps/stm32fx/src/cortexm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cortexm</name>
+			<name>deps/stm32fx/src/diag</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/diag</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32f4/src/initialize-hardware.c</name>
+			<name>deps/stm32fx/src/initialize-hardware.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/initialize-hardware.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/initialize-hardware.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/libs.ld</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/libs.ld</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32f4/src/mem.ld</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/mem.ld</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32f4/src/newlib</name>
+			<name>deps/stm32fx/src/newlib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/sections.ld</name>
+			<name>deps/stm32fx/src/stm32_assert.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/sections.ld</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32_assert.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32_assert.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32_assert.h</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32f4/src/stm32f4-hal</name>
+			<name>deps/stm32fx/src/stm32f4-cmsis</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4xx_hal_conf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4xx_hal_conf.h</locationURI>
+			<name>deps/stm32fx/src/stm32f4-hal</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4xx_hal_msp.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4xx_hal_msp.c</locationURI>
+			<name>deps/stm32fx/src/stm32f4-ld</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/write.c</name>
+			<name>deps/stm32fx/src/write.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/write.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/write.c</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/arm</name>
@@ -246,789 +221,824 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/arm/semihosting.h</name>
+			<name>deps/stm32fx/include/arm/semihosting.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/arm/semihosting.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/arm/semihosting.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/LICENSE.txt</name>
+			<name>deps/stm32fx/include/cmsis/LICENSE.txt</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/LICENSE.txt</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/LICENSE.txt</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/README.md</name>
+			<name>deps/stm32fx/include/cmsis/README.md</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/README.md</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/README.md</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/arm_common_tables.h</name>
+			<name>deps/stm32fx/include/cmsis/arm_common_tables.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/arm_common_tables.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/arm_common_tables.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/arm_const_structs.h</name>
+			<name>deps/stm32fx/include/cmsis/arm_const_structs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/arm_const_structs.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/arm_const_structs.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/arm_math.h</name>
+			<name>deps/stm32fx/include/cmsis/arm_math.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/arm_math.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/arm_math.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_armcc.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_armcc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_armcc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_armcc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_armcc_V6.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_armcc_V6.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_armcc_V6.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_armcc_V6.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_armclang.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_armclang.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_armclang.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_armclang.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_compiler.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_compiler.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_compiler.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_compiler.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_device.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_device.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_device.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_device.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_gcc.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_gcc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_gcc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_gcc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_iccarm.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_iccarm.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_iccarm.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_iccarm.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/cmsis_version.h</name>
+			<name>deps/stm32fx/include/cmsis/cmsis_version.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/cmsis_version.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/cmsis_version.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_armv8mbl.h</name>
+			<name>deps/stm32fx/include/cmsis/core_armv8mbl.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_armv8mbl.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_armv8mbl.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_armv8mml.h</name>
+			<name>deps/stm32fx/include/cmsis/core_armv8mml.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_armv8mml.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_armv8mml.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm0.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm0.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm0.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm0.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm0plus.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm0plus.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm0plus.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm0plus.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm1.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm1.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm1.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm1.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm23.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm23.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm23.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm23.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm3.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm3.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm3.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm3.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm33.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm33.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm33.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm33.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm4.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm4.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm4.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm4.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cm7.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cm7.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cm7.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cm7.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cmFunc.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cmFunc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cmFunc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cmFunc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cmInstr.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cmInstr.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cmInstr.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cmInstr.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_cmSimd.h</name>
+			<name>deps/stm32fx/include/cmsis/core_cmSimd.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_cmSimd.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_cmSimd.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_sc000.h</name>
+			<name>deps/stm32fx/include/cmsis/core_sc000.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_sc000.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_sc000.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/core_sc300.h</name>
+			<name>deps/stm32fx/include/cmsis/core_sc300.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/core_sc300.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/core_sc300.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/mpu_armv7.h</name>
+			<name>deps/stm32fx/include/cmsis/mpu_armv7.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/mpu_armv7.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/mpu_armv7.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/mpu_armv8.h</name>
+			<name>deps/stm32fx/include/cmsis/mpu_armv8.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/mpu_armv8.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/mpu_armv8.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/stm32f407xx.h</name>
+			<name>deps/stm32fx/include/cmsis/stm32f051x8.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/stm32f407xx.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/stm32f051x8.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/stm32f4xx.h</name>
+			<name>deps/stm32fx/include/cmsis/stm32f0xx.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/stm32f4xx.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/stm32f0xx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/system_stm32f4xx.h</name>
+			<name>deps/stm32fx/include/cmsis/stm32f407xx.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/system_stm32f4xx.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/stm32f407xx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cmsis/tz_context.h</name>
+			<name>deps/stm32fx/include/cmsis/stm32f4xx.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cmsis/tz_context.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/stm32f4xx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/cortexm/exception-handlers.h</name>
+			<name>deps/stm32fx/include/cmsis/system_stm32f0xx.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/cortexm/exception-handlers.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/system_stm32f0xx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/diag/trace.h</name>
+			<name>deps/stm32fx/include/cmsis/system_stm32f4xx.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/diag/trace.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/system_stm32f4xx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/Legacy</name>
+			<name>deps/stm32fx/include/cmsis/tz_context.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cmsis/tz_context.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/include/cortexm/exception-handlers.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/cortexm/exception-handlers.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/include/diag/trace.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/diag/trace.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/include/stm32f4-hal/Legacy</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/README-DEVICE.md</name>
+			<name>deps/stm32fx/include/stm32f4-hal/README-DEVICE.md</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/README-DEVICE.md</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/README-DEVICE.md</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32_assert_template.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32_assert_template.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32_assert_template.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32_assert_template.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_adc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_adc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_adc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_adc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_adc_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_adc_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_adc_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_adc_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_can.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_can.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_can.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_can.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cec.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cec.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cec.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cec.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_conf_template.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_conf.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_conf_template.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_conf.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cortex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_conf_template.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cortex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_conf_template.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_crc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cortex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_crc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cortex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cryp.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_crc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cryp.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_crc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cryp_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cryp.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_cryp_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cryp.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dac.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cryp_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dac.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_cryp_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dac_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dac.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dac_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dac.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dcmi.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dac_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dcmi.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dac_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dcmi_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dcmi.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dcmi_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dcmi.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_def.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dcmi_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_def.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dcmi_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dfsdm.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_def.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dfsdm.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_def.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dfsdm.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dfsdm.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma2d.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma2d.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma2d.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dma_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma2d.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dsi.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_dsi.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dma_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_eth.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dsi.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_eth.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_dsi.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_exti.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_eth.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_exti.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_eth.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_exti.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_exti.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpi2c.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpi2c.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_flash_ramfunc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpi2c_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpi2c.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpi2c_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpi2c.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpsmbus.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpi2c_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_fmpsmbus.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpi2c_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_gpio.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpsmbus.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_gpio.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_fmpsmbus.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_gpio_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_gpio.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_gpio_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_gpio.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hash.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_gpio_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hash.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_gpio_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hash_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hash.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hash_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hash.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hcd.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hash_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_hcd.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hash_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2c.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hcd.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2c.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_hcd.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2c_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2c.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2c_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2c.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2s.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2c_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2s.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2c_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2s_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2s.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_i2s_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2s.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_irda.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2s_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_irda.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_i2s_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_iwdg.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_irda.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_iwdg.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_irda.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_lptim.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_iwdg.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_lptim.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_iwdg.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_ltdc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_lptim.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_ltdc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_lptim.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_ltdc_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_ltdc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_ltdc_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_ltdc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_mmc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_ltdc_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_mmc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_ltdc_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_nand.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_mmc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_nand.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_mmc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_nor.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_nand.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_nor.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_nand.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pccard.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_nor.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pccard.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_nor.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pcd.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pccard.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pcd.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pccard.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pcd_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pcd.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pcd_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pcd.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pwr.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pcd_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pwr.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pcd_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pwr_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pwr.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_pwr_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pwr.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_qspi.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pwr_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_qspi.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_pwr_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rcc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_qspi.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rcc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_qspi.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rcc_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rcc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rcc_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rcc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rng.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rcc_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rng.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rcc_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rtc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rng.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rtc.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rng.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rtc_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rtc.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_rtc_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rtc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sai.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rtc_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sai.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_rtc_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sai_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sai.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sai_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sai.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sd.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sai_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sd.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sai_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sdram.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sd.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sdram.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sd.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_smartcard.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sdram.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_smartcard.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sdram.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_smbus.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_smartcard.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_smbus.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_smartcard.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_spdifrx.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_smbus.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_spdifrx.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_smbus.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_spi.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_spdifrx.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_spi.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_spdifrx.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sram.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_spi.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_sram.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_spi.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_tim.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sram.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_tim.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_sram.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_tim_ex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_tim.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_tim_ex.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_tim.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_uart.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_tim_ex.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_uart.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_tim_ex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_usart.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_uart.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_usart.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_uart.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_hal_wwdg.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_usart.h</name>
 			<type>1</type>
-			<location>D:/SVN/private/stk/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_hal_wwdg.h</location>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_usart.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_adc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_hal_wwdg.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_adc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_hal_wwdg.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_bus.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_adc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_bus.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_adc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_cortex.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_bus.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_cortex.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_bus.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_crc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_cortex.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_crc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_cortex.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dac.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_crc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dac.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_crc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dma.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dac.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dma.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dac.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dma2d.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dma.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_dma2d.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dma.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_exti.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dma2d.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_exti.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_dma2d.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fmc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_exti.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fmc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_exti.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fmpi2c.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fmc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fmpi2c.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fmc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fsmc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fmpi2c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_fsmc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fmpi2c.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_gpio.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fsmc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_gpio.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_fsmc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_i2c.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_gpio.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_i2c.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_gpio.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_iwdg.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_i2c.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_iwdg.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_i2c.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_lptim.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_iwdg.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_lptim.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_iwdg.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_pwr.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_lptim.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_pwr.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_lptim.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rcc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_pwr.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rcc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_pwr.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rng.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rcc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rng.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rcc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rtc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rng.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_rtc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rng.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_sdmmc.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rtc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_sdmmc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_rtc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_spi.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_sdmmc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_spi.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_sdmmc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_system.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_spi.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_system.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_spi.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_tim.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_system.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_tim.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_system.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_usart.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_tim.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_usart.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_tim.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_usb.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_usart.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_usb.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_usart.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_utils.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_usb.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_utils.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_usb.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/stm32f4xx_ll_wwdg.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_utils.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/stm32f4xx_ll_wwdg.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_utils.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cmsis/system_stm32f4xx.c</name>
+			<name>deps/stm32fx/include/stm32f4-hal/stm32f4xx_ll_wwdg.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/cmsis/system_stm32f4xx.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/stm32f4xx_ll_wwdg.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cmsis/vectors_stm32f407xx.c</name>
+			<name>deps/stm32fx/src/cortexm/exception-handlers.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/cmsis/vectors_stm32f407xx.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/cortexm/exception-handlers.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cortexm/exception-handlers.c</name>
+			<name>deps/stm32fx/src/cortexm/initialize-hardware.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/cortexm/exception-handlers.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/cortexm/initialize-hardware.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cortexm/initialize-hardware.c</name>
+			<name>deps/stm32fx/src/cortexm/reset-hardware.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/cortexm/initialize-hardware.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/cortexm/reset-hardware.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/cortexm/reset-hardware.c</name>
+			<name>deps/stm32fx/src/diag/trace-impl.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/cortexm/reset-hardware.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/diag/trace-impl.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/diag/trace-impl.c</name>
+			<name>deps/stm32fx/src/diag/trace.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/diag/trace-impl.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/diag/trace.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/diag/trace.c</name>
+			<name>deps/stm32fx/src/newlib/README.txt</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/diag/trace.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/README.txt</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/README.txt</name>
+			<name>deps/stm32fx/src/newlib/assert.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/README.txt</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/assert.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/assert.c</name>
+			<name>deps/stm32fx/src/newlib/cxx.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/assert.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/cxx.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/cxx.cpp</name>
+			<name>deps/stm32fx/src/newlib/exit.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/cxx.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/exit.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/exit.c</name>
+			<name>deps/stm32fx/src/newlib/sbrk.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/exit.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/sbrk.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/sbrk.c</name>
+			<name>deps/stm32fx/src/newlib/startup.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/sbrk.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/startup.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/startup.c</name>
+			<name>deps/stm32fx/src/newlib/syscalls.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/startup.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/newlib/syscalls.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/newlib/syscalls.c</name>
+			<name>deps/stm32fx/src/stm32f4-cmsis/system_stm32f4xx.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/newlib/syscalls.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-cmsis/system_stm32f4xx.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/README-DEVICE.md</name>
+			<name>deps/stm32fx/src/stm32f4-cmsis/vectors_stm32f407xx.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/README-DEVICE.md</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-cmsis/vectors_stm32f407xx.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/stm32f4xx_hal.c</name>
+			<name>deps/stm32fx/src/stm32f4-hal/README-DEVICE.md</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/stm32f4xx_hal.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/README-DEVICE.md</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/stm32f4xx_hal_cortex.c</name>
+			<name>deps/stm32fx/src/stm32f4-hal/stm32f4xx_hal.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/stm32f4xx_hal_cortex.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/stm32f4xx_hal.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/stm32f4xx_hal_gpio.c</name>
+			<name>deps/stm32fx/src/stm32f4-hal/stm32f4xx_hal_cortex.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/stm32f4xx_hal_gpio.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/stm32f4xx_hal_cortex.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/stm32f4xx_hal_rcc.c</name>
+			<name>deps/stm32fx/src/stm32f4-hal/stm32f4xx_hal_gpio.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/stm32f4xx_hal_rcc.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/stm32f4xx_hal_gpio.c</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/src/stm32f4-hal/stm32f4xx_hal_rcc_ex.c</name>
+			<name>deps/stm32fx/src/stm32f4-hal/stm32f4xx_hal_rcc.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/src/stm32f4-hal/stm32f4xx_hal_rcc_ex.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/stm32f4xx_hal_rcc.c</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/src/stm32f4-hal/stm32f4xx_hal_rcc_ex.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-hal/stm32f4xx_hal_rcc_ex.c</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/src/stm32f4-ld/libs.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-ld/libs.ld</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/src/stm32f4-ld/mem.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-ld/mem.ld</locationURI>
+		</link>
+		<link>
+			<name>deps/stm32fx/src/stm32f4-ld/sections.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32f4-ld/sections.ld</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/arm/cortex-m</name>
@@ -1051,14 +1061,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/Legacy/stm32_hal_legacy.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/Legacy/stm32_hal_legacy.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/Legacy/stm32_hal_legacy.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/Legacy/stm32_hal_legacy.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stm32f4/include/stm32f4-hal/Legacy/stm32f4xx_hal_can_legacy.h</name>
+			<name>deps/stm32fx/include/stm32f4-hal/Legacy/stm32f4xx_hal_can_legacy.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32f4/include/stm32f4-hal/Legacy/stm32f4xx_hal_can_legacy.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32f4-hal/Legacy/stm32f4xx_hal_can_legacy.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</name>
