@@ -92,7 +92,6 @@ private:
             }
 
             DelaySpin(1000);
-            //Sleep(1000);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)

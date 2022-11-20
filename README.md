@@ -26,34 +26,39 @@ using fancy new C++ features. It just tries to be very friendly to C developers 
 
 ## Example:
 
-Here is an example to toggle Red, Green, Blue LEDs of the FRM-K66 development
-board (NXP K66 MCU) where thread is handling its own LED, e.g. there are 3 threads
+Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development
+boards hosting Arm Cortex-M4F CPU where thread is handling its own LED, e.g. there are 3 threads
 in total which are switching LEDs with 1 second periodicity.
 
 ```cpp
+#include <stk_config.h>
 #include <stk.h>
-#include "board.h"
+#include "example.h"
 
 static volatile uint8_t g_TaskSwitch = 0;
 
 template <stk::EAccessMode _AccessMode>
-class Task : public stk::UserTask<256, _AccessMode>
+class MyTask : public stk::Task<256, _AccessMode>
 {
     uint8_t m_taskId;
 
 public:
-    Task(uint8_t taskId) : m_taskId(taskId)
+    MyTask(uint8_t taskId) : m_taskId(taskId)
     { }
 
-    stk::RunFuncT GetFunc() { return &Run; }
+#if 0
+    stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&MyTask::RunInner); }
+#else
+    stk::RunFuncType GetFunc() { return &Run; }
+#endif
     void *GetFuncUserData() { return this; }
-    static void Run(void *userData)
+
+private:
+    static void Run(void *user_data)
     {
-        Task *_this = (Task *)userData;
-        _this->RunInner();
+        ((MyTask *)user_data)->RunInner();
     }
 
-protected:
     void RunInner()
     {
         uint8_t task_id = m_taskId;
@@ -74,23 +79,23 @@ protected:
             switch (task_id)
             {
             case 0:
-                LED_RED_ON();
-                LED_GREEN_OFF();
-                LED_BLUE_OFF();
+                LED_SET_STATE(LED_RED, true);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, false);
                 break;
             case 1:
-                LED_RED_OFF();
-                LED_GREEN_ON();
-                LED_BLUE_OFF();
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, true);
+                LED_SET_STATE(LED_BLUE, false);
                 break;
             case 2:
-                LED_RED_OFF();
-                LED_GREEN_OFF();
-                LED_BLUE_ON();
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, true);
                 break;
             }
 
-            stk::g_Kernel->Delay(1000);
+            g_KernelService->DelaySpin(delay_ms);
 
             g_TaskSwitch = task_id + 1;
             if (g_TaskSwitch > 2)
@@ -101,9 +106,9 @@ protected:
 
 static void InitLeds()
 {
-    LED_RED_INIT(LOGIC_LED_OFF);
-    LED_GREEN_INIT(LOGIC_LED_OFF);
-    LED_BLUE_INIT(LOGIC_LED_OFF);
+    LED_INIT(LED_RED, false);
+    LED_INIT(LED_GREEN, false);
+    LED_INIT(LED_BLUE, false);
 }
 
 void RunExample()
@@ -112,13 +117,19 @@ void RunExample()
 
     InitLeds();
 
-    Kernel<10> kernel;
-    PlatformArmCortexM platform;
-    SwitchStrategyRoundRobin tsstrategy;
+    static Kernel<10> kernel;
+#if defined(_STK_ARCH_ARM_CORTEX_M)
+    static PlatformArmCortexM platform;
+#elif defined(_STK_ARCH_X86_WIN32)
+    static PlatformX86Win32 platform;
+#else
+    #error Unimplemented platform!
+#endif
+    static SwitchStrategyRoundRobin tsstrategy;
 
-    Task<ACCESS_PRIVILEGED> task1(0);
-    Task<ACCESS_USER> task2(1);
-    Task<ACCESS_USER> task3(2);
+    static MyTask<ACCESS_PRIVILEGED> task1(0);
+    static MyTask<ACCESS_USER> task2(1);
+    static MyTask<ACCESS_USER> task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 
@@ -126,7 +137,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(1000);
+    kernel.Start(10000);
 
     assert(false);
     while (true);
@@ -135,8 +146,10 @@ void RunExample()
 
 ## Test boards:
 * Arm Cortex-M0
+  - [STM STM32F0DISCOVERY](https://www.st.com/en/evaluation-tools/stm32f0discovery.html)
 * Arm Cortex-M3
-* Arm Cortex-M4
+  - [STM NUCLEO-F103RB](https://www.st.com/en/evaluation-tools/nucleo-f103rb.html)
+* Arm Cortex-M4 (Cortex-M4F)
   - [NXP FRDM-K66F](http://www.google.com/search?q=FRDM-K66F)
   - [STM STM32F4DISCOVERY](http://www.google.com/search?q=STM32F4DISCOVERY)
 * Arm Cortex-M7
@@ -145,4 +158,4 @@ void RunExample()
 ## Porting:
 
 You are welcome to port STK to a new platform and offer a patch. The platform
-dependent files are located in: ```/src/arch``` and ```/include/arch``` folders.
+dependent files are located in: ```/stk/src/arch``` and ```/stk/include/arch``` folders.

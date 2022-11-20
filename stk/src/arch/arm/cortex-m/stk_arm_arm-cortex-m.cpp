@@ -88,7 +88,7 @@ g_Context;
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
-#if (defined(STM32F0) || defined(STM32F3) || defined(STM32F4)) && defined(HAL_MODULE_ENABLED)
+#ifdef HAL_MODULE_ENABLED // STM32 HAL
 	HAL_IncTick();
 	// unfortunately STM32 HAL is starting SysTick on its initialization that
 	// will cause a crash on NULL, therefore use additional check

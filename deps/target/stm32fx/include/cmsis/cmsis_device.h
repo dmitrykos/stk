@@ -28,12 +28,14 @@
 #ifndef STM32FX_CMSIS_DEVICE_H_
 #define STM32FX_CMSIS_DEVICE_H_
 
-#if defined(STM32F4)
-    #include "stm32f4xx.h"
-#elif defined(STM32F0)
-    #include "stm32f0xx.h"
+#if defined(STM32F0)
+#include "stm32f0xx.h"
+#elif defined(STM32F1)
+#include "stm32f1xx.h"
+#elif defined(STM32F4)
+#include "stm32f4xx.h"
 #else
-    #error Undefined device architecture!
+#error Undefined device architecture!
 #endif
 
 #endif // STM32F4_CMSIS_DEVICE_H_

@@ -141,6 +141,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stm32fx/include/stm32_assert.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/include/stm32_assert.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stm32fx/include/stm32f4-hal</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -164,11 +169,6 @@
 			<name>deps/stm32fx/src/newlib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/stm32fx/src/stm32_assert.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/stm32_assert.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stm32fx/src/stm32f4-cmsis</name>

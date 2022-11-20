@@ -26,14 +26,20 @@
  */
 
 // ----------------------------------------------------------------------------
-#if defined(STM32F4)
-#include "stm32f4xx.h"
-#include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_cortex.h"
-#elif defined(STM32F0)
+#if defined(STM32F0)
 #include "stm32f0xx.h"
 #include "stm32f0xx_hal.h"
 #include "stm32f0xx_hal_cortex.h"
+#elif defined(STM32F1)
+#include "stm32f1xx.h"
+#include "stm32f1xx_hal.h"
+#include "stm32f1xx_hal_cortex.h"
+#elif defined(STM32F4)
+#include "stm32f4xx.h"
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_cortex.h"
+#else
+#error Undefined device architecture!
 #endif
 
 #include "diag/trace.h"

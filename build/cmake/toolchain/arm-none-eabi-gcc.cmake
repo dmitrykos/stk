@@ -17,6 +17,7 @@ set(CMAKE_SYSTEM_PROCESSOR             arm)
 option(ENABLE_LTO       "enable LTO" OFF)
 option(ENABLE_HARD_FP   "enable Hard FP" OFF)
 option(ENABLE_CORTEX_M0 "target Arm Cortex-M0 CPU" OFF)
+option(ENABLE_CORTEX_M3 "target Arm Cortex-M3 CPU" OFF)
 
 # CPU platform
 set(ARM TRUE)
@@ -132,6 +133,8 @@ endif()
 # CPU
 if (ENABLE_CORTEX_M0)
     set(TOOLCHAIN_CPU "-mcpu=cortex-m0")
+elseif (ENABLE_CORTEX_M3)
+    set(TOOLCHAIN_CPU "-mcpu=cortex-m3")
 else()
     set(TOOLCHAIN_CPU "-mcpu=cortex-m4")    
 endif()
