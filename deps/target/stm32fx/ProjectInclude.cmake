@@ -9,7 +9,6 @@ add_definitions(
 )
 
 include_directories(        
-    ${ROOT_DIR}/deps/target/stm32fx/src
     ${ROOT_DIR}/deps/target/stm32fx/include
     ${ROOT_DIR}/deps/target/stm32fx/include/arm
     ${ROOT_DIR}/deps/target/stm32fx/include/cmsis
@@ -17,14 +16,14 @@ include_directories(
     ${ROOT_DIR}/deps/target/stm32fx/include/diag
 )
 
-if (TARGET_STM32F407DISC1)
+if (BOARD_STM32F407DISC1)
     add_definitions(
         -DSTM32F4
         -DSTM32F407xx
     )
     include_directories(${ROOT_DIR}/deps/target/stm32fx/include/stm32f4-hal)
     link_directories(${ROOT_DIR}/deps/target/stm32fx/src/stm32f4-ld)
-elseif (TARGET_STM32F0DISCOVERY)
+elseif (BOARD_STM32F0DISCOVERY)
     add_definitions(
         -DSTM32F0
         -DSTM32F051x8

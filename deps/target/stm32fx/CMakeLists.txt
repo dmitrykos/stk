@@ -21,7 +21,6 @@ add_definitions(
 
 # Base includes
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include    
     ${CMAKE_CURRENT_SOURCE_DIR}/include/arm
     ${CMAKE_CURRENT_SOURCE_DIR}/include/cmsis
@@ -35,7 +34,7 @@ file(GLOB STM32FX_CORTEXM ${CMAKE_CURRENT_SOURCE_DIR}/src/cortexm/*.c)
 file(GLOB STM32FX_DIAG ${CMAKE_CURRENT_SOURCE_DIR}/src/diag/*.c)
 file(GLOB STM32FX_NEWLIB ${CMAKE_CURRENT_SOURCE_DIR}/src/newlib/*.c)
 
-if (TARGET_STM32F407DISC1)
+if (BOARD_STM32F407DISC1)
     # Definitions
     add_definitions(
         -DSTM32F4
@@ -51,7 +50,7 @@ if (TARGET_STM32F407DISC1)
     list(APPEND STM32FX_HAL ${CMAKE_CURRENT_SOURCE_DIR}/src/stm32f4-hal/stm32f4xx_hal_rcc.c)
     list(APPEND STM32FX_HAL ${CMAKE_CURRENT_SOURCE_DIR}/src/stm32f4-hal/stm32f4xx_hal_rcc_ex.c)
     list(APPEND STM32FX_HAL ${CMAKE_CURRENT_SOURCE_DIR}/src/stm32f4-hal/stm32f4xx_hal.c)
-elseif (TARGET_STM32F0DISCOVERY)
+elseif (BOARD_STM32F0DISCOVERY)
     # Definitions
     add_definitions(
         -DSTM32F0

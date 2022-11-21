@@ -1,23 +1,23 @@
-# 
+#
 #  SuperTinyKernel: Minimalistic thread scheduling kernel for Embedded systems.
-# 
+#
 #  Source: http://github.com/dmitrykos/stk
-# 
+#
 #  Copyright (c) 2022 Dmitry Kostjucenko <dmitry.kostjucenko@gmail.com>
 #  License: MIT License, see LICENSE for a full text.
-# 
+#
 
 # Identity
 set(CMAKE_CROSSCOMPILING               TRUE)
-set(CMAKE_SYSTEM_NAME                  Linux) 
+set(CMAKE_SYSTEM_NAME                  Linux)
 set(CMAKE_SYSTEM_VERSION               0)
 set(CMAKE_SYSTEM_PROCESSOR             arm)
 
 # Options
 option(ENABLE_LTO       "enable LTO" OFF)
 option(ENABLE_HARD_FP   "enable Hard FP" OFF)
-option(ENABLE_CORTEX_M0 "target Arm Cortex-M0 CPU" OFF)
-option(ENABLE_CORTEX_M3 "target Arm Cortex-M3 CPU" OFF)
+option(TARGET_CORTEX_M0 "target Arm Cortex-M0 CPU" OFF)
+option(TARGET_CORTEX_M3 "target Arm Cortex-M3 CPU" OFF)
 
 # CPU platform
 set(ARM TRUE)
@@ -40,7 +40,7 @@ if (NOT TOOLCHAIN_PATH)
         set(SEARCH_CMD which)
     endif()
     execute_process(
-        COMMAND ${SEARCH_CMD} ${TOOLCHAIN_COMPILER_ABI}-gcc
+        COMMAND ${SEARCH_CMD} ${TOOLCHAIN_COMPILER_ABI}-gcc${HOST_COMPILER_EXT}
         OUTPUT_VARIABLE GCC_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
@@ -59,6 +59,7 @@ set(TOOLCHAIN_TOOLS_PATH               ${TOOLCHAIN_PATH}/bin)
 set(CMAKE_C_COMPILER                   ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-gcc${HOST_COMPILER_EXT})
 set(CMAKE_CXX_COMPILER                 ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-g++${HOST_COMPILER_EXT})
 set(CMAKE_ASM_COMPILER                 ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-as${HOST_COMPILER_EXT})
+set(CMAKE_SIZE                         ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-size${HOST_COMPILER_EXT})
 set(CMAKE_ROOT_PATH                    ${TOOLCHAIN_TOOLCHAIN_BASE})
 set(CMAKE_COMPILER_IS_GNUCC            TRUE)
 set(CMAKE_COMPILER_IS_GNUCXX           TRUE)
@@ -78,7 +79,7 @@ set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
 # Obligatory to use in target_link_libraries to avoid undefined references
-set(TOOLCHAIN_LINKER_FLAGS "-Wl,--gc-sections -nostartfiles -Wl,--print-memory-usage") 
+set(TOOLCHAIN_LINKER_FLAGS "-Wl,--gc-sections -nostartfiles -Wl,--print-memory-usage")
 
 # Preserve debugging ability for Release builds
 set(ENABLE_DEBUG_ABILITY FALSE)
@@ -102,7 +103,7 @@ if (IS_DEBUG_BUILD)
 else()
     set(TOOLCHAIN_COMMON_FLAGS "-O${OPT_LEVEL_RELEASE} -g -DNDEBUG")
 endif()
-set(TOOLCHAIN_COMMON_FLAGS "${TOOLCHAIN_COMMON_FLAGS} -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -Wall -Wextra")
+set(TOOLCHAIN_COMMON_FLAGS "${TOOLCHAIN_COMMON_FLAGS} -pipe -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fstrict-aliasing -fmerge-constants -Wall -Wextra")
 set(TOOLCHAIN_COMMON_C_FLAGS "-std=gnu11")
 set(TOOLCHAIN_COMMON_CXX_FLAGS "-std=gnu++11 -fabi-version=0 -fno-use-cxa-atexit -fno-threadsafe-statics")
 
@@ -116,7 +117,7 @@ add_definitions(-D_STK_ARCH_ARM_CORTEX_M)
 # Optimizing flags
 set(TOOLCHAIN_OPT_FLAGS "")
 if (NOT ENABLE_DEBUG_ABILITY)
-    #set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} -fomit-frame-pointer -funswitch-loops")
+    #set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} ")
 	if (ENABLE_LTO)
 		option(IS_FORCED_LTO "enable forced usage of LTO" OFF)
 		set(OPT_LTO_FLAGS "-flto")
@@ -131,12 +132,13 @@ else()
 endif()
 
 # CPU
-if (ENABLE_CORTEX_M0)
+if (TARGET_CORTEX_M0)
     set(TOOLCHAIN_CPU "-mcpu=cortex-m0")
-elseif (ENABLE_CORTEX_M3)
+elseif (TARGET_CORTEX_M3)
     set(TOOLCHAIN_CPU "-mcpu=cortex-m3")
 else()
-    set(TOOLCHAIN_CPU "-mcpu=cortex-m4")    
+    set(TOOLCHAIN_CPU "-mcpu=cortex-m4")
+    set(TARGET_CORTEX_M4 TRUE)
 endif()
 set(TOOLCHAIN_CPU_LINKER_FLAGS "${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_CPU} -mthumb")
 

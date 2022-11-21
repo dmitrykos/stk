@@ -10,15 +10,6 @@
 set(TARGET_NAME test-generic)
 project(${TARGET_NAME})
 
-# Device-specific targets
-if (ARM)
-    set(OPT_STM32 ON)
-else()
-    set(OPT_STM32 OFF)
-endif()
-option(TARGET_STM32F407DISC1 "target STM32F407G-DISC1 development board" ${OPT_STM32})
-option(TARGET_STM32F0DISCOVERY "target STM32F0DISCOVERY development board" OFF)
-
 # Definitions
 add_definitions(-D_STK_ASSERT_REDIRECT)
 
@@ -47,7 +38,7 @@ list(APPEND TARGET_DEPS cpputest)
 list(APPEND TARGET_LIBS cpputest)
 
 # Target - STM32F407-DISK1 development board
-if (TARGET_STM32F407DISC1 OR TARGET_STM32F0DISCOVERY)
+if (BOARD_STM32F407DISC1 OR BOARD_STM32F0DISCOVERY)
     include(${ROOT_DIR}/deps/target/stm32fx/ProjectInclude.cmake)
     set(TARGET_BINARY ${TARGET_NAME}.elf)
 else()

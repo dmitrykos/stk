@@ -11,6 +11,17 @@ project(global)
 
 cmake_minimum_required(VERSION 2.6)
 
+# Device-specific targets
+option(BOARD_STM32F407DISC1 "Target STM32F407G-DISC1 (Arm Cortex-M4) development board" OFF)
+option(BOARD_STM32F0DISCOVERY "Target STM32F0DISCOVERY (Arm Cortex-M0) development board" OFF)
+
+if (BOARD_STM32F407DISC1 AND NOT TARGET_CORTEX_M4)
+    message(FATAL_ERROR "Target Arm Cortex-M4 (default) CPU for BOARD_STM32F407DISC1!")
+endif()
+if (BOARD_STM32F0DISCOVERY AND NOT TARGET_CORTEX_M0)
+    message(FATAL_ERROR "Target Arm Cortex-M0 CPU for BOARD_STM32F0DISCOVERY!")
+endif()
+
 # Add static lib option
 #option(BUILD_LIB      "build Library"  OFF)
 #option(BUILD_EXAMPLES "build Examples" OFF)

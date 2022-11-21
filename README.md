@@ -19,6 +19,7 @@ using fancy new C++ features. It just tries to be very friendly to C developers 
 * Arm Cortex-M3
 * Arm Cortex-M4
 * Arm Cortex-M7
+* Hard or Soft floating-point support
 
 ## Requires:
 * CMSIS
@@ -26,9 +27,10 @@ using fancy new C++ features. It just tries to be very friendly to C developers 
 
 ## Example:
 
-Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development
-boards hosting Arm Cortex-M4F CPU where thread is handling its own LED, e.g. there are 3 threads
-in total which are switching LEDs with 1 second periodicity.
+Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or 
+STM STM32F4DISCOVERY development boards hosting Arm Cortex-M4F CPU where thread is 
+handling its own LED, e.g. there are 3 threads in total which are switching LEDs 
+with 1 second periodicity.
 
 ```cpp
 #include <stk_config.h>
