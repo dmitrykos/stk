@@ -10,8 +10,8 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-#include "MK66F18.h"
-#include "core_cm4.h"
+#include "MIMXRT1052.h"
+#include "core_cm7.h"
 
 // Undefine if MCU is Arm Cortex-M4
 #define _STK_ARCH_ARM_CORTEX_M

@@ -29,7 +29,7 @@
  */
 
 /**
- * @file    SuperTinyKernel.cpp
+ * @file    main.cpp
  * @brief   Application entry point.
  */
 #include <stdio.h>
@@ -37,7 +37,7 @@
 #include "peripherals.h"
 #include "pin_mux.h"
 #include "clock_config.h"
-#include "MK66F18.h"
+#include "MIMXRT1052.h"
 #include "fsl_debug_console.h"
 /* TODO: insert other include files here. */
 #include "example.h"
@@ -49,9 +49,9 @@ void LED_INIT(ELed led, bool init_state)
 
     switch (led)
     {
-    case LED_RED: LED_RED_INIT(logic_state); break;
-    case LED_GREEN: LED_GREEN_INIT(logic_state); break;
-    case LED_BLUE: LED_BLUE_INIT(logic_state); break;
+    case LED_RED: break; // unavailabe on board
+    case LED_GREEN: USER_LED_INIT(logic_state); break;
+    case LED_BLUE: break; // unavailabe on board
     default:
         assert(false);
         break;
@@ -62,9 +62,9 @@ void LED_SET_STATE(ELed led, bool state)
 {
     switch (led)
     {
-    case LED_RED: (state ? LED_RED_ON() : LED_RED_OFF()); break;
-    case LED_GREEN: (state ? LED_GREEN_ON() : LED_GREEN_OFF()); break;
-    case LED_BLUE: (state ? LED_BLUE_ON() : LED_BLUE_OFF()); break;
+    case LED_RED: break; // unavailabe on board
+    case LED_GREEN: (state ? USER_LED_ON() : USER_LED_OFF()); break;
+    case LED_BLUE: break; // unavailabe on board
     default:
         assert(false);
         break;
@@ -77,6 +77,7 @@ void LED_SET_STATE(ELed led, bool state)
 int main(void) {
 
     /* Init board hardware. */
+    BOARD_ConfigMPU();
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
     BOARD_InitBootPeripherals();
