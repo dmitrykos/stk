@@ -30,15 +30,12 @@ file(GLOB TEST_SRC_GENERIC ${ROOT_DIR}/test/generic/*.cpp)
 file(GLOB TEST_SRC_STK ${ROOT_DIR}/stk/src/*.cpp)
 set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC_GENERIC} ${TEST_SRC_STK})
 
-# CPPUTEST lib
-add_subdirectory(${ROOT_DIR}/deps/cpputest ${CMAKE_TARGET_BINARY_DIR}/cpputest)
-
 # Deps
 list(APPEND TARGET_DEPS cpputest)
 list(APPEND TARGET_LIBS cpputest)
 
 # Target - STM32F407-DISK1 development board
-if (BOARD_STM32F407DISC1 OR BOARD_STM32F0DISCOVERY)
+if (VENDOR_STM32)
     include(${ROOT_DIR}/deps/target/stm32fx/ProjectInclude.cmake)
     set(TARGET_BINARY ${TARGET_NAME}.elf)
 else()
@@ -52,5 +49,10 @@ include(${ROOT_DIR}/deps/target/PostBuild.cmake)
 # Link deps
 add_dependencies(${TARGET_BINARY} ${TARGET_DEPS})
 target_link_libraries(${TARGET_BINARY} ${TARGET_LIBS})
+
+# Add into tests
+if (NOT ARM)
+    add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
+endif()
 
 install(TARGETS ${TARGET_BINARY} DESTINATION ${LIBRARY_OUTPUT_PATH})

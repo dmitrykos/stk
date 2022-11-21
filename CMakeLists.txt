@@ -9,12 +9,21 @@
 
 project(global)
 
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 3.14)
 
-# Device-specific targets
-option(BOARD_STM32F407DISC1 "Target STM32F407G-DISC1 (Arm Cortex-M4) development board" OFF)
-option(BOARD_STM32F0DISCOVERY "Target STM32F0DISCOVERY (Arm Cortex-M0) development board" OFF)
+# Vendor specific targeting
+option(VENDOR_STM32 "Target STM32 devices" OFF)
 
+# Vendor-specific boards
+if (VENDOR_STM32)
+    option(BOARD_STM32F407DISC1 "Target STM32F407G-DISC1 (Arm Cortex-M4) development board" OFF)
+    option(BOARD_STM32F0DISCOVERY "Target STM32F0DISCOVERY (Arm Cortex-M0) development board" OFF)
+else()
+    set(BOARD_STM32F407DISC1 OFF)
+    set(BOARD_STM32F0DISCOVERY OFF)
+endif()
+
+# Sanity check: board should match its CPU
 if (BOARD_STM32F407DISC1 AND NOT TARGET_CORTEX_M4)
     message(FATAL_ERROR "Target Arm Cortex-M4 (default) CPU for BOARD_STM32F407DISC1!")
 endif()
@@ -26,6 +35,11 @@ endif()
 #option(BUILD_LIB      "build Library"  OFF)
 #option(BUILD_EXAMPLES "build Examples" OFF)
 option(BUILD_TESTS    "build Tests"    OFF)
+
+# Include CTest for running tests
+if (BUILD_TESTS)
+    include(CTest)
+endif()
 
 # Detect compiler
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -39,6 +53,7 @@ endif()
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
 
 # Add projects
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps)
 if (BUILD_LIB)
 	add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/build/lib/cmake)
 endif()

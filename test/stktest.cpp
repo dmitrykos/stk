@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 
 	printf("STKTEST-FAILED: %d\n", result);
 
-	return 0;
+	return result;
 }
 
 /*! \fn    _STK_ASSERT_IMPL
