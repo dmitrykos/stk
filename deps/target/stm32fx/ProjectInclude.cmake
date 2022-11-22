@@ -1,5 +1,3 @@
-add_subdirectory(${ROOT_DIR}/deps/target/stm32fx ${CMAKE_BINARY_DIR}/stm32fx)
-
 add_definitions(
     -DUSE_HAL_DRIVER
     -DHSE_VALUE=8000000
