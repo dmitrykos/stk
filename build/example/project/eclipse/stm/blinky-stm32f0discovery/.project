@@ -941,14 +941,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stk/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</name>
+			<name>deps/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/arm/cortex-m/stk_arm_arm-cortex-m.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/stk/src/arch/x86/win32/stk_arm_x86-win32.cpp</name>
+			<name>deps/stk/src/arch/x86/win32/stk_arch_x86-win32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/x86/win32/stk_arm_x86-win32.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/x86/win32/stk_arch_x86-win32.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

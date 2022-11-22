@@ -342,6 +342,16 @@
 							</tool>
 						</toolChain>
 					</folderInfo>
+					<folderInfo id="com.crt.advproject.config.exe.debug.1492089332.313403720" name="/" resourcePath="stk">
+						<toolChain id="com.crt.advproject.toolchain.exe.debug.1906015104" name="NXP MCU Tools" superClass="com.crt.advproject.toolchain.exe.debug" unusedChildren="">
+							<tool id="com.crt.advproject.cpp.exe.debug.1549896008" name="MCU C++ Compiler" superClass="com.crt.advproject.cpp.exe.debug.597967406"/>
+							<tool id="com.crt.advproject.gcc.exe.debug.265416310" name="MCU C Compiler" superClass="com.crt.advproject.gcc.exe.debug.374121793"/>
+							<tool id="com.crt.advproject.gas.exe.debug.1780350640" name="MCU Assembler" superClass="com.crt.advproject.gas.exe.debug.1964817213"/>
+							<tool id="com.crt.advproject.link.cpp.exe.debug.847255275" name="MCU C++ Linker" superClass="com.crt.advproject.link.cpp.exe.debug.1506440966"/>
+							<tool id="com.crt.advproject.link.exe.debug.583529702" name="MCU Linker" superClass="com.crt.advproject.link.exe.debug.2052725512"/>
+							<tool id="com.crt.advproject.tool.debug.debug.2134496397" name="MCU Debugger" superClass="com.crt.advproject.tool.debug.debug.971293304"/>
+						</toolChain>
+					</folderInfo>
 					<sourceEntries>
 						<entry flags="LOCAL|VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="CMSIS"/>
 						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="board"/>
@@ -694,6 +704,16 @@
 								<option id="com.crt.advproject.debugger.security.nonsecureimage.1373225766" name="Non-Secure Project" superClass="com.crt.advproject.debugger.security.nonsecureimage" useByScannerDiscovery="false"/>
 								<option id="com.crt.advproject.linkserver.debug.prevent.release.1658046165" name="Prevent Debugging" superClass="com.crt.advproject.linkserver.debug.prevent.release" useByScannerDiscovery="false"/>
 							</tool>
+						</toolChain>
+					</folderInfo>
+					<folderInfo id="com.crt.advproject.config.exe.release.1459680146.1823996099" name="/" resourcePath="stk">
+						<toolChain id="com.crt.advproject.toolchain.exe.release.21039366" name="NXP MCU Tools" superClass="com.crt.advproject.toolchain.exe.release" unusedChildren="">
+							<tool id="com.crt.advproject.cpp.exe.release.2144038111" name="MCU C++ Compiler" superClass="com.crt.advproject.cpp.exe.release.669447152"/>
+							<tool id="com.crt.advproject.gcc.exe.release.1492862915" name="MCU C Compiler" superClass="com.crt.advproject.gcc.exe.release.1226841037"/>
+							<tool id="com.crt.advproject.gas.exe.release.1327671140" name="MCU Assembler" superClass="com.crt.advproject.gas.exe.release.1457347614"/>
+							<tool id="com.crt.advproject.link.cpp.exe.release.1167906638" name="MCU C++ Linker" superClass="com.crt.advproject.link.cpp.exe.release.4057189"/>
+							<tool id="com.crt.advproject.link.exe.release.132976755" name="MCU Linker" superClass="com.crt.advproject.link.exe.release.1031876585"/>
+							<tool id="com.crt.advproject.tool.debug.release.1302548850" name="MCU Debugger" superClass="com.crt.advproject.tool.debug.release.2124153140"/>
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
