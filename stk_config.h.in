@@ -1,0 +1,37 @@
+/*
+ * SuperTinyKernel: Minimalistic thread scheduling kernel for Embedded systems.
+ *
+ * Source: http://github.com/dmitrykos/stk
+ *
+ * Copyright (c) 2022 Dmitry Kostjucenko <dmitry.kostjucenko@gmail.com>
+ * License: MIT License, see LICENSE for a full text.
+ */
+
+#ifndef STK_CONFIG_H_
+#define STK_CONFIG_H_
+
+// note: Replace below includes with includes provided by the vendor of your board.
+// note: Rename this file to stk_config.h and place to your project folder which references includes (normally where main.cpp is, see /example).
+
+// Example for NXP K66 MCU:
+//#include "MK66F18.h"
+//#include "core_cm4.h"
+
+// Define for Arm Cortex-M4 MCU
+#cmakedefine _STK_ARCH_ARM_CORTEX_M
+
+#ifdef _STK_ARCH_ARM_CORTEX_M
+    // Redefine if SysTick handler name is different from SysTick_Handler
+    #cmakedefine _STK_SYSTICK_HANDLER @_STK_SYSTICK_HANDLER@
+
+    // Redefine if PendSv handler name is different from PendSV_Handler
+    #cmakedefine _STK_PENDSV_HANDLER @_STK_PENDSV_HANDLER@
+
+    // Redefine if SVC handler name is different from SVC_Handler
+    #cmakedefine _STK_SVC_HANDLER @_STK_SVC_HANDLER@
+#endif
+
+// Define for x86, Windows
+#cmakedefine _STK_ARCH_X86_WIN32
+
+#endif /* STK_CONFIG_H_ */

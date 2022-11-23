@@ -36,10 +36,10 @@ static __stk_forceinline void DelaySpin(uint32_t delay_ms)
 template <stk::EAccessMode _AccessMode>
 class MyTask : public stk::Task<256, _AccessMode>
 {
-    uint8_t m_taskId;
+    uint8_t m_task_id;
 
 public:
-    MyTask(uint8_t taskId) : m_taskId(taskId)
+    MyTask(uint8_t task_id) : m_task_id(task_id)
     { }
 
 #if 0
@@ -57,10 +57,10 @@ private:
 
     void RunInner()
     {
-        uint8_t task_id = m_taskId;
+        uint8_t task_id = m_task_id;
 
-        float count = 0;
-        uint64_t count_skip = 0;
+        volatile float count = 0;
+        volatile uint64_t count_skip = 0;
 
         while (true)
         {

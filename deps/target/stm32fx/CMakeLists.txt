@@ -9,6 +9,7 @@
 
 set(TARGET_NAME stm32fx)
 project(${TARGET_NAME})
+message(STATUS "- " ${TARGET_NAME})
 
 # Base definitions
 add_definitions(

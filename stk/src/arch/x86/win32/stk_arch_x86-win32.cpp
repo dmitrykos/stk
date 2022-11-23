@@ -18,8 +18,12 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <mmsystem.h>
 #include <list>
+#include <assert.h>
+
+typedef UINT MMRESULT;
+typedef MMRESULT (* timeBeginPeriodF)(UINT uPeriod);
+static timeBeginPeriodF timeBeginPeriod = NULL;
 
 #define _STK_ARCH_X86_WIN32_MIN_RESOLUTION (10 * 1000)
 
@@ -32,7 +36,34 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, first_stack, tick_resolution);
 
+        m_winmm_dll    = NULL;
         m_timer_thread = NULL;
+
+        LoadWindowsAPI();
+    }
+    ~Context()
+    {
+        UnloadWindowsAPI();
+    }
+
+    void LoadWindowsAPI()
+    {
+        HMODULE winmm = GetModuleHandleA("Winmm");
+        if (winmm == NULL)
+            m_winmm_dll = winmm = LoadLibraryA("Winmm.dll");
+        assert(winmm != NULL);
+
+        timeBeginPeriod = (timeBeginPeriodF)GetProcAddress(winmm, "timeBeginPeriod");
+        assert(timeBeginPeriod != NULL);
+    }
+
+    void UnloadWindowsAPI()
+    {
+        if (m_winmm_dll != NULL)
+        {
+            FreeLibrary(m_winmm_dll);
+            m_winmm_dll = NULL;
+        }
     }
 
     struct TaskContext
@@ -48,6 +79,7 @@ static struct Context : public PlatformContext
     void CreateThreadsForTasks();
     void CreateTimerThreadAndJoin();
 
+    HMODULE                m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                 m_timer_thread;  //!< timer thread handle
     std::list<TaskContext> m_tasks;         //!< list of task internal contexts
 }

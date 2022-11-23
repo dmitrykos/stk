@@ -7,7 +7,7 @@
 #  License: MIT License, see LICENSE for a full text.
 # 
 
-set(TARGET_NAME test-generic)
+set(TARGET_NAME test-x86-win32-switch)
 project(${TARGET_NAME})
 message(STATUS "- " ${TARGET_NAME})
 
@@ -15,7 +15,7 @@ message(STATUS "- " ${TARGET_NAME})
 add_definitions(-D_STK_ASSERT_REDIRECT)
 
 # Proect root dir
-set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
+set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../..)
 
 # Includes
 include_directories( 
@@ -27,32 +27,24 @@ include_directories(
 
 # Sources
 file(GLOB TEST_SRC_MAIN ${ROOT_DIR}/test/*.cpp)
-file(GLOB TEST_SRC ${ROOT_DIR}/test/generic/*.cpp)
-set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC} ${TEST_SRC_STK})
+file(GLOB TEST_SRC ${ROOT_DIR}/test/arch/x86/win32/*.cpp)
+set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC} ${TEST_SRC_STK} ${TEST_SRC_STK_WIN32})
 
 # Deps
 list(APPEND TARGET_DEPS stk cpputest)
 list(APPEND TARGET_LIBS stk cpputest)
 
-# Target - STM32F407-DISK1 development board
-if (VENDOR_STM32)
-    include(${ROOT_DIR}/deps/target/stm32fx/ProjectInclude.cmake)
-    set(TARGET_BINARY ${TARGET_NAME}.elf)
-else()
-    set(TARGET_BINARY ${TARGET_NAME})
-endif()
+# Target
+set(TARGET_BINARY ${TARGET_NAME})
 
 # Make target
 add_executable(${TARGET_BINARY} ${TEST_SRC})
-include(${ROOT_DIR}/deps/target/PostBuild.cmake)
 
 # Link deps
 add_dependencies(${TARGET_BINARY} ${TARGET_DEPS})
 target_link_libraries(${TARGET_BINARY} ${TARGET_LIBS})
 
 # Add into tests
-if (NOT ARM)
-    add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
-endif()
+add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
 
 install(TARGETS ${TARGET_BINARY} DESTINATION ${LIBRARY_OUTPUT_PATH})

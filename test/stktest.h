@@ -15,8 +15,8 @@
 #include <CppUTest/TestHarness.h>
 
 // lib: stk
-#define _STK_ARCH_X86_WIN32
 #define _STK_UNDER_TEST
+#include <stk_config.h>
 #include <stk.h>
 
 /*! \class TestAssertPassed
@@ -36,12 +36,32 @@ public:
     TestContext() : m_expect_assert(false)
     { }
 
+    /*! \brief     Start expecting assertion for the test case.
+        \param[in] expect: True to expect otherwise False.
+    */
     void ExpectAssert(bool expect) { m_expect_assert = expect; }
+
+    /*! \brief     Check if test case is expecting assertion.
+    */
     bool IsExpectingAssert() const { return m_expect_assert; }
 
+    /*! \brief     Show text string as prologue before tests start.
+    */
+    static void ShowTestSuitePrologue();
+
+    /*! \brief     Show text string as epilogue after tests end.
+        \param[in] result: 0 if no tests are failed otherwise number of failed tests.
+    */
+    static void ShowTestSuiteEpilogue(int32_t result);
+
+    /*! \brief     Exit test suite process forcibly.
+        \param[in] result: 0 if no tests are failed otherwise number of failed tests.
+    */
+    static void ForceExitTestSuie(int32_t result);
+
 private:
-    static TestContext m_instance;
-    bool m_expect_assert;
+    static TestContext m_instance; //!< global instance of the TestContext
+    bool m_expect_assert;          //!< assert expectation flag
 };
 
 /*! \var   g_TestContext

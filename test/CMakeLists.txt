@@ -10,3 +10,7 @@
 project(test)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
+
+if (WIN32)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/arch/x86/win32)
+endif()

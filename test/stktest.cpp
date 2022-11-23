@@ -14,11 +14,11 @@ TestContext g_TestContext;
 
 int main(int argc, char **argv)
 {
-	printf("STKTEST-START\n");
+    TestContext::ShowTestSuitePrologue();
 
-	int result = RUN_ALL_TESTS(argc, argv);
+	int32_t result = RUN_ALL_TESTS(argc, argv);
 
-	printf("STKTEST-FAILED: %d\n", result);
+	TestContext::ShowTestSuiteEpilogue(result);
 
 	return result;
 }
@@ -40,4 +40,20 @@ extern void _STK_ASSERT_IMPL(const char *message, const char *file, int32_t line
 	what += StringFrom(line);
 
 	CHECK_TEXT(false, what.asCharString());
+}
+
+void TestContext::ShowTestSuitePrologue()
+{
+    printf("STKTEST-START\n");
+}
+
+void TestContext::ShowTestSuiteEpilogue(int32_t result)
+{
+    printf("STKTEST-RESULT: %d\n", result);
+}
+
+void TestContext::ForceExitTestSuie(int32_t result)
+{
+    ShowTestSuiteEpilogue(result);
+    std::exit(result);
 }
