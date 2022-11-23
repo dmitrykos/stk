@@ -1,4 +1,4 @@
-name: Portable Tests (CMake)
+name: Portable Tests Runner
 
 on:
   push:
