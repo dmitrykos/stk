@@ -13,9 +13,13 @@
 // note: Replace below includes with includes provided by the vendor of your board.
 // note: Rename this file to stk_config.h and place to your project folder which references includes (normally where main.cpp is, see /example).
 
-// Example for NXP K66 MCU:
+// Device-specific include file, example for NXP K66 MCU:
 //#include "MK66F18.h"
 //#include "core_cm4.h"
+#cmakedefine _STK_DEVICE_INC "@_STK_DEVICE_INC@"
+#ifdef _STK_DEVICE_INC
+#include _STK_DEVICE_INC
+#endif
 
 // Define for Arm Cortex-M4 MCU
 #cmakedefine _STK_ARCH_ARM_CORTEX_M

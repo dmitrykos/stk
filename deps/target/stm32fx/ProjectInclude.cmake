@@ -1,3 +1,8 @@
+if (NOT ROOT_DIR)
+    message(FATAL_ERROR "ROOT_DIR must be defined and point to the root of STK repository!")
+endif()
+
+# Base definitions
 add_definitions(
     -DUSE_HAL_DRIVER
     -DHSE_VALUE=8000000
@@ -6,6 +11,7 @@ add_definitions(
     -DUSE_FULL_ASSERT
 )
 
+# Base includes
 include_directories(        
     ${ROOT_DIR}/deps/target/stm32fx/include
     ${ROOT_DIR}/deps/target/stm32fx/include/arm
@@ -14,6 +20,7 @@ include_directories(
     ${ROOT_DIR}/deps/target/stm32fx/include/diag
 )
 
+# Device-specific includes
 if (BOARD_STM32F407DISC1)
     add_definitions(
         -DSTM32F4
@@ -30,10 +37,5 @@ elseif (BOARD_STM32F0DISCOVERY)
     link_directories(${ROOT_DIR}/deps/target/stm32fx/src/stm32f0-ld)
 endif()
 
-set(LINKER_FLAGS "-T mem.ld -T libs.ld -T sections.ld -Wl,-Map=${TARGET_NAME}.map")
-
-set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} ${LINKER_FLAGS}")
-set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} ${LINKER_FLAGS}")
-
-list(APPEND TARGET_DEPS stm32fx)
-list(APPEND TARGET_LIBS -Wl,--whole-archive stm32fx -Wl,--no-whole-archive)
+# Device specific include file
+set(_STK_DEVICE_INC "cmsis_device.h" CACHE STRING "_STK_DEVICE_INC" FORCE)

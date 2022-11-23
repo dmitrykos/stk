@@ -24,11 +24,11 @@ else()
 endif()
 
 # Sanity check: board should match its CPU
-if (BOARD_STM32F407DISC1 AND NOT TARGET_CORTEX_M4)
-    message(FATAL_ERROR "Target Arm Cortex-M4 (default) CPU for BOARD_STM32F407DISC1!")
+if (BOARD_STM32F407DISC1 AND (NOT TARGET_CORTEX_M4 OR NOT VENDOR_STM32))
+    message(FATAL_ERROR "Target Arm Cortex-M4 (default) CPU for BOARD_STM32F407DISC1 as well as STM32 vendor!")
 endif()
-if (BOARD_STM32F0DISCOVERY AND NOT TARGET_CORTEX_M0)
-    message(FATAL_ERROR "Target Arm Cortex-M0 CPU for BOARD_STM32F0DISCOVERY!")
+if (BOARD_STM32F0DISCOVERY AND (NOT TARGET_CORTEX_M0 OR NOT VENDOR_STM32))
+    message(FATAL_ERROR "Target Arm Cortex-M0 CPU for BOARD_STM32F0DISCOVERY as well as STM32 vendor!")
 endif()
 
 # Add static lib option
@@ -49,21 +49,12 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(GCC TRUE)
 endif()
 
-# Create stk_config.h
-if (WIN32)
-    set(_STK_ARCH_X86_WIN32 TRUE)
-    message(STATUS "Platform define: _STK_ARCH_X86_WIN32")
-elseif (ARM)
-    set(_STK_ARCH_ARM_CORTEX_M TRUE)
-    message(STATUS "Platform define: _STK_ARCH_ARM_CORTEX_M")
-endif()
-set(STK_CONFIG_INC ${CMAKE_CURRENT_BINARY_DIR}/include/stk_config.h)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stk_config.h.in ${STK_CONFIG_INC})
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
-message(STATUS "Config file: " ${STK_CONFIG_INC})
-
 # Output binaries path
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
+
+# Configure file folder (note: must be defined before inclusion of the projects so that they could use it)
+set(_STK_DEVICE_INC)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/include)
 
 # Add projects
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/deps)
@@ -76,3 +67,15 @@ endif()
 if (BUILD_TESTS)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)
 endif()
+
+# Create stk_config.h (note: must be defined after inclusion of the projects to catch value of _STK_DEVICE_INC)
+if (WIN32)
+    set(_STK_ARCH_X86_WIN32 TRUE)
+    message(STATUS "Platform define: _STK_ARCH_X86_WIN32")
+elseif (ARM)
+    set(_STK_ARCH_ARM_CORTEX_M TRUE)
+    message(STATUS "Platform define: _STK_ARCH_ARM_CORTEX_M")
+endif()
+set(STK_CONFIG_INC ${CMAKE_CURRENT_BINARY_DIR}/include/stk_config.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stk_config.h.in ${STK_CONFIG_INC})
+message(STATUS "Config file: " ${STK_CONFIG_INC})

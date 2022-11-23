@@ -49,7 +49,7 @@ void TestContext::ShowTestSuitePrologue()
 
 void TestContext::ShowTestSuiteEpilogue(int32_t result)
 {
-    printf("STKTEST-RESULT: %d\n", result);
+    printf("STKTEST-RESULT: %d\n", (int)result);
 }
 
 void TestContext::ForceExitTestSuie(int32_t result)

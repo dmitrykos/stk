@@ -9,7 +9,10 @@
 
 project(deps)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/target)
+# Include device-specific files (note: for now including only for tests and examples)
+if (BUILD_TESTS OR BUILD_EXAMPLES)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/target)
+endif()
 
 if (BUILD_TESTS)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/cpputest)

@@ -34,9 +34,13 @@ set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC} ${TEST_SRC_STK})
 list(APPEND TARGET_DEPS stk cpputest)
 list(APPEND TARGET_LIBS stk cpputest)
 
-# Target - STM32F407-DISK1 development board
+# Target STM32 development board
 if (VENDOR_STM32)
     include(${ROOT_DIR}/deps/target/stm32fx/ProjectInclude.cmake)
+    include(${ROOT_DIR}/deps/target/stm32fx/ProjectIncludeLib.cmake)
+    set(LINKER_FLAGS "-Wl,-Map=${TARGET_NAME}.map")
+    set(CMAKE_C_LINK_FLAGS "${CMAKE_C_LINK_FLAGS} ${LINKER_FLAGS}")
+    set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} ${LINKER_FLAGS}")
     set(TARGET_BINARY ${TARGET_NAME}.elf)
 else()
     set(TARGET_BINARY ${TARGET_NAME})

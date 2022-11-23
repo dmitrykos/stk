@@ -14,6 +14,12 @@ message(STATUS "- " ${TARGET_NAME})
 # Includes
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Add STM32 specific includes
+if (VENDOR_STM32)
+    set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../deps/target/stm32fx/ProjectInclude.cmake)
+endif()
+
 # Sources
 file(GLOB STK_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 file(GLOB STK_LIB_SRC_ARM_CORTEX_M ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/arm/cortex-m/*.cpp)

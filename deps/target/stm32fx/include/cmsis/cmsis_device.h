@@ -30,10 +30,13 @@
 
 #if defined(STM32F0)
 #include "stm32f0xx.h"
+#include "core_cm1.h"
 #elif defined(STM32F1)
 #include "stm32f1xx.h"
+#include "core_cm3.h"
 #elif defined(STM32F4)
 #include "stm32f4xx.h"
+#include "core_cm4.h"
 #else
 #error Undefined device architecture!
 #endif
