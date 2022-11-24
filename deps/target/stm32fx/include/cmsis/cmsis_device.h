@@ -30,7 +30,7 @@
 
 #if defined(STM32F0)
 #include "stm32f0xx.h"
-#include "core_cm1.h"
+#include "core_cm0.h"
 #elif defined(STM32F1)
 #include "stm32f1xx.h"
 #include "core_cm3.h"
