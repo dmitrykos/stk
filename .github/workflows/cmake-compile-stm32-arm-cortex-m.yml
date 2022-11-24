@@ -14,13 +14,13 @@ jobs:
       matrix:
         include:
           - name: "Configure CMake (Board: STM32F407DISC1, CPU: Arm Cortex-M0)"
-            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M0=ON -DBOARD_STM32F0DISCOVERY=ON
+            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M0=ON -DTARGET_CPU_FAMILY=STM32F051x8
             
           - name: "Configure CMake (Board: NUCLEOF103RB, CPU: Arm Cortex-M3)"
-            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M3=ON -DBOARD_NUCLEOF103RB=ON
+            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M3=ON -DTARGET_CPU_FAMILY=STM32F103xB
         
           - name: "Configure CMake (Board: STM32F407DISC1, CPU: Arm Cortex-M4)"
-            cmake_flags: -DVENDOR_STM32=ON -DBOARD_STM32F407DISC1=ON
+            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M4=ON -DTARGET_CPU_FAMILY=STM32F407xx
   
     # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
     # You can convert this to a matrix build if you need cross-platform coverage.
@@ -44,4 +44,4 @@ jobs:
 
     - name: Build
       # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 4
