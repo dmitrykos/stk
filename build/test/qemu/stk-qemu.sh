@@ -18,7 +18,7 @@ if [ "$?" -ne 0 ]; then
 fi
 
 # Wait for the output (semihosting)
-sleep 5
+sleep 10
 
 # Kill emulator
 kill ${PID} &> /dev/null

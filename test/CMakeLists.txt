@@ -9,8 +9,13 @@
 
 project(test)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
+option(TEST_GENERIC "build test: Generic"                     ON)
+option(TEST_SWITCH  "build test: Switch (platform-dependent)" OFF)
 
-if (WIN32)
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/arch/x86/win32)
+if (TEST_GENERIC)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
+endif()
+
+if (TEST_SWITCH)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/switch)
 endif()

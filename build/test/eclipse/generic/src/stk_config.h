@@ -10,7 +10,7 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-// note: tests do not use platform-dependent implementation
+// note: Generic tests do not use platform-dependent implementation
 
 #define _STK_ASSERT
 

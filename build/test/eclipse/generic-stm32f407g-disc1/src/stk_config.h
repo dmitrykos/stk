@@ -10,8 +10,11 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-// note: tests do not use platform-dependent implementation
+// note: Generic tests do not use platform-dependent implementation
+
+#include "cmsis_device.h"
 
 #define _STK_ASSERT
+#define _STK_ARCH_ARM_CORTEX_M
 
 #endif /* STK_CONFIG_H_ */

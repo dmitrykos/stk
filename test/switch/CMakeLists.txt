@@ -7,7 +7,7 @@
 #  License: MIT License, see LICENSE for a full text.
 # 
 
-set(TARGET_NAME test-generic)
+set(TARGET_NAME test-switch)
 project(${TARGET_NAME})
 message(STATUS "- " ${TARGET_NAME})
 
@@ -27,8 +27,12 @@ include_directories(
 
 # Sources
 file(GLOB TEST_SRC_MAIN ${ROOT_DIR}/test/*.cpp)
-file(GLOB TEST_SRC ${ROOT_DIR}/test/generic/*.cpp)
-set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC} ${TEST_SRC_STK})
+if (WIN32)
+    file(GLOB TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/arch/x86/win32/*.cpp)
+elseif (ARM)
+    file(GLOB TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/arch/arm/cortex-m/*.cpp)
+endif()
+set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC})
 
 # Deps
 list(APPEND TARGET_DEPS cpputest)
