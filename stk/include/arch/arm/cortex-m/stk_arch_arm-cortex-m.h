@@ -27,6 +27,11 @@ public:
     void SetAccessMode(EAccessMode mode);
 };
 
+/*! \typedef PlatformDefault
+    \brief   Default platform implementation.
+*/
+typedef PlatformArmCortexM PlatformDefault;
+
 } // namespace stk
 
 #endif /* STK_ARCH_ARM_CORTEX_M_H_ */

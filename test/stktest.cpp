@@ -10,18 +10,8 @@
 #include "stktest.h"
 #include <CppUTest/CommandLineTestRunner.h>
 
+// Define TestContext instance.
 TestContext g_TestContext;
-
-int main(int argc, char **argv)
-{
-    TestContext::ShowTestSuitePrologue();
-
-	int32_t result = RUN_ALL_TESTS(argc, argv);
-
-	TestContext::ShowTestSuiteEpilogue(result);
-
-	return result;
-}
 
 /*! \fn    _STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.
@@ -29,7 +19,13 @@ int main(int argc, char **argv)
 extern void _STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)
 {
 	if (g_TestContext.IsExpectingAssert())
+	{
+    #if CPPUTEST_HAVE_EXCEPTIONS
 		throw TestAssertPassed();
+    #else
+		return;
+    #endif
+	}
 
 	SimpleString what = "Assertion failed!\n";
 	what += "\twhat: ";
@@ -42,18 +38,16 @@ extern void _STK_ASSERT_IMPL(const char *message, const char *file, int32_t line
 	CHECK_TEXT(false, what.asCharString());
 }
 
-void TestContext::ShowTestSuitePrologue()
+int main(int argc, char **argv)
 {
-    printf("STKTEST-START\n");
-}
+    (void)argc;
+    (void)argv;
 
-void TestContext::ShowTestSuiteEpilogue(int32_t result)
-{
-    printf("STKTEST-RESULT: %d\n", (int)result);
-}
+    TestContext::ShowTestSuitePrologue();
 
-void TestContext::ForceExitTestSuie(int32_t result)
-{
-    ShowTestSuiteEpilogue(result);
-    std::exit(result);
+    int32_t result = RUN_ALL_TESTS(argc, argv);
+
+    TestContext::ShowTestSuiteEpilogue(result);
+
+    return result;
 }

@@ -1,6 +1,6 @@
 # Deps
-list(APPEND TARGET_DEPS stk cpputest)
-list(APPEND TARGET_LIBS stk cpputest)
+list(APPEND TARGET_DEPS stk)
+list(APPEND TARGET_LIBS stk)
 
 # Target
 if (VENDOR_STM32)

@@ -12,7 +12,8 @@ project(${TARGET_NAME})
 message(STATUS "- " ${TARGET_NAME})
 
 # Definitions
-add_definitions(-D_STK_ASSERT_REDIRECT)
+# Note: Exclude memory leak detection as we do not allocated memory dynamically in STK.
+add_definitions(-D_STK_ASSERT_REDIRECT -DCPPUTEST_MEM_LEAK_DETECTION_DISABLED -DCPPUTEST_STD_CPP_LIB_DISABLED)
 
 # Proect root dir
 set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)

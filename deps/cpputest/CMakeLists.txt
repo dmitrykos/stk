@@ -9,12 +9,14 @@
 
 set(TARGET_NAME cpputest)
 project(${TARGET_NAME})
+message(STATUS "- " ${TARGET_NAME})
+
+# Definitions
+# Note: Exclude memory leak detection as we do not allocated memory dynamically in STK.
+add_definitions(-DCPPUTEST_MEM_LEAK_DETECTION_DISABLED -DCPPUTEST_STD_CPP_LIB_DISABLED)
 
 # Includes
-list(APPEND CPPUTEST_INC_DIRS 
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-include_directories(${CPPUTEST_INC_DIRS})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Sources
 file(GLOB CPPUTEST_SRC_CPPUTEST ${CMAKE_CURRENT_SOURCE_DIR}/src/CppUTest/*.cpp)

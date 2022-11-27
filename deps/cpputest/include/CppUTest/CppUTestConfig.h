@@ -123,56 +123,10 @@
   #define _check_format_(type, format_parameter, other_parameters) /* type, format_parameter, other_parameters */
 #endif
 
-/*
- * When we don't link Standard C++, then we won't throw exceptions as we assume the compiler might not support that!
- */
-
-#if CPPUTEST_USE_STD_CPP_LIB
-  #if defined(__cplusplus) && __cplusplus >= 201103L
-    #define UT_THROW(exception)
-    #define UT_NOTHROW noexcept
-  #else
-    #define UT_THROW(exception) throw (exception)
-    #define UT_NOTHROW throw()
-  #endif
-#else
-  #define UT_THROW(exception)
-  #ifdef __clang__
-    #define UT_NOTHROW throw()
-  #else
-    #define UT_NOTHROW
-  #endif
-#endif
-
-/*
- * Visual C++ doesn't define __cplusplus as C++11 yet (201103), however it doesn't want the throw(exception) either, but
- * it does want throw().
- */
-
-#ifdef _MSC_VER
-  #undef UT_THROW
-  #define UT_THROW(exception)
-#endif
-
 #if defined(__cplusplus) && __cplusplus >= 201103L
     #define DEFAULT_COPY_CONSTRUCTOR(classname) classname(const classname &) = default;
 #else
     #define DEFAULT_COPY_CONSTRUCTOR(classname)
-#endif
-
-/*
- * g++-4.7 with stdc++11 enabled On MacOSX! will have a different exception specifier for operator new (and thank you!)
- * I assume they'll fix this in the future, but for now, we'll change that here.
- * (This should perhaps also be done in the configure.ac)
- */
-
-#ifdef __GXX_EXPERIMENTAL_CXX0X__
-#ifdef __APPLE__
-#ifdef _GLIBCXX_THROW
-#undef UT_THROW
-#define UT_THROW(exception) _GLIBCXX_THROW(exception)
-#endif
-#endif
 #endif
 
 /*
@@ -209,33 +163,94 @@
 #endif
 
 /*
- * Handling of IEEE754 floating point exceptions via fenv.h
+ * Handling of IEEE754 (IEC559) floating point exceptions via fenv.h
  * Predominantly works on non-Visual C++ compilers and Visual C++ 2008 and newer
  */
-#ifndef CPPUTEST_FENV_DISABLED
- #if !CPPUTEST_USE_STD_C_LIB || \
-     (defined(_MSC_VER) && (_MSC_VER < 1800)) || \
-     defined(__APPLE__) || \
-     (defined(__ghs__) && defined(__ColdFire__)) || \
-     defined(__BCPLUSPLUS__)
-  #define CPPUTEST_FENV_DISABLED
- #endif
-#endif
-
 #ifndef CPPUTEST_HAVE_FENV
- #ifdef CPPUTEST_FENV_DISABLED
-  #define CPPUTEST_HAVE_FENV 0
- #else
-  #define CPPUTEST_HAVE_FENV 1
+  #if __STDC_IEC_559__ && CPPUTEST_USE_STD_C_LIB
+    #define CPPUTEST_HAVE_FENV 1
+  #else
+    #define CPPUTEST_HAVE_FENV 0
  #endif
 #endif
 
-#if CPPUTEST_HAVE_FENV
-#if defined(__WATCOMC__) || defined(__ARMEL__) || defined(__m68k__)
-#define CPPUTEST_FENV_IS_WORKING_PROPERLY 0
-#else
-#define CPPUTEST_FENV_IS_WORKING_PROPERLY 1
-#endif
+#ifdef __cplusplus
+  /*
+   * Detection of run-time type information (RTTI) presence. Since it's a
+   * standard language feature, assume it is enabled unless we see otherwise.
+   */
+  #ifndef CPPUTEST_HAVE_RTTI
+    #if ((__cplusplus >= 202002L) && !__cpp_rtti) || \
+        (defined(_MSC_VER) && !_CPPRTTI) || \
+        (defined(__GNUC__) && !__GXX_RTTI) || \
+        (defined(__ghs__) && !__RTTI) || \
+        (defined(__WATCOMC__) && !_CPPRTTI)
+      #define CPPUTEST_HAVE_RTTI 0
+    #else
+      #define CPPUTEST_HAVE_RTTI 1
+    #endif
+  #endif
+
+  /*
+   * Detection of exception support. Since it's a standard language feature,
+   * assume it is enabled unless we see otherwise.
+   */
+  #ifndef CPPUTEST_HAVE_EXCEPTIONS
+    #if ((__cplusplus >= 202002L) && !__cpp_exceptions) || \
+        (defined(_MSC_VER) && !_CPPUNWIND) || \
+        (defined(__GNUC__) && !__EXCEPTIONS) || \
+        (defined(__ghs__) && !__EXCEPTION_HANDLING) || \
+        (defined(__WATCOMC__) && !_CPPUNWIND)
+      #define CPPUTEST_HAVE_EXCEPTIONS 0
+    #else
+      #define CPPUTEST_HAVE_EXCEPTIONS 1
+    #endif
+  #endif
+
+  #if CPPUTEST_HAVE_EXCEPTIONS
+    #if defined(__cplusplus) && __cplusplus >= 201103L
+      #define UT_THROW(exception)
+      #define UT_NOTHROW noexcept
+    #else
+      #define UT_THROW(exception) throw (exception)
+      #define UT_NOTHROW throw()
+    #endif
+  #else
+    #define UT_THROW(exception)
+    #ifdef __clang__
+      #define UT_NOTHROW throw()
+    #else
+      #define UT_NOTHROW
+    #endif
+  #endif
+
+  /*
+   * Visual C++ doesn't define __cplusplus as C++11 yet (201103), however it doesn't want the throw(exception) either, but
+   * it does want throw().
+   */
+  #ifdef _MSC_VER
+    #undef UT_THROW
+    #define UT_THROW(exception)
+  #endif
+
+  /*
+   * g++-4.7 with stdc++11 enabled On MacOSX! will have a different exception specifier for operator new (and thank you!)
+   * I assume they'll fix this in the future, but for now, we'll change that here.
+   * (This should perhaps also be done in the configure.ac)
+   */
+  #if defined(__GXX_EXPERIMENTAL_CXX0X__) && \
+      defined(__APPLE__) && \
+      defined(_GLIBCXX_THROW)
+    #undef UT_THROW
+    #define UT_THROW(exception) _GLIBCXX_THROW(exception)
+  #endif
+
+  #if CPPUTEST_USE_STD_CPP_LIB
+    #define CPPUTEST_BAD_ALLOC std::bad_alloc
+  #else
+    class CppUTestBadAlloc {};
+    #define CPPUTEST_BAD_ALLOC CppUTestBadAlloc
+  #endif
 #endif
 
 /*
@@ -249,13 +264,16 @@
 #endif
 #endif
 
-/* Handling of systems with a different byte-width (e.g. 16 bit).
- * Since CHAR_BIT is defined in limits.h (ANSI C), use default of 8 when building without Std C library.
+/* Handling of systems with a different byte-width (e.g. 16 bit). Since
+ * CHAR_BIT is defined in limits.h (ANSI C), the user must provide a definition
+ * when building without Std C library.
  */
-#if CPPUTEST_USE_STD_C_LIB
-#define CPPUTEST_CHAR_BIT CHAR_BIT
-#else
-#define CPPUTEST_CHAR_BIT 8
+#ifndef CPPUTEST_CHAR_BIT
+  #if defined(CHAR_BIT)
+    #define CPPUTEST_CHAR_BIT CHAR_BIT
+  #else
+    #error "Provide a definition for CPPUTEST_CHAR_BIT"
+  #endif
 #endif
 
 /* Handling of systems with a different int-width (e.g. 16 bit).
@@ -316,29 +334,24 @@ typedef struct
 
 #endif
 
-/* Visual C++ 10.0+ (2010+) supports the override keyword, but doesn't define the C++ version as C++11 */
-#if defined(__cplusplus) && ((__cplusplus >= 201103L) || (defined(_MSC_VER) && (_MSC_VER >= 1600)))
-#if !defined(__ghs__)
-#define CPPUTEST_COMPILER_FULLY_SUPPORTS_CXX11
-#define _override override
-#else
-/* GreenHills is not compatible with other compilers with regards to where
- * it expects the override specifier to be on methods that return function
- * pointers. Given this, it is easiest to not use the override specifier.
- */
-#define _override
-#endif
-#define NULLPTR nullptr
-#else
-#define _override
-#define NULLPTR NULL
+#ifdef __cplusplus
+  /* Visual C++ 10.0+ (2010+) supports the override keyword, but doesn't define the C++ version as C++11 */
+  #if (__cplusplus >= 201103L) || (defined(_MSC_VER) && (_MSC_VER >= 1600))
+    #define _override override
+    #define NULLPTR nullptr
+  #else
+    #define _override
+    #define NULLPTR NULL
+  #endif
 #endif
 
-/* Visual C++ 11.0+ (2012+) supports the override keyword on destructors */
-#if defined(__cplusplus) && ((__cplusplus >= 201103L) || (defined(_MSC_VER) && (_MSC_VER >= 1700)))
-#define _destructor_override override
-#else
-#define _destructor_override
+#ifdef __cplusplus
+  /* Visual C++ 11.0+ (2012+) supports the override keyword on destructors */
+  #if (__cplusplus >= 201103L) || (defined(_MSC_VER) && (_MSC_VER >= 1700))
+    #define _destructor_override override
+  #else
+    #define _destructor_override
+  #endif
 #endif
 
 #ifdef __clang__

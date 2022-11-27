@@ -114,13 +114,7 @@ void RunExample()
     InitLeds();
 
     static Kernel<10> kernel;
-#if defined(_STK_ARCH_ARM_CORTEX_M)
-    static PlatformArmCortexM platform;
-#elif defined(_STK_ARCH_X86_WIN32)
-    static PlatformX86Win32 platform;
-#else
-    #error Unimplemented platform!
-#endif
+    static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
@@ -134,7 +128,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(10000);
+    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
 
     assert(false);
     while (true);

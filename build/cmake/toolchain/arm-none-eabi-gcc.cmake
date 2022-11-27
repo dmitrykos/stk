@@ -14,8 +14,9 @@ set(CMAKE_SYSTEM_VERSION               0)
 set(CMAKE_SYSTEM_PROCESSOR             arm)
 
 # Options
-option(ENABLE_LTO       "enable LTO" OFF)
-option(ENABLE_HARD_FP   "enable Hard FP" OFF)
+option(ENABLE_LTO       "enable LTO"               OFF)
+option(ENABLE_HARD_FP   "enable Hard FP"           OFF)
+option(ENABLE_SMALL     "enable Small build (Os)"  OFF)
 option(TARGET_CORTEX_M0 "target Arm Cortex-M0 CPU" OFF)
 option(TARGET_CORTEX_M3 "target Arm Cortex-M3 CPU" OFF)
 
@@ -78,9 +79,6 @@ set_property(GLOBAL PROPERTY TARGET_SUPPORTS_SHARED_LIBS FALSE)
 # Static library for try-compile
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 
-# Obligatory to use in target_link_libraries to avoid undefined references
-set(TOOLCHAIN_LINKER_FLAGS "-Wl,--gc-sections -nostartfiles -Wl,--print-memory-usage")
-
 # Preserve debugging ability for Release builds
 set(ENABLE_DEBUG_ABILITY FALSE)
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
@@ -93,38 +91,37 @@ endif()
 
 # Release optimization level
 set(OPT_LEVEL_RELEASE 3)
-if (ENABLE_DEBUG_ABILITY)
-	set(OPT_LEVEL_RELEASE 0)
+if (ENABLE_SMALL)
+	set(OPT_LEVEL_RELEASE s)
 endif()
 
 # Common all
-if (IS_DEBUG_BUILD)
+if (ENABLE_DEBUG_ABILITY)
     set(TOOLCHAIN_COMMON_FLAGS "-O0 -g3 -DDEBUG")
 else()
     set(TOOLCHAIN_COMMON_FLAGS "-O${OPT_LEVEL_RELEASE} -g -DNDEBUG")
 endif()
 set(TOOLCHAIN_COMMON_FLAGS "${TOOLCHAIN_COMMON_FLAGS} -pipe -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fstrict-aliasing -fmerge-constants -Wall -Wextra")
+
+# Common C and C++ (C++ excludes RTTI always)
 set(TOOLCHAIN_COMMON_C_FLAGS "-std=gnu11")
 set(TOOLCHAIN_COMMON_CXX_FLAGS "-std=gnu++11 -fabi-version=0 -fno-use-cxa-atexit -fno-threadsafe-statics")
+
+# Small build excludes exceptions
+if (ENABLE_SMALL)
+	set(TOOLCHAIN_COMMON_CXX_FLAGS "${TOOLCHAIN_COMMON_CXX_FLAGS} -ffreestanding -fno-exceptions -fno-rtti")
+endif()
 
 # Common other
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TOOLCHAIN_COMMON_FLAGS} ${TOOLCHAIN_COMMON_C_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TOOLCHAIN_COMMON_FLAGS} ${TOOLCHAIN_COMMON_CXX_FLAGS}")
 
 # Optimizing flags
-set(TOOLCHAIN_OPT_FLAGS "")
+set(TOOLCHAIN_LTO_FLAGS)
 if (NOT ENABLE_DEBUG_ABILITY)
-    #set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} ")
+    set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS}")
 	if (ENABLE_LTO)
-		option(IS_FORCED_LTO "enable forced usage of LTO" OFF)
-		set(OPT_LTO_FLAGS "-flto")
-		if (NOT ARM_NEON OR IS_FORCED_LTO)
-			set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} ${OPT_LTO_FLAGS}")
-		endif()
-	endif()
-else()
-	if (NOT IS_DEBUG_BUILD)
-		set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} -fno-omit-frame-pointer -fno-unswitch-loops")
+        set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} -flto -ffat-lto-objects")
 	endif()
 endif()
 
@@ -147,9 +144,17 @@ else()
 endif()
 set(TOOLCHAIN_FPU_LINKER_FLAGS "${TOOLCHAIN_FPU_LINKER_FLAGS} ${TOOLCHAIN_FPU}")
 
-# Flags
+# Compiler flags
 set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${TOOLCHAIN_CPU} ${TOOLCHAIN_FPU} ${TOOLCHAIN_OPT_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TOOLCHAIN_CPU} ${TOOLCHAIN_FPU} ${TOOLCHAIN_OPT_FLAGS}")
+
+# Linker flags
+set(TOOLCHAIN_LINKER_FLAGS "-Wl,--gc-sections -nostartfiles -Wl,--print-memory-usage")
+
+# Use NewLib-nano for small builds
+if (ENABLE_SMALL)
+    set(TOOLCHAIN_LINKER_FLAGS "${TOOLCHAIN_LINKER_FLAGS} --specs=nano.specs")
+endif()
 
 # Append CPU & FPU flags to linker
 set(TOOLCHAIN_LINKER_FLAGS "${TOOLCHAIN_LINKER_FLAGS} ${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_FPU_LINKER_FLAGS}")
@@ -167,5 +172,7 @@ if (NOT ONCE)
     message(STATUS "Target processor: ${CMAKE_SYSTEM_PROCESSOR}")
     message(STATUS "CXX flags: ${CMAKE_CXX_FLAGS}")
     message(STATUS "C flags: ${CMAKE_C_FLAGS}")
+    message(STATUS "Linker C flags: ${CMAKE_C_LINK_FLAGS}")
+    message(STATUS "Linker CXX flags: ${CMAKE_CXX_LINK_FLAGS}")
     set(ONCE TRUE)
 endif()

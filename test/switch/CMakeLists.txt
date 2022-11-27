@@ -20,23 +20,13 @@ set(ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 # Includes
 include_directories( 
     ${ROOT_DIR}/stk/include
-    ${ROOT_DIR}/deps/cpputest/include
     ${ROOT_DIR}/test
     ${ROOT_DIR}/test/generic
 )
 
 # Sources
-file(GLOB TEST_SRC_MAIN ${ROOT_DIR}/test/*.cpp)
-if (WIN32)
-    file(GLOB TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/arch/x86/win32/*.cpp)
-elseif (ARM)
-    file(GLOB TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/arch/arm/cortex-m/*.cpp)
-endif()
-set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC_MAIN} ${TEST_SRC})
-
-# Deps
-list(APPEND TARGET_DEPS cpputest)
-list(APPEND TARGET_LIBS cpputest)
+file(GLOB TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+set(TEST_SRC ${TEST_SRC_MAIN} ${TEST_SRC})
 
 # Finalize
 include(${ROOT_DIR}/build/cmake/MakeExecutable.cmake)

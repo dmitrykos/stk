@@ -33,6 +33,14 @@ enum EAccessMode
     ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
 };
 
+/*! \enum  EDefault
+    \brief Default constants.
+*/
+enum EDefault
+{
+    DEFAULT_RESOLUTION_US_ONE_MSEC = 10000, //!< Default resolution (1 millisecond) of the kernel supplied to Kernel::Start().
+};
+
 /*! \class Stack
     \brief Stack descriptor.
 */
@@ -70,7 +78,7 @@ public:
     /*! \brief  Get IKernelService instance.
         \note   IKernelService instance is available only after kernel was started with Kernel::Start().
     */
-    static __stk_forceinline _InstanceType Get() { return m_instance; }
+    static __stk_forceinline _InstanceType const &Get() { return m_instance; }
 
 protected:
     /*! \brief     Bind instance to the singleton.

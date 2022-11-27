@@ -28,6 +28,11 @@ public:
     void SetAccessMode(EAccessMode mode);
 };
 
+/*! \typedef PlatformDefault
+    \brief   Default platform implementation.
+*/
+typedef PlatformX86Win32 PlatformDefault;
+
 } // namespace stk
 
 #endif /* STK_ARCH_X86_WIN32_H_ */
