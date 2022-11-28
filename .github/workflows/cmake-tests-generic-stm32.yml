@@ -1,4 +1,4 @@
-name: Tests (Generic, QEMU=STM32F407DISC1, Arm Cortex-M4)
+name: Tests Generic (QEMU, Arm Cortex-M4)
 
 on:
   push:
@@ -36,7 +36,7 @@ jobs:
     - name: ${{matrix.name}}
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchain/arm-none-eabi-gcc.cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{matrix.cmake_flags}} -DBUILD_LIB=ON -DENABLE_LTO=OFF -DBUILD_TESTS=ON -DTEST_GENERIC=ON
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchain/arm-none-eabi-gcc.cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} ${{matrix.cmake_flags}} -DENABLE_LTO=ON -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=ON
 
     - name: Build
       # Build your program with the given configuration

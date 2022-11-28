@@ -1,4 +1,4 @@
-name: Compile (Arm Cortex-M0,3,4)
+name: Compile Lib (Arm Cortex-M0,3,4)
 
 on:
   push:

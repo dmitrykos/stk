@@ -121,6 +121,7 @@ set(TOOLCHAIN_LTO_FLAGS)
 if (NOT ENABLE_DEBUG_ABILITY)
     set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS}")
 	if (ENABLE_LTO)
+        # Note: fat-lto-objects required for ARM GCC toolchain which does not have LTO linker plugin (which understands slim LTO objects) unlike xPack ARM GCC therefore use it for compatibility with all cases
         set(TOOLCHAIN_OPT_FLAGS "${TOOLCHAIN_OPT_FLAGS} -flto -ffat-lto-objects")
 	endif()
 endif()

@@ -1,4 +1,4 @@
-name: Tests (x86)
+name: Tests All (Windows-MinGW, x86)
 
 on:
   push:

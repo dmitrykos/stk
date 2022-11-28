@@ -1,4 +1,4 @@
-name: Tests (Generic)
+name: Tests Generic (Linux, x86)
 
 on:
   push:
