@@ -22,7 +22,16 @@ include(${ROOT_DIR}/deps/target/PostBuild.cmake)
 add_dependencies(${TARGET_BINARY} ${TARGET_DEPS})
 target_link_libraries(${TARGET_BINARY} ${TARGET_LIBS})
 
-# Add into tests
-add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
+# Tests
+if (BUILD_TESTS)
+    # Add into tests
+    add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
+
+    # Generate test coverage report
+    if (GCC AND NOT CMAKE_CROSSCOMPILING)
+        target_compile_options(${TARGET_BINARY} PUBLIC "-fprofile-arcs" "-ftest-coverage")
+        target_link_libraries(${TARGET_BINARY} gcov)
+    endif()
+endif()
 
 install(TARGETS ${TARGET_BINARY} DESTINATION ${LIBRARY_OUTPUT_PATH})

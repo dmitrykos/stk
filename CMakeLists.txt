@@ -24,13 +24,20 @@ if (BUILD_TESTS)
     include(CTest)
 endif()
 
-# Detect compiler
+# Compiler related
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     set(CLANGC TRUE)
     set(GCC TRUE)
+    set(CMAKE_COMPILER_IS_GNUCC TRUE)
+    set(CMAKE_COMPILER_IS_GNUCXX TRUE)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(GCC TRUE)
+    set(CMAKE_COMPILER_IS_GNUCC TRUE)
+    set(CMAKE_COMPILER_IS_GNUCXX TRUE)
 endif()
+message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
+message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 
 # Output binaries path
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)

@@ -29,4 +29,12 @@ set(STK_LIB_SRC ${STK_LIB_SRC} ${STK_LIB_SRC_ARM_CORTEX_M} ${STK_LIB_SRC_WIN32})
 # Target
 add_library(${TARGET_NAME} STATIC ${STK_LIB_SRC})
 
+# Tests
+if (BUILD_TESTS)
+    # Generate test coverage report
+    if (GCC AND NOT CMAKE_CROSSCOMPILING)
+        target_compile_options(${TARGET_NAME} PUBLIC "-fprofile-arcs" "-ftest-coverage")
+    endif()
+endif()
+
 install(TARGETS ${TARGET_NAME} DESTINATION ${LIBRARY_OUTPUT_PATH})
