@@ -44,6 +44,7 @@ public:
         m_first_task_Start    = NULL;
         m_stack_InitStack     = NULL;
         m_user_task_InitStack = NULL;
+        m_fail_InitStack      = 0;
         m_resolution          = 0;
         m_access_mode         = stk::ACCESS_USER;
         m_context_switch_nr   = 0;
@@ -59,6 +60,9 @@ public:
     }
     bool InitStack(stk::Stack *stack, stk::ITask *user_task)
     {
+        if (m_fail_InitStack)
+            return false;
+
         m_stack_InitStack     = stack;
         m_user_task_InitStack = user_task;
 
@@ -82,6 +86,7 @@ public:
     stk::IKernelTask *m_first_task_Start;
     stk::Stack       *m_stack_InitStack;
     stk::ITask       *m_user_task_InitStack;
+    bool              m_fail_InitStack;
     int32_t           m_resolution;
     bool              m_started;
     stk::EAccessMode  m_access_mode;

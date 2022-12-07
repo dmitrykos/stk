@@ -12,16 +12,22 @@ project(global)
 cmake_minimum_required(VERSION 3.14)
 
 # Vendor specific targeting
-option(VENDOR_STM32 "Target STM32 devices" OFF)
+option(VENDOR_STM32   "Target STM32 devices" OFF)
 
 # Add static lib option
-option(BUILD_LIB      "build Library"  OFF)
-#option(BUILD_EXAMPLES "build Examples" OFF)
-option(BUILD_TESTS    "build Tests"    OFF)
+option(BUILD_LIB      "build Library"        OFF)
+#option(BUILD_EXAMPLES "build Examples"       OFF)
+option(BUILD_TESTS    "build Tests"          OFF)
 
 # Include CTest for running tests
 if (BUILD_TESTS)
     include(CTest)
+
+	# Coverage report
+    option(ENABLE_COVERAGE "enable Coverage report" OFF)
+    if (ENABLE_COVERAGE)
+        include(build/cmake/Coverage.cmake)
+    endif()
 endif()
 
 # Compiler related
@@ -38,6 +44,9 @@ endif()
 message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+if (GCC)
+	add_compile_options("-std=c++11")
+endif()
 
 # Output binaries path
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)

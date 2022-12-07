@@ -1,3 +1,12 @@
+# 
+#  SuperTinyKernel: Minimalistic thread scheduling kernel for Embedded systems.
+# 
+#  Source: http://github.com/dmitrykos/stk
+# 
+#  Copyright (c) 2022 Dmitry Kostjucenko <dmitry.kostjucenko@gmail.com>
+#  License: MIT License, see LICENSE for a full text.
+# 
+
 # Deps
 list(APPEND TARGET_DEPS stk)
 list(APPEND TARGET_LIBS stk)
@@ -27,10 +36,10 @@ if (BUILD_TESTS)
     # Add into tests
     add_test(NAME ${TARGET_BINARY} COMMAND ${TARGET_NAME})
 
-    # Generate test coverage report
-    if (GCC AND NOT CMAKE_CROSSCOMPILING)
-        target_compile_options(${TARGET_BINARY} PUBLIC "-fprofile-arcs" "-ftest-coverage")
-        target_link_libraries(${TARGET_BINARY} gcov)
+    # Coverage report
+    if (ENABLE_COVERAGE AND GCC AND NOT CMAKE_CROSSCOMPILING)
+        target_add_coverage_compiler_options(${TARGET_BINARY})
+        target_add_coverage_linker_options(${TARGET_BINARY})
     endif()
 endif()
 

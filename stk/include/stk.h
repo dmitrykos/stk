@@ -102,16 +102,16 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         explicit KernelService() : m_platform(0), m_ticks(0)
         { }
 
-	#ifdef _STK_UNDER_TEST
+    #ifdef _STK_UNDER_TEST
         /*! \brief     Destructor.
             \note      It is used only when STK is under a test, should not be in production.
         */
         ~KernelService()
         {
-        	// allow in multiple tests
-        	SingletonBinder::Unbind(this);
+            // allow in multiple tests
+            SingletonBinder::Unbind(this);
         }
-	#endif
+    #endif
 
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
@@ -151,9 +151,9 @@ public:
     */
     enum EConsts
     {
-    	TASKS_MAX       = _Size,    //!< Maximum number of tasks supported by the instance of the Kernel.
-        PERIODICITY_MAX = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
-		PERIODICITY_DEFAULT = 1000, //!< Default reasonable periodicity (microseconds), 1 millisecond.
+        TASKS_MAX           = _Size,    //!< Maximum number of tasks supported by the instance of the Kernel.
+        PERIODICITY_MAX     = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
+        PERIODICITY_DEFAULT = 1000,     //!< Default reasonable periodicity (microseconds), 1 millisecond.
     };
 
     /*! \brief Default initializer.
@@ -176,7 +176,7 @@ public:
 
     void AddTask(ITask *user_task)
     {
-    	// must be initialized first
+        // must be initialized first
         STK_ASSERT(IsInitialized());
 
         KernelTask *task = AllocateNewTask(user_task);
@@ -193,8 +193,6 @@ public:
 
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
-        if (m_task_now == NULL)
-            return;
 
         m_service.Initialize(m_platform);
 
@@ -215,13 +213,9 @@ protected:
             {
                 // avoid task collision
                 STK_ASSERT(task->m_user != user_task);
-                if (task->m_user == user_task)
-                    return NULL;
 
                 // avoid stack collision
                 STK_ASSERT(task->m_user->GetStack() != user_task->GetStack());
-                if (task->m_user->GetStack() == user_task->GetStack())
-                    return NULL;
             }
             else
             if (kernel_task == NULL)
@@ -234,14 +228,12 @@ protected:
         if (kernel_task == NULL)
         {
             STK_ASSERT(false);
-            return NULL;
         }
 
         // init stack of the user task
-        if (!m_platform->InitStack(&kernel_task->m_stack, user_task))
+        if (!m_platform->InitStack(kernel_task->GetUserStack(), user_task))
         {
             STK_ASSERT(false);
-            return NULL;
         }
 
         // make kernel task busy with user task
@@ -272,8 +264,8 @@ protected:
 
         if (next != now)
         {
-            (*idle) = &now->m_stack;
-            (*active) = &next->m_stack;
+            (*idle) = now->GetUserStack();
+            (*active) = next->GetUserStack();
 
             m_task_now = next;
 
@@ -285,11 +277,11 @@ protected:
 
     bool IsInitialized() const
     {
-    	return (m_platform != NULL) && (m_switch_strategy != NULL);
+        return (m_platform != NULL) && (m_switch_strategy != NULL);
     }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
-	STK_STATIC_ASSERT(TASKS_MAX > 0);
+    STK_STATIC_ASSERT(TASKS_MAX > 0);
 
     /*! \class TaskStorageType
         \brief KernelTask array type used as a storage for the KernelTask instances.

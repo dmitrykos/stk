@@ -1,0 +1,16 @@
+# 
+#  SuperTinyKernel: Minimalistic thread scheduling kernel for Embedded systems.
+# 
+#  Source: http://github.com/dmitrykos/stk
+# 
+#  Copyright (c) 2022 Dmitry Kostjucenko <dmitry.kostjucenko@gmail.com>
+#  License: MIT License, see LICENSE for a full text.
+# 
+
+function(target_add_coverage_compiler_options _TARGET)
+    target_compile_options(${_TARGET} PRIVATE "-O0" "-g" "--coverage" "-fprofile-arcs" "-ftest-coverage")
+endfunction()
+
+function(target_add_coverage_linker_options _TARGET)
+    target_link_libraries(${TARGET_BINARY} gcov)
+endfunction()

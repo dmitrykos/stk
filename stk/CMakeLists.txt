@@ -31,9 +31,9 @@ add_library(${TARGET_NAME} STATIC ${STK_LIB_SRC})
 
 # Tests
 if (BUILD_TESTS)
-    # Generate test coverage report
-    if (GCC AND NOT CMAKE_CROSSCOMPILING)
-        target_compile_options(${TARGET_NAME} PUBLIC "-fprofile-arcs" "-ftest-coverage")
+    # Coverage report
+    if (ENABLE_COVERAGE AND GCC AND NOT CMAKE_CROSSCOMPILING)
+        target_add_coverage_compiler_options(${TARGET_NAME})
     endif()
 endif()
 

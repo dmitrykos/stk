@@ -54,6 +54,7 @@ template <uint32_t _StackSize, EAccessMode _AccessMode>
 class Task : public ITask
 {
 public:
+    enum { STACK_SIZE = _StackSize };
     size_t *GetStack() { return m_stack; }
     uint32_t GetStackSize() const { return _StackSize; }
     EAccessMode GetAccessMode() const { return _AccessMode; }

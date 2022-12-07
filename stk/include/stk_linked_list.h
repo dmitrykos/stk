@@ -104,6 +104,7 @@ public:
 
     void Unlink(EntryType *entry)
     {
+        STK_ASSERT(entry != NULL);
         STK_ASSERT(entry->IsLinked());
         STK_ASSERT(entry->GetHead() == this);
 
@@ -132,6 +133,7 @@ public:
 private:
     void Link(EntryType *entry, EntryType *next = NULL, EntryType *prev = NULL)
     {
+        STK_ASSERT(entry != NULL);
         STK_ASSERT(!entry->IsLinked());
 
         if (prev == NULL)

@@ -102,6 +102,7 @@ TEST(TestKernel, AddTaskNoInit)
     {
         g_TestContext.ExpectAssert(true);
         kernel.AddTask(&task);
+        CHECK_TEXT(false, "AddTask() did not fail");
     }
     catch (TestAssertPassed &pass)
     {

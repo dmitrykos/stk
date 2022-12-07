@@ -14,6 +14,9 @@ using namespace stk;
 // =+========================= KernelService ================================== //
 // ============================================================================ //
 
+/*! \class KernelServiceMock
+    \brief IKernelService mock.
+*/
 struct KernelServiceMock : public IKernelService
 {
     KernelServiceMock()
@@ -71,6 +74,28 @@ TEST(TestKernelService, DelaySpin)
     mock.DelaySpin(10);
 
     CHECK_EQUAL(10001, (int32_t)mock.m_ticks);
+}
+
+TEST(TestKernelService, InitStackFailure)
+{
+    Kernel<2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+    platform.m_fail_InitStack = true;
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.Initialize(&platform, &switch_strategy);
+        kernel.AddTask(&task);
+        CHECK_TEXT(false, "AddTask() did not fail");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
 
 TEST(TestKernelService, GetTicksResolution)
