@@ -1,0 +1,38 @@
+name: Code Coverage Generic
+
+on:
+  push:
+  pull_request:
+  pull_request_target:
+  
+env:
+  PASS_THRESHOLD: 98
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:   
+    - name: Install LCOV
+      run: sudo apt install -y lcov
+
+    - name: Checkout      
+      uses: actions/checkout@v3
+    
+    - name: Generate Code Coverage
+      run: ./coverage.sh -s . -b ${{github.workspace}}/cov-build -o ${{github.workspace}}/cov-report -f ${{github.workspace}}/cov-build/coverage.info
+      
+    - name: Pass threshold ${{env.PASS_THRESHOLD}}%
+      uses: VeryGoodOpenSource/very_good_coverage@v2
+      with:
+        path: ${{github.workspace}}/cov-build/coverage.info
+        min_coverage: ${{env.PASS_THRESHOLD}}
+ 
+    - name: Report Code Coverage
+      uses: zgosalvez/github-actions-report-lcov@v2
+      with:
+        coverage-files: ${{github.workspace}}/cov-build/coverage.info
+        minimum-coverage: ${{env.PASS_THRESHOLD}}
+        artifact-name: code-coverage-report
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        working-directory: ./
