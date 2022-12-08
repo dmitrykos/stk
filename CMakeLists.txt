@@ -47,6 +47,9 @@ message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 if (GCC)
 	add_compile_options("-std=c++11")
 endif()
+if (MSVC)
+	link_libraries("Winmm") # for CppUTest
+endif()
 
 # Output binaries path
 set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR}/lib)
