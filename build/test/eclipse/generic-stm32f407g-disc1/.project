@@ -101,6 +101,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernelservice.cpp</locationURI>
 		</link>
 		<link>
+			<name>test/generic/stktest_misc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_misc.cpp</locationURI>
+		</link>
+		<link>
 			<name>test/generic/stktest_switchstrategyroundrobin.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyroundrobin.cpp</locationURI>

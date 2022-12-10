@@ -114,10 +114,10 @@ public:
         if (m_last == entry)
             m_last = entry->GetPrev();
 
-        UpdateLoop();
-
-        entry->Remove();
+        entry->Unlink();
         --m_count;
+
+        UpdateLoop();
     }
 
     void RelinkTo(DListHead &to)

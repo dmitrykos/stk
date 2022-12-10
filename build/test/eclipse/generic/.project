@@ -61,11 +61,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/test/CMakeLists.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/CMakeLists.txt</locationURI>
-		</link>
-		<link>
 			<name>deps/test/generic</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -156,11 +151,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/stk/src/stk.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/CMakeLists.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/generic/CMakeLists.txt</locationURI>
-		</link>
-		<link>
 			<name>deps/test/generic/stktest_kernel.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernel.cpp</locationURI>
@@ -169,6 +159,11 @@
 			<name>deps/test/generic/stktest_kernelservice.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernelservice.cpp</locationURI>
+		</link>
+		<link>
+			<name>deps/test/generic/stktest_misc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_misc.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/test/generic/stktest_switchstrategyroundrobin.cpp</name>
