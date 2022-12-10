@@ -37,7 +37,7 @@ TEST(TestKernel, InitFailPlatformNull)
     {
         g_TestContext.ExpectAssert(true);
         kernel.Initialize(NULL, &switch_strategy);
-        CHECK_TEXT(false, "Kernel::Initialize() did not fail with platform = NULL");
+        CHECK_TEXT(false, "Kernel::Initialize() did not fail with NULL platform");
     }
     catch (TestAssertPassed &pass)
     {
@@ -55,7 +55,7 @@ TEST(TestKernel, InitFailSwitchStrategyNull)
     {
         g_TestContext.ExpectAssert(true);
         kernel.Initialize(&platform, NULL);
-        CHECK_TEXT(false, "Kernel::Initialize() did not fail with switch_strategy = NULL");
+        CHECK_TEXT(false, "Kernel::Initialize() did not fail with NULL strategy");
     }
     catch (TestAssertPassed &pass)
     {

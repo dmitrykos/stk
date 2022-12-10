@@ -27,7 +27,6 @@ TEST(UserTask, GetStackSize)
     CHECK_EQUAL(TaskMock<ACCESS_USER>::STACK_SIZE, task.GetStackSize());
 }
 
-
 TEST_GROUP(DList)
 {
     void setup() {}
