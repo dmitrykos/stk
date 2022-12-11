@@ -376,6 +376,9 @@ bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
 void PlatformArmCortexM::SwitchContext()
 {
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
+
+    // flush instructions pipeline before PendSV is triggered
+    __ISB();
 }
 
 int32_t PlatformArmCortexM::GetTickResolution() const
