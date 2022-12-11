@@ -23,6 +23,9 @@
 
 #include "stktest_context.h"
 
+namespace stk {
+namespace test {
+
 /*! \class TestAssertPassed
     \brief Throwable class for catching assertions from _STK_ASSERT_IMPL().
 */
@@ -113,5 +116,8 @@ private:
     void RunInner()
     { }
 };
+
+} // namespace test
+} // namespace stk
 
 #endif /* STKTEST_H_ */

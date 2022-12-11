@@ -15,6 +15,9 @@
 #include <stdint.h>
 #include <exception>
 
+namespace stk {
+namespace test {
+
 /*! \class TestContext
     \brief Common context for executed tests.
 */
@@ -91,5 +94,8 @@ extern TestContext g_TestContext;
         printf("_STK_ASSERT failed: file[%s] line[%d] message: %s", file, (int)line, message);\
         abort();\
     }
+
+} // namespace test
+} // namespace stk
 
 #endif /* STKTEST_CONTEX_H_ */

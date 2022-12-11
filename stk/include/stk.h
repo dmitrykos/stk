@@ -163,7 +163,10 @@ public:
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
     {
+        // required argument
         STK_ASSERT(platform != NULL);
+
+        // required argument
         STK_ASSERT(switch_strategy != NULL);
 
         // allow initialization only once
@@ -225,10 +228,7 @@ protected:
         }
 
         // if NULL - exceeded max supported kernel task count
-        if (kernel_task == NULL)
-        {
-            STK_ASSERT(false);
-        }
+        STK_ASSERT(kernel_task != NULL);
 
         // init stack of the user task
         if (!m_platform->InitStack(kernel_task->GetUserStack(), user_task))

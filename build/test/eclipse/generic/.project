@@ -76,6 +76,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.h</locationURI>
 		</link>
 		<link>
+			<name>deps/test/stktest_context.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
+		</link>
+		<link>
 			<name>deps/cpputest/include/CppUTest</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

@@ -10,8 +10,7 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-// note: Generic tests do not use platform-dependent implementation
-
 #define _STK_ASSERT
+#define _STK_ARCH_X86_WIN32
 
 #endif /* STK_CONFIG_H_ */

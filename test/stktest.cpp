@@ -10,8 +10,11 @@
 #include "stktest.h"
 #include <CppUTest/CommandLineTestRunner.h>
 
+using namespace stk;
+using namespace stk::test;
+
 // Define TestContext instance.
-TestContext g_TestContext;
+TestContext test::g_TestContext;
 
 /*! \fn    _STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.

@@ -13,6 +13,9 @@
 
 #include "stktest_context.h"
 
+using namespace stk;
+using namespace stk::test;
+
 STK_TEST_DECL_ASSERT;
 
 #define _STK_TEST_TASKS_MAX 3
@@ -21,14 +24,14 @@ STK_TEST_DECL_ASSERT;
 static volatile uint8_t g_TaskSwitch = 0;
 static volatile uint8_t g_Cycles[_STK_TEST_TASKS_MAX] = {};
 
-template <stk::EAccessMode _AccessMode>
-class TestTask : public stk::Task<64, _AccessMode>
+template <EAccessMode _AccessMode>
+class TestTask : public Task<64, _AccessMode>
 {
     uint8_t m_task_id;
 
 public:
     TestTask(uint8_t task_id) : m_task_id(task_id) {}
-    stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&TestTask::RunInner); }
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&TestTask::RunInner); }
     void *GetFuncUserData() { return this; }
 
 private:
@@ -80,12 +83,11 @@ private:
     }
 };
 
-//! \note Counts number of workloads processed by each task.
-int main(int argc, char **argv)
+/*! \fn    main
+    \brief Counts number of workloads processed by each task.
+*/
+int main()
 {
-    (void)argc;
-    (void)argv;
-
     using namespace stk;
 
     static Kernel<3> kernel;
