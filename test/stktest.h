@@ -24,6 +24,10 @@
 #include "stktest_context.h"
 
 namespace stk {
+
+/*! \namespace stk::test
+    \brief     Namespace for the test inventory.
+ */
 namespace test {
 
 /*! \class TestAssertPassed
@@ -37,7 +41,7 @@ struct TestAssertPassed : public std::exception
 /*! \class PlatformTestMock
     \brief IPlatform mock.
 */
-class PlatformTestMock : public stk::IPlatform
+class PlatformTestMock : public IPlatform
 {
 public:
     explicit PlatformTestMock()
@@ -49,19 +53,19 @@ public:
         m_user_task_InitStack = NULL;
         m_fail_InitStack      = 0;
         m_resolution          = 0;
-        m_access_mode         = stk::ACCESS_USER;
+        m_access_mode         = ACCESS_USER;
         m_context_switch_nr   = 0;
     }
     virtual ~PlatformTestMock()
     { }
-    void Start(IEventHandler *event_handler, uint32_t resolution_us, stk::IKernelTask *first_task)
+    void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
     {
         m_event_handler    = event_handler;
         m_started          = true;
         m_resolution       = resolution_us;
         m_first_task_Start = first_task;
     }
-    bool InitStack(stk::Stack *stack, stk::ITask *user_task)
+    bool InitStack(Stack *stack, ITask *user_task)
     {
         if (m_fail_InitStack)
             return false;
@@ -80,31 +84,63 @@ public:
     {
         return m_resolution;
     }
-    void SetAccessMode(stk::EAccessMode mode)
+    void SetAccessMode(EAccessMode mode)
     {
         m_access_mode = mode;
     }
 
-    IEventHandler    *m_event_handler;
-    stk::IKernelTask *m_first_task_Start;
-    stk::Stack       *m_stack_InitStack;
-    stk::ITask       *m_user_task_InitStack;
-    bool              m_fail_InitStack;
-    int32_t           m_resolution;
-    bool              m_started;
-    stk::EAccessMode  m_access_mode;
-    uint32_t          m_context_switch_nr;
+    IEventHandler *m_event_handler;
+    IKernelTask   *m_first_task_Start;
+    Stack         *m_stack_InitStack;
+    ITask         *m_user_task_InitStack;
+    bool           m_fail_InitStack;
+    int32_t        m_resolution;
+    bool           m_started;
+    EAccessMode    m_access_mode;
+    uint32_t       m_context_switch_nr;
+};
+
+/*! \class KernelServiceMock
+    \brief IKernelService mock.
+*/
+struct KernelServiceMock : public IKernelService
+{
+    KernelServiceMock()
+    {
+        m_inc_ticks  = false;
+        m_ticks      = 0;
+        m_resolution = 0;
+    }
+    virtual ~KernelServiceMock()
+    { }
+
+    int64_t GetTicks() const
+    {
+        if (m_inc_ticks)
+            const_cast<int64_t &>(m_ticks) = m_ticks + 1;
+
+        return m_ticks;
+    }
+
+    int32_t GetTicksResolution() const
+    {
+        return m_resolution;
+    }
+
+    bool    m_inc_ticks;
+    int64_t m_ticks;
+    int32_t m_resolution;
 };
 
 /*! \class TaskMock
-    \brief User task mock.
+    \brief Task mock.
     \note  QEMU allocates small stack for the function, therefore stack size is limited to 16 for tests to pass (256 was causing a hard fault).
 */
-template <stk::EAccessMode _AccessMode>
-class TaskMock : public stk::Task<16, _AccessMode>
+template <EAccessMode _AccessMode>
+class TaskMock : public Task<16, _AccessMode>
 {
 public:
-    stk::RunFuncType GetFunc() { return &Run; }
+    RunFuncType GetFunc() { return &Run; }
     void *GetFuncUserData() { return this; }
 
 private:
@@ -113,8 +149,7 @@ private:
         ((TaskMock *)user_data)->RunInner();
     }
 
-    void RunInner()
-    { }
+    void RunInner() {}
 };
 
 } // namespace test

@@ -102,7 +102,7 @@
     #define __stk_full_memfence()
 #endif
 
-/*! \def   ____stk_relax_cpu
+/*! \def   __stk_relax_cpu
     \brief Emits CPU relaxing instruction for usage inside a hot-spinning loop.
 */
 #ifdef __GNUC__
@@ -115,7 +115,7 @@
     #define __stk_relax_cpu()
 #endif
 
-/*! \def   stk_assert
+/*! \def   STK_ASSERT
     \brief A shortcut to the assert() function. Can be overridden by the alternative _STK_ASSERT_FUNC if _STK_ASSERT_REDIRECT is defined.
 */
 #ifdef _STK_ASSERT_REDIRECT
@@ -141,10 +141,10 @@
  */
 namespace stk {
 
-/*! \namespace platform
-    \brief     Namespace for platform-specific inventory.
+/*! \namespace stk::util
+    \brief     Namespace for the helper inventory.
  */
-namespace platform { }
+namespace util {}
 
 /*! \fn    forced_cast
     \brief Force-cast value of one type to another. Overcomes compiler error or warning when trying

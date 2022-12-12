@@ -28,7 +28,7 @@ namespace stk {
 #define g_KernelService stk::Singleton<stk::IKernelService *>::Get()
 
 /*! \class Kernel
-    \brief Concrete implementation of the thread scheduling kernel.
+    \brief Concrete implementation of IKernel (thread scheduling kernel).
     \note  Kernel expects at least 1 task, e.g. Kernel<N> where N != 0.
 
     Usage example:
@@ -283,8 +283,8 @@ protected:
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
     STK_STATIC_ASSERT(TASKS_MAX > 0);
 
-    /*! \class TaskStorageType
-        \brief KernelTask array type used as a storage for the KernelTask instances.
+    /*! \typedef TaskStorageType
+        \brief   KernelTask array type used as a storage for the KernelTask instances.
     */
     typedef KernelTask TaskStorageType[TASKS_MAX];
 

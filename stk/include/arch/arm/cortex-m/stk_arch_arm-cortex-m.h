@@ -15,7 +15,7 @@
 namespace stk {
 
 /*! \class PlatformArmCortexM
-    \brief Concrete implementation of the platform driver for the Arm Cortex-M0, M3, M4, M7 processors.
+    \brief Concrete implementation of IPlatform driver for the Arm Cortex-M0, M3, M4, M7 processors.
 */
 class PlatformArmCortexM : public IPlatform
 {

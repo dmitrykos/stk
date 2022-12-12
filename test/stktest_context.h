@@ -19,7 +19,7 @@ namespace stk {
 namespace test {
 
 /*! \class TestContext
-    \brief Common context for executed tests.
+    \brief Common context for a test suite.
 */
 class TestContext
 {
@@ -72,7 +72,7 @@ private:
 };
 
 /*! \var   g_TestContext
-    \brief Global instance of the test context.
+    \brief Global instance of the TestContext.
 */
 extern TestContext g_TestContext;
 

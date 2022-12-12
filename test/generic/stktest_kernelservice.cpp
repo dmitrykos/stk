@@ -16,38 +16,6 @@ using namespace stk::test;
 // =+========================= KernelService ================================== //
 // ============================================================================ //
 
-/*! \class KernelServiceMock
-    \brief IKernelService mock.
-*/
-struct KernelServiceMock : public IKernelService
-{
-    KernelServiceMock()
-    {
-        m_inc_ticks  = false;
-        m_ticks      = 0;
-        m_resolution = 0;
-    }
-    virtual ~KernelServiceMock()
-    { }
-
-    int64_t GetTicks() const
-    {
-        if (m_inc_ticks)
-            const_cast<int64_t &>(m_ticks) = m_ticks + 1;
-
-        return m_ticks;
-    }
-
-    int32_t GetTicksResolution() const
-    {
-        return m_resolution;
-    }
-
-    bool    m_inc_ticks;
-    int64_t m_ticks;
-    int32_t m_resolution;
-};
-
 TEST_GROUP(TestKernelService)
 {
     void setup() {}

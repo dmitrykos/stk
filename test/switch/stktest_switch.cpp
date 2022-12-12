@@ -18,12 +18,20 @@ using namespace stk::test;
 
 STK_TEST_DECL_ASSERT;
 
-#define _STK_TEST_TASKS_MAX 3
-#define _STK_TEST_CYCLES_MAX 2
+#define _STK_SWITCH_TEST_TASKS_MAX 3
+#define _STK_SWITCH_TEST_CYCLES_MAX 2
+
+namespace stk {
+namespace test {
+namespace switch_ {
 
 static volatile uint8_t g_TaskSwitch = 0;
-static volatile uint8_t g_Cycles[_STK_TEST_TASKS_MAX] = {};
+static volatile uint8_t g_Cycles[_STK_SWITCH_TEST_TASKS_MAX] = {};
 
+/*! \class TestTask
+    \brief Switch test task.
+    \note  Counts __STK_SWITCH_TEST_CYCLES_MAX cycles with _STK_SWITCH_TEST_TASKS_MAX. Succeeds if counter incremented correctly.
+*/
 template <EAccessMode _AccessMode>
 class TestTask : public Task<64, _AccessMode>
 {
@@ -53,20 +61,20 @@ private:
 
             // count total workload of all tasks
             uint32_t total = 0;
-            for (int32_t i = 0; i < _STK_TEST_TASKS_MAX; ++i)
+            for (int32_t i = 0; i < _STK_SWITCH_TEST_TASKS_MAX; ++i)
             {
                 total += g_Cycles[i];
             }
 
             // check if it is a time to evaluate workload counters
-            if (total >= (_STK_TEST_CYCLES_MAX * _STK_TEST_TASKS_MAX))
+            if (total >= (_STK_SWITCH_TEST_CYCLES_MAX * _STK_SWITCH_TEST_TASKS_MAX))
             {
-                STK_TEST_CHECK_EQUAL((_STK_TEST_CYCLES_MAX * _STK_TEST_TASKS_MAX), total);
+                STK_TEST_CHECK_EQUAL((_STK_SWITCH_TEST_CYCLES_MAX * _STK_SWITCH_TEST_TASKS_MAX), total);
 
                 // check if workload is spread equally between all tasks
-                for (int32_t i = 0; i < _STK_TEST_TASKS_MAX; ++i)
+                for (int32_t i = 0; i < _STK_SWITCH_TEST_TASKS_MAX; ++i)
                 {
-                    STK_TEST_CHECK_EQUAL(_STK_TEST_CYCLES_MAX, g_Cycles[i]);
+                    STK_TEST_CHECK_EQUAL(_STK_SWITCH_TEST_CYCLES_MAX, g_Cycles[i]);
                 }
 
                 // success, exit process
@@ -83,12 +91,21 @@ private:
     }
 };
 
+} // namespace switch_
+} // namespace test
+} // namespace stk
+
 /*! \fn    main
     \brief Counts number of workloads processed by each task.
 */
-int main()
+int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
+
     using namespace stk;
+    using namespace stk::test;
+    using namespace stk::test::switch_;
 
     static Kernel<3> kernel;
     static PlatformDefault platform;

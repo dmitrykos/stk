@@ -15,7 +15,7 @@
 namespace stk {
 
 /*! \class PlatformX86Win32
-    \brief Concrete implementation of the platform driver for the x86 Win32 platform.
+    \brief Concrete implementation of IPlatform driver for the x86 Win32 platform.
     \note  Implemented for simulation purpose on Windows platform.
 */
 class PlatformX86Win32 : public IPlatform

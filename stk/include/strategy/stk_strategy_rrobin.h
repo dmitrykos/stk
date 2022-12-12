@@ -15,7 +15,7 @@
 namespace stk {
 
 /*! \class SwitchStrategyRoundRobin
-    \brief Task switching strategy concrete implementation - Round-Robin.
+    \brief Tasks switching strategy concrete implementation - Round-Robin.
 
     Round-Robin: all tasks are given an equal amount of processing time.
 */
