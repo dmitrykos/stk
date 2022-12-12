@@ -16,13 +16,13 @@ using namespace stk::test;
 // =+========================= KernelService ================================== //
 // ============================================================================ //
 
-TEST_GROUP(TestKernelService)
+TEST_GROUP(KernelService)
 {
     void setup() {}
     void teardown() {}
 };
 
-TEST(TestKernelService, GetDeadlineTicks)
+TEST(KernelService, GetDeadlineTicks)
 {
     KernelServiceMock mock;
     mock.m_ticks = 1;
@@ -34,7 +34,7 @@ TEST(TestKernelService, GetDeadlineTicks)
     CHECK_EQUAL(101, (int32_t)mock.GetDeadlineTicks(10));
 }
 
-TEST(TestKernelService, DelaySpin)
+TEST(KernelService, DelaySpin)
 {
     KernelServiceMock mock;
     mock.m_inc_ticks  = true;
@@ -46,7 +46,7 @@ TEST(TestKernelService, DelaySpin)
     CHECK_EQUAL(10001, (int32_t)mock.m_ticks);
 }
 
-TEST(TestKernelService, InitStackFailure)
+TEST(KernelService, InitStackFailure)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -68,7 +68,7 @@ TEST(TestKernelService, InitStackFailure)
     }
 }
 
-TEST(TestKernelService, GetTicksResolution)
+TEST(KernelService, GetTicksResolution)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -83,7 +83,7 @@ TEST(TestKernelService, GetTicksResolution)
     CHECK_EQUAL(periodicity, g_KernelService->GetTicksResolution());
 }
 
-TEST(TestKernelService, GetTicks)
+TEST(KernelService, GetTicks)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;

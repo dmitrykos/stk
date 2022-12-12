@@ -16,13 +16,13 @@ using namespace stk::test;
 // ============================ SwitchStrategyRoundRobin ====================== //
 // ============================================================================ //
 
-TEST_GROUP(TestSwitchStrategyRoundRobin)
+TEST_GROUP(SwitchStrategyRoundRobin)
 {
     void setup() {}
     void teardown() {}
 };
 
-TEST(TestSwitchStrategyRoundRobin, EndlessNext)
+TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;

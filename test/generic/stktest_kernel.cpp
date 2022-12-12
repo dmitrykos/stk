@@ -16,13 +16,13 @@ using namespace stk::test;
 // ============================== Kernel ====================================== //
 // ============================================================================ //
 
-TEST_GROUP(TestKernel)
+TEST_GROUP(Kernel)
 {
     void setup() {}
     void teardown() {}
 };
 
-TEST(TestKernel, MaxTasks)
+TEST(Kernel, MaxTasks)
 {
     const int32_t TASKS = 10;
     Kernel<TASKS> kernel;
@@ -30,7 +30,7 @@ TEST(TestKernel, MaxTasks)
     CHECK_EQUAL(TASKS, Kernel<TASKS>::TASKS_MAX);
 }
 
-TEST(TestKernel, InitFailPlatformNull)
+TEST(Kernel, InitFailPlatformNull)
 {
     Kernel<10> kernel;
     SwitchStrategyRoundRobin switch_strategy;
@@ -48,7 +48,7 @@ TEST(TestKernel, InitFailPlatformNull)
     }
 }
 
-TEST(TestKernel, InitFailSwitchStrategyNull)
+TEST(Kernel, InitFailSwitchStrategyNull)
 {
     Kernel<10> kernel;
     PlatformTestMock platform;
@@ -66,7 +66,7 @@ TEST(TestKernel, InitFailSwitchStrategyNull)
     }
 }
 
-TEST(TestKernel, Init)
+TEST(Kernel, Init)
 {
     Kernel<10> kernel;
     PlatformTestMock platform;
@@ -75,7 +75,7 @@ TEST(TestKernel, Init)
     kernel.Initialize(&platform, &switch_strategy);
 }
 
-TEST(TestKernel, InitDoubleFail)
+TEST(Kernel, InitDoubleFail)
 {
     Kernel<10> kernel;
     PlatformTestMock platform;
@@ -95,7 +95,7 @@ TEST(TestKernel, InitDoubleFail)
     }
 }
 
-TEST(TestKernel, AddTaskNoInit)
+TEST(Kernel, AddTaskNoInit)
 {
     Kernel<10> kernel;
     TaskMock<ACCESS_USER> task;
@@ -113,7 +113,7 @@ TEST(TestKernel, AddTaskNoInit)
     }
 }
 
-TEST(TestKernel, AddTask)
+TEST(Kernel, AddTask)
 {
     Kernel<10> kernel;
     PlatformTestMock platform;
@@ -133,7 +133,7 @@ TEST(TestKernel, AddTask)
     CHECK_TRUE_TEXT(ktask->GetUserTask() == &task, "Expecting just added user task");
 }
 
-TEST(TestKernel, AddTaskInitStack)
+TEST(Kernel, AddTaskInitStack)
 {
     Kernel<10> kernel;
     PlatformTestMock platform;
@@ -147,7 +147,7 @@ TEST(TestKernel, AddTaskInitStack)
     CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_InitStack->SP);
 }
 
-TEST(TestKernel, AddTaskMaxOut)
+TEST(Kernel, AddTaskMaxOut)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -173,7 +173,7 @@ TEST(TestKernel, AddTaskMaxOut)
     }
 }
 
-TEST(TestKernel, AddSameTask)
+TEST(Kernel, AddSameTask)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -196,7 +196,7 @@ TEST(TestKernel, AddSameTask)
     }
 }
 
-TEST(TestKernel, StartInvalidPeriodicity)
+TEST(Kernel, StartInvalidPeriodicity)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -231,7 +231,7 @@ TEST(TestKernel, StartInvalidPeriodicity)
     }
 }
 
-TEST(TestKernel, StartNotIntialized)
+TEST(Kernel, StartNotIntialized)
 {
     Kernel<2> kernel;
 
@@ -248,7 +248,7 @@ TEST(TestKernel, StartNotIntialized)
     }
 }
 
-TEST(TestKernel, StartNoTasks)
+TEST(Kernel, StartNoTasks)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -269,7 +269,7 @@ TEST(TestKernel, StartNoTasks)
     }
 }
 
-TEST(TestKernel, Start)
+TEST(Kernel, Start)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -289,7 +289,7 @@ TEST(TestKernel, Start)
     CHECK_EQUAL(periodicity, platform.GetTickResolution());
 }
 
-TEST(TestKernel, StartBeginISR)
+TEST(Kernel, StartBeginISR)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -307,7 +307,7 @@ TEST(TestKernel, StartBeginISR)
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
 }
 
-TEST(TestKernel, ContextSwitchOnSysTickISR)
+TEST(Kernel, ContextSwitchOnSysTickISR)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -353,7 +353,7 @@ TEST(TestKernel, ContextSwitchOnSysTickISR)
     }
 }
 
-TEST(TestKernel, ContextSwitchAccessModeChange)
+TEST(Kernel, ContextSwitchAccessModeChange)
 {
     Kernel<2> kernel;
     PlatformTestMock platform;
@@ -380,7 +380,7 @@ TEST(TestKernel, ContextSwitchAccessModeChange)
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
 }
 
-TEST(TestKernel, AbiCompatibility)
+TEST(Kernel, AbiCompatibility)
 {
     class TaskMockAbiCheck : public Task<16, ACCESS_USER>
     {
