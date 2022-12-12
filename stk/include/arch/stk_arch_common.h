@@ -25,8 +25,8 @@ class PlatformContext
 {
 public:
     /*! \brief     Initialize context.
-        \param[in] handler: Stack descriptor.
-        \param[in] first_task: First kernel task which will be called upon start.
+        \param[in] handler: Event handler.
+        \param[in] first_stack: First task's stack.
         \param[in] tick_resolution: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
     */
     virtual void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)

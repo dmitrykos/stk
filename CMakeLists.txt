@@ -18,6 +18,7 @@ option(VENDOR_STM32   "Target STM32 devices" OFF)
 option(BUILD_LIB      "build Library"        OFF)
 #option(BUILD_EXAMPLES "build Examples"       OFF)
 option(BUILD_TESTS    "build Tests"          OFF)
+option(BUILD_DOC      "build Documentation"  OFF)
 
 # Include CTest for running tests
 if (BUILD_TESTS)
@@ -69,6 +70,9 @@ endif()
 if (BUILD_TESTS)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/test)
 endif()
+if (BUILD_DOC)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/build/doc)
+endif()
 
 # Create stk_config.h (note: must be defined after inclusion of the projects to catch value of _STK_DEVICE_INC)
 if (WIN32)
@@ -80,7 +84,7 @@ elseif (ARM)
 endif()
 set(STK_CONFIG_INC ${CMAKE_CURRENT_BINARY_DIR}/include/stk_config.h)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/stk_config.h.in ${STK_CONFIG_INC})
-message(STATUS "Config file: " ${STK_CONFIG_INC})
+message(STATUS "STK config file: " ${STK_CONFIG_INC})
 
 # Log CPU family
 message(STATUS "Target CPU family: ${TARGET_CPU_FAMILY}")
