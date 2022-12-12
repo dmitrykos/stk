@@ -26,7 +26,7 @@
 namespace stk {
 
 /*! \namespace stk::test
-    \brief     Namespace for the test inventory.
+    \brief     Namespace of the test inventory.
  */
 namespace test {
 

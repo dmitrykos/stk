@@ -23,6 +23,10 @@ STK_TEST_DECL_ASSERT;
 
 namespace stk {
 namespace test {
+
+/*! \namespace stk::test::switch_
+    \brief     Namespace of Switch test.
+ */
 namespace switch_ {
 
 static volatile uint8_t g_TaskSwitch = 0;

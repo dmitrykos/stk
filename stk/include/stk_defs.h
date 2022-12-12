@@ -142,7 +142,7 @@
 namespace stk {
 
 /*! \namespace stk::util
-    \brief     Namespace for the helper inventory.
+    \brief     Namespace of the helper inventory.
  */
 namespace util {}
 
