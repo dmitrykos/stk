@@ -196,6 +196,49 @@ TEST(Kernel, AddSameTask)
     }
 }
 
+TEST(Kernel, RemoveTask)
+{
+    Kernel<2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task1;
+    TaskMock<ACCESS_USER> task2;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL_TEXT(&task2, switch_strategy.GetFirst()->GetUserTask(), "Expecting task2 as first");
+
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL_TEXT(&task2, switch_strategy.GetFirst()->GetUserTask(), "Expecting task2 as first (duplicate task1 removal attempt)");
+
+    kernel.RemoveTask(&task2);
+    CHECK_TRUE_TEXT(switch_strategy.GetFirst() == NULL, "Expecting none tasks");
+}
+
+TEST(Kernel, RemoveTaskNull)
+{
+    Kernel<1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+
+    kernel.Initialize(&platform, &switch_strategy);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.RemoveTask(NULL);
+        CHECK_TEXT(false, "expecting to fail with NULL argument");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 TEST(Kernel, StartInvalidPeriodicity)
 {
     Kernel<2> kernel;

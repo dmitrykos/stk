@@ -41,6 +41,24 @@ enum EDefault
     DEFAULT_RESOLUTION_US_ONE_MSEC = 10000, //!< Default resolution (1 millisecond) of the kernel supplied to Kernel::Start().
 };
 
+/*! \class StackMemoryDef
+    \brief Stack memory type definition.
+    \note  This descriptor provides an encapsulated type only on basis of which you can declare
+           your memory array variable.
+
+    Usage example:
+    \code
+    StackMemory<128>::Type my_memory_array;
+    \endcode
+*/
+template <uint32_t _StackSize> struct StackMemoryDef
+{
+    /*! \typedef Type
+        \brief   Stack memory type.
+    */
+    typedef __stk_aligned(16) size_t Type[_StackSize];
+};
+
 /*! \class Stack
     \brief Stack descriptor.
 */
@@ -102,8 +120,8 @@ protected:
         STK_ASSERT(instance != NULL);
 
         // allow if not bound
-    	if (m_instance == NULL)
-    		return;
+        if (m_instance == NULL)
+            return;
 
         STK_ASSERT(m_instance == instance);
         m_instance = NULL;
@@ -112,6 +130,21 @@ protected:
 
 private:
     static _InstanceType m_instance; //!< referenced single instance
+};
+
+/*! \class IMemoryRegion
+    \brief Interface of the memory region.
+*/
+class IStackMemory
+{
+public:
+    /*! \brief Get pointer to the stack memory.
+    */
+    virtual size_t *GetStack() = 0;
+
+    /*! \brief Get size of the stack memory array (number of size_t elements in the array).
+    */
+    virtual uint32_t GetStackSize() const = 0;
 };
 
 /*! \class ITask
@@ -128,7 +161,7 @@ private:
     kernel.AddTask(&task2);
     \endcode
 */
-class ITask
+class ITask : public IStackMemory
 {
 public:
     /*! \brief     Get user task's main entry function.
@@ -138,14 +171,6 @@ public:
     /*! \brief     Get user data which is supplied to the user task's main entry function.
     */
     virtual void *GetFuncUserData() = 0;
-
-    /*! \brief     Get pointer to the stack memory of the user task.
-    */
-    virtual size_t *GetStack() = 0;
-
-    /*! \brief     Get size of the stack memory array (number of size_t elements in the array, see UserTask).
-    */
-    virtual uint32_t GetStackSize() const = 0;
 
     /*! \brief     Get hardware access mode of the user task.
     */
@@ -181,7 +206,8 @@ public:
 
 /*! \class IPlatform
     \brief Interface of the platform driver.
-    \note  Bridge design pattern. Do not put implementation details in the header of the concrete class to avoid breaking this pattern.
+    \note  Bridge design pattern. Do not put implementation details in the header of the
+           concrete class to avoid breaking this pattern.
 
     Platform driver represents an underlying hardware and implements the following logic:
      - time tick
@@ -211,25 +237,36 @@ public:
             \param[out] active:  Stack of the task which shall go into Active state (to which context will switch).
         */
         virtual void OnSysTick(Stack **idle, Stack **active) = 0;
+
+        /*! \brief      Called from the Thread process when task finished (its Run function exited by return).
+            \param[out] stack: Stack of the exited task.
+        */
+        virtual void OnTaskExit(Stack *stack) = 0;
     };
 
     /*! \brief     Start scheduling.
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
         \param[in] first_task: First kernel task which will be called upon start.
+        \param[in] main_process: Stack of the main process (optional, if provided then tasks can be dynamic).
         \note      This function never returns!
     */
-    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task) = 0;
+    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *main_process) = 0;
 
     /*! \brief     Initialize stack memory of the user task.
         \param[in] stack: Stack descriptor.
+        \param[in] stack_memory: Stack memory.
         \param[in] user_task: User task to which Stack belongs.
     */
-    virtual bool InitStack(Stack *stack, ITask *user_task) = 0;
+    virtual bool InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task) = 0;
 
     /*! \brief     Switches context of the tasks.
     */
     virtual void SwitchContext() = 0;
+
+    /*! \brief     Stop scheduling tasks.
+    */
+    virtual void StopScheduling() = 0;
 
     /*! \brief     Get resolution of the system tick timer in microseconds.
                    Resolution means a number of microseconds between system tick timer ISRs.
@@ -259,6 +296,12 @@ public:
     */
     virtual void AddTask(IKernelTask *task) = 0;
 
+    /*! \brief     Remove task.
+        \note      Kernel tasks are removed from the concrete implementation of IKernel.
+        \param[in] task: Pointer to the task to remove.
+    */
+    virtual void RemoveTask(IKernelTask *task) = 0;
+
     /*! \brief     Get first task.
     */
     virtual IKernelTask *GetFirst() = 0;
@@ -285,18 +328,25 @@ public:
     virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy) = 0;
 
     /*! \brief     Add user task.
-        \param[in] user_task: Pointer to the user task to add to the kernel.
+        \param[in] user_task: Pointer to the user task to add.
     */
     virtual void AddTask(ITask *user_task) = 0;
 
+    /*! \brief     Remove user task.
+        \param[in] user_task: Pointer to the user task to remove.
+    */
+    virtual void RemoveTask(ITask *user_task) = 0;
+
     /*! \brief     Start kernel.
         \param[in] resolution_us: Resolution of the system tick (SysTick) timer in microseconds, (see IPlatform::GetSysTickResolution).
+        \param[in] main_process: Main process stack memory (optional, required for the dynamic tasks only).
     */
-    virtual void Start(uint32_t resolution_us) = 0;
+    virtual void Start(uint32_t resolution_us, IStackMemory *main_process) = 0;
 };
 
 /*! \class IKernelService
-    \brief Interface for the kernel services exposed to the user processes during run-time when Kernel started scheduling the processes.
+    \brief Interface for the kernel services exposed to the user processes during
+           run-time when Kernel started scheduling the processes.
     \note  State design pattern.
 */
 class IKernelService
@@ -327,7 +377,7 @@ public:
         int64_t deadline = GetDeadlineTicks(delay_ms);
         while (GetTicks() < deadline)
         {
-        	__stk_relax_cpu();
+            __stk_relax_cpu();
         }
     }
 };

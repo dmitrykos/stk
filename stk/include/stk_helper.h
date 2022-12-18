@@ -60,7 +60,26 @@ public:
     EAccessMode GetAccessMode() const { return _AccessMode; }
 
 private:
-    __stk_aligned(16) size_t m_stack[_StackSize];
+    typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
+};
+
+/*! \class StackMemory
+    \brief Stack memory.
+*/
+template <uint32_t _StackSize>
+class StackMemory : public IStackMemory
+{
+public:
+    /*! \brief Get pointer to the stack memory.
+    */
+    size_t *GetStack() { return m_stack; }
+
+    /*! \brief Get size of the stack memory array (number of size_t elements in the array).
+    */
+    uint32_t GetStackSize() const { return _StackSize; }
+
+private:
+    typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
 };
 
 } // namespace stk

@@ -24,22 +24,42 @@ TEST_GROUP(SwitchStrategyRoundRobin)
 
 TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
-    Kernel<2> kernel;
+    Kernel<3> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1;
     TaskMock<ACCESS_USER> task2;
+    TaskMock<ACCESS_USER> task3;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
 
-    IKernelTask *next = switch_strategy.GetFirst();
-    CHECK_TRUE_TEXT(switch_strategy.GetNext(next) == next, "Expecting the same next task (endless looping)");
+    IKernelTask *next = strategy.GetFirst();
+    CHECK_TEXT(strategy.GetNext(next) == next, "Expecting the same next task1 (endless looping)");
 
     kernel.AddTask(&task2);
 
-    next = switch_strategy.GetNext(next);
-    CHECK_TRUE_TEXT(next->GetUserTask() == &task2, "Expecting the next 2-nd task");
+    next = strategy.GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
 
-    CHECK_TRUE_TEXT(switch_strategy.GetNext(next)->GetUserTask() == &task1, "Expecting the next 1-st task (endless looping)");
+    kernel.AddTask(&task3);
+
+    next = strategy.GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
+
+    next = strategy.GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1 (endless looping)");
+
+    IKernelTask *ktask1 = next;
+    next = strategy.GetNext(ktask1);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
+
+    kernel.RemoveTask(&task1);
+
+    next = strategy.GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
+
+    next = strategy.GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2 (endless looping)");
 }
+

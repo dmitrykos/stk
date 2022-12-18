@@ -13,6 +13,8 @@
 
 #ifdef _STK_ARCH_ARM_CORTEX_M
 
+#include <setjmp.h>
+
 #include "arch/stk_arch_common.h"
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
@@ -29,8 +31,11 @@ using namespace stk;
     #define STK_CORTEX_M_PRIVILEGED_MODE_ON() ((void)0)
     #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() ((void)0)
 #endif
-#define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE 0xFFFFFFFDUL
+#define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_MSP_MODE 0xFFFFFFF9
+#define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE 0xFFFFFFFD
 #define STK_CORTEX_M_ISR_PRIORITY_LOWEST 0xFF
+#define STK_CORTEX_M_EXIT_FROM_HANDLER() __asm volatile("BX LR")
+#define STK_CORTEX_M_START_SCHEDULING() __asm volatile("SVC #0")
 
 //! Do sanity check for a compiler define, __CORTEX_M must be defined.
 #ifndef __CORTEX_M
@@ -75,36 +80,38 @@ extern "C" void SVC_Handler_Main(size_t *svc_args) __stk_attr_used; // __stk_att
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
+    void Initialize(IPlatform::IEventHandler *handler, Stack *main_process, Stack *first_stack, int32_t tick_resolution)
     {
-        PlatformContext::Initialize(handler, first_stack, tick_resolution);
+        PlatformContext::Initialize(handler, main_process, first_stack, tick_resolution);
 
         m_started = false;
+        m_exiting    = false;
     }
 
-    bool m_started; //!< started state
+    bool    m_started;  //!< 'true' when in started state
+    bool    m_exiting;  //!< 'true' when is exiting the scheduling process
+    jmp_buf m_exit_buf; //!< saved context of the exit point
 }
 g_Context;
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
 #ifdef HAL_MODULE_ENABLED // STM32 HAL
-	HAL_IncTick();
-	// unfortunately STM32 HAL is starting SysTick on its initialization that
-	// will cause a crash on NULL, therefore use additional check
-	if (g_Context.m_started)
+    HAL_IncTick();
+    // unfortunately STM32 HAL is starting SysTick on its initialization that
+    // will cause a crash on NULL, therefore use additional check
+    if (g_Context.m_started)
 #else
-	// make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
-	STK_ASSERT(g_Context.m_started);
-	STK_ASSERT(g_Context.m_handler != NULL);
+    // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
+    STK_ASSERT(g_Context.m_started);
+    STK_ASSERT(g_Context.m_handler != NULL);
 #endif
-	g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+    g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+    __DSB();
 }
 
-extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
+__stk_forceinline void SaveStackIdle()
 {
-    STK_CORTEX_M_DISABLE_INTERRUPTS();
-
     // get Process Stack Pointer (PSP) of the current stack
     __asm volatile(
     "MRS        r0, psp         \n");
@@ -143,7 +150,10 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
     "STR        r0, [r1]        \n"
     ::
     [stack] "o" (g_Context.m_stack_idle));
+}
 
+__stk_forceinline void LoadStackActive()
+{
     // set active stack
     __asm volatile(
     "LDR        r1, %[stack]    \n"
@@ -158,12 +168,12 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 #else
     // note: LDMIA is limited to r0-r7 range, therefore load via stack memory
     __asm volatile(
-    "LDMIA      r0!,{r4-r7}     \n"
+    "LDMIA      r0!, {r4-r7}    \n"
     "MOV        r8, r4          \n"
     "MOV        r9, r5          \n"
     "MOV        r10, r6         \n"
     "MOV        r11, r7         \n"
-    "LDMIA      r0!,{r4-r7}     \n");
+    "LDMIA      r0!, {r4-r7}    \n");
 #endif
 
     // load FP general registers
@@ -178,43 +188,30 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
     // set Process Stack Pointer (PSP) of the new active stack
     __asm volatile(
     "MSR        psp, r0         \n");
-
-    STK_CORTEX_M_ENABLE_INTERRUPTS();
-
-    // exit to the Thread of the first task
-    __asm volatile(
-    "BX         LR              \n");
 }
 
-static __stk_attr_naked void OnTaskRun()
+__stk_forceinline void OnTaskSwitch()
 {
     STK_CORTEX_M_DISABLE_INTERRUPTS();
 
-    // set active stack
-    __asm volatile(
-    "LDR    r1, %[stack]    \n"
-    "LDR    r0, [r1]        \n"
-    ::
-    [stack] "o" (g_Context.m_stack_active));
+    SaveStackIdle();
+    LoadStackActive();
 
-    // load general registers from the active stack
-#ifdef STK_CORTEX_M_MANAGE_LR
-    __asm volatile(
-    "LDMIA  r0!, {r4-r11, LR}\n");
-#else
-    // note: LDMIA is limited to r0-r7 range, therefore load via stack memory
-    __asm volatile(
-    "LDMIA  r0!, {r4-r7}    \n"
-    "MOV    r8, r4          \n"
-    "MOV    r9, r5          \n"
-    "MOV    r10, r6         \n"
-    "MOV    r11, r7         \n"
-    "LDMIA  r0!, {r4-r7}    \n");
-#endif
+    STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-    // set Process Stack Pointer (PSP) of the new active stack
-    __asm volatile(
-    "MSR    psp, r0         \n");
+    STK_CORTEX_M_EXIT_FROM_HANDLER();
+}
+
+extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
+{
+    OnTaskSwitch();
+}
+
+__stk_forceinline void OnTaskRun()
+{
+    STK_CORTEX_M_DISABLE_INTERRUPTS();
+
+    LoadStackActive();
 
 #ifndef STK_CORTEX_M_MANAGE_LR
     // M0: set LR to the Thread mode, use PSP state & stack
@@ -227,14 +224,7 @@ static __stk_attr_naked void OnTaskRun()
 
     STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-    // exit to the Thread of the first task
-    __asm volatile(
-    "BX     LR              \n");
-}
-
-static __stk_forceinline void StartFirstTask()
-{
-    __asm volatile("SVC #0");
+    STK_CORTEX_M_EXIT_FROM_HANDLER();
 }
 
 static __stk_forceinline void ClearFpuState()
@@ -252,35 +242,55 @@ static __stk_forceinline void EnableFullFpuAccess()
 #endif
 }
 
-void SVC_Handler_Main(size_t *svc_args)
+static void StartScheduling()
+{
+    // disallow any duplicate attempt
+    STK_ASSERT(!g_Context.m_started);
+    if (g_Context.m_started)
+        return;
+
+    // FPU
+    EnableFullFpuAccess();
+
+    // clear FPU usage status if FPU was used before kernel start
+    ClearFpuState();
+
+    // set priority
+    NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+    NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+
+    // notify kernel
+    g_Context.m_handler->OnStart();
+
+    // schedule ticks
+    uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * g_Context.m_tick_resolution / 1000000));
+    STK_ASSERT(result == 0);
+    (void)result;
+
+    g_Context.m_started = true;
+}
+
+void SVC_Handler_Main(size_t *stack)
 {
     // Stack contains: r0, r1, r2, r3, r12, r14, the return address and xPSR, First argument (r0) is svc_args[0]
-    char svc_number = ((char *)svc_args[6])[-2];
+    // - R0 = stack[0]
+    // - R1 = stack[1]
+    // - R2 = stack[2]
+    // - R3 = stack[3]
+    // - R12 = stack[4]
+    // - LR = stack[5]
+    // - PC = stack[6]
+    // - xPSR= stack[7]
+    char svc_arg = ((char *)stack[6])[-2];
 
-    switch (svc_number)
+    switch (svc_arg)
     {
     case 0: {
-        // disallow any duplicate attempt
-    	STK_ASSERT(!g_Context.m_started);
-        if (g_Context.m_started)
-            return;
-
-        g_Context.m_started = true;
-
-        // FPU
-        EnableFullFpuAccess();
-
-        // clear FPU usage status if FPU was used before kernel start
-        ClearFpuState();
-
-        // notify kernel
-        g_Context.m_handler->OnStart();
-
-        // execute first task
+        StartScheduling();
         OnTaskRun();
         break; }
     default:
-    	STK_ASSERT(false);
+        STK_ASSERT(false);
         break;
     }
 }
@@ -314,35 +324,51 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 
 static void OnTaskExit()
 {
-    volatile static int i = 0;
+    uint32_t mutex;
+    STK_CORTEX_M_CRITICAL_SESSION_START(mutex);
+
+    g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
+
+    STK_CORTEX_M_CRITICAL_SESSION_END(mutex);
+
     while (true)
     {
-        ++i;
         __asm volatile("NOP");
     }
 }
 
-void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resolution, IKernelTask *first_task)
+static void OnSchedulerExit()
 {
-    g_Context.Initialize(event_handler, first_task->GetUserStack(), tick_resolution);
-    
-    NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
-    NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+    __set_CONTROL(0); // switch to MSP
+    __set_PSP(0);     // clear PSP (for a clean register state)
 
-    uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * tick_resolution / 1000000));
-    STK_ASSERT(result == 0);
-    (void)result;
-
-    StartFirstTask();
+    // jump to the exit from the IKernel::Start()
+    longjmp(g_Context.m_exit_buf, 0);
 }
 
-bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
+void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resolution, IKernelTask *first_task, Stack *main_process)
 {
-    uint32_t stack_size = user_task->GetStackSize();
+    g_Context.Initialize(event_handler, main_process, first_task->GetUserStack(), tick_resolution);
+    g_Context.m_exiting = false;
+
+    // save jump location of the Exit trap
+    setjmp(g_Context.m_exit_buf);
+    if (g_Context.m_exiting)
+        return;
+
+    STK_CORTEX_M_START_SCHEDULING();
+}
+
+bool PlatformArmCortexM::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
+{
+    uint32_t stack_size = stack_memory->GetStackSize();
     if (stack_size <= STK_CORTEX_M_REGISTER_COUNT)
         return false;
 
-    size_t *stack_top = user_task->GetStack() + stack_size;
+    size_t *stack_top = stack_memory->GetStack() + stack_size;
+
+    // initialize Stack Pointer (SP)
+    stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
 
     // initialize stack memory
     for (int32_t i = -stack_size; i <= -4; ++i)
@@ -350,14 +376,28 @@ bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
         stack_top[i] = (size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef);
     }
 
-    size_t xPSR = (1 << 24); // set T bit of EPSR sub-regiser to enable execution of instructions (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/special-purpose-program-status-registers--xpsr-)
-    size_t PC   = (size_t)user_task->GetFunc() & ~0x1UL; // "Bit [0] is always 0, so instructions are always aligned to halfword boundaries" (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/general-purpose-registers)
-    size_t LR   = (size_t)OnTaskExit;
-    size_t R0   = (size_t)user_task->GetFuncUserData();
-
     // xPSR, PC, LR, R12, R3, R2, R1, R0
     // -1    -2  -3  -4   -5  -6  -7  -8
+
+    size_t xPSR = (1 << 24); // set T bit of EPSR sub-regiser to enable execution of instructions (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/special-purpose-program-status-registers--xpsr-)
+    size_t PC, LR, R0;
+
     stack_top[-1] = xPSR;
+
+    // initialize registers for the user task's first start
+    if (user_task != NULL)
+    {
+        PC = (size_t)user_task->GetFunc() & ~0x1UL; // "Bit [0] is always 0, so instructions are always aligned to halfword boundaries" (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/general-purpose-registers)
+        LR = (size_t)OnTaskExit;
+        R0 = (size_t)user_task->GetFuncUserData();
+    }
+    else
+    {
+        PC = (size_t)OnSchedulerExit & ~0x1UL; // scheduler's Exit trap
+        LR = (size_t)OnSchedulerExit;
+        R0 = 0;
+    }
+
     stack_top[-2] = PC;
     stack_top[-3] = LR;
     stack_top[-8] = R0;
@@ -367,18 +407,27 @@ bool PlatformArmCortexM::InitStack(Stack *stack, ITask *user_task)
     stack_top[-9] = STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE;
 #endif
 
-    // initialize Stack Pointer (SP)
-    stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
-
     return true;
 }
 
 void PlatformArmCortexM::SwitchContext()
 {
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
-
-    // flush instructions pipeline before PendSV is triggered
     __ISB();
+}
+
+void PlatformArmCortexM::StopScheduling()
+{
+    // stop and clear SysTick
+    SysTick->CTRL = 0;
+    SysTick->LOAD = 0;
+    SysTick->VAL  = 0;
+
+    g_Context.m_started = false;
+    g_Context.m_exiting = true;
+
+    // load context of the Exit trap
+    OnTaskRun();
 }
 
 int32_t PlatformArmCortexM::GetTickResolution() const

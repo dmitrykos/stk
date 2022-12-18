@@ -56,8 +56,10 @@ public:
         m_access_mode         = ACCESS_USER;
         m_context_switch_nr   = 0;
     }
+
     virtual ~PlatformTestMock()
     { }
+
     void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
     {
         m_event_handler    = event_handler;
@@ -65,6 +67,7 @@ public:
         m_resolution       = resolution_us;
         m_first_task_Start = first_task;
     }
+
     bool InitStack(Stack *stack, ITask *user_task)
     {
         if (m_fail_InitStack)
@@ -76,14 +79,17 @@ public:
         stack->SP = (size_t)user_task->GetStack();
         return true;
     }
+
     void SwitchContext()
     {
         ++m_context_switch_nr;
     }
+
     int32_t GetTickResolution() const
     {
         return m_resolution;
     }
+
     void SetAccessMode(EAccessMode mode)
     {
         m_access_mode = mode;
@@ -103,8 +109,9 @@ public:
 /*! \class KernelServiceMock
     \brief IKernelService mock.
 */
-struct KernelServiceMock : public IKernelService
+class KernelServiceMock : public IKernelService
 {
+public:
     KernelServiceMock()
     {
         m_inc_ticks  = false;

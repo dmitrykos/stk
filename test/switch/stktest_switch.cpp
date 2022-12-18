@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
+    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC, NULL);
 
     return TestContext::DEFAULT_FAILURE_EXIT_CODE;
 }

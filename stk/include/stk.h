@@ -60,10 +60,16 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     {
         friend class Kernel;
 
+        enum EStateFlags
+        {
+            STATE_NONE           = 0,
+            STATE_REMOVE_PENDING = (1 << 0)
+        };
+
     public:
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL)
+        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack()
         { }
 
         ITask *GetUserTask() { return m_user; }
@@ -73,8 +79,20 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         bool IsBusy() const { return (m_user != NULL); }
 
     private:
-        ITask *m_user;  //!< user task
-        Stack  m_stack; //!< stack descriptor
+        void Unbind()
+        {
+            m_user  = NULL;
+            m_stack = {};
+            m_state = STATE_NONE;
+        }
+
+        void ScheduleRemoval() { m_state |= STATE_REMOVE_PENDING; }
+
+        bool IsPendingRemoval() const { return (m_state & STATE_REMOVE_PENDING) != 0; }
+
+        ITask   *m_user;  //!< user task
+        uint32_t m_state; //!< state flags
+        Stack    m_stack; //!< stack descriptor
     };
 
     /*! \class KernelService
@@ -122,8 +140,9 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         {
             m_platform = platform;
 
-            // make instance accessible for user
-            SingletonBinder::Bind(this);
+            // make instance accessible for the user
+            if (Singleton<IKernelService *>::Get() == NULL)
+                SingletonBinder::Bind(this);
         }
 
         int64_t GetTicks() const
@@ -158,28 +177,24 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL)
+    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_main_process()
     { }
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
     {
-        // required argument
         STK_ASSERT(platform != NULL);
-
-        // required argument
         STK_ASSERT(switch_strategy != NULL);
-
-        // allow initialization only once
         STK_ASSERT(!IsInitialized());
 
         m_platform        = platform;
         m_switch_strategy = switch_strategy;
         m_task_now        = NULL;
+        m_main_process    = {};
     }
 
     void AddTask(ITask *user_task)
     {
-        // must be initialized first
+        STK_ASSERT(user_task != NULL);
         STK_ASSERT(IsInitialized());
 
         KernelTask *task = AllocateNewTask(user_task);
@@ -188,7 +203,16 @@ public:
         m_switch_strategy->AddTask(task);
     }
 
-    void Start(uint32_t resolution_us)
+    void RemoveTask(ITask *user_task)
+    {
+        STK_ASSERT(user_task != NULL);
+
+        KernelTask *task = FindTask(user_task);
+        if (task != NULL)
+            RemoveTask(task);
+    }
+
+    void Start(uint32_t resolution_us, IStackMemory *main_process)
     {
         STK_ASSERT(resolution_us != 0);
         STK_ASSERT(resolution_us < PERIODICITY_MAX);
@@ -197,16 +221,17 @@ public:
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
+        if (main_process != NULL)
+            m_platform->InitStack(&m_main_process, main_process, NULL);
+
         m_service.Initialize(m_platform);
 
-        m_platform->Start(this, resolution_us, m_task_now);
+        m_platform->Start(this, resolution_us, m_task_now, (main_process != NULL ? &m_main_process : NULL));
     }
 
 protected:
     KernelTask *AllocateNewTask(ITask *user_task)
     {
-        STK_ASSERT(user_task != NULL);
-
         // look for a free kernel task
         KernelTask *kernel_task = NULL;
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
@@ -227,11 +252,11 @@ protected:
             }
         }
 
-        // if NULL - exceeded max supported kernel task count
+        // if NULL - exceeded max supported kernel task count, application design failure
         STK_ASSERT(kernel_task != NULL);
 
         // init stack of the user task
-        if (!m_platform->InitStack(kernel_task->GetUserStack(), user_task))
+        if (!m_platform->InitStack(kernel_task->GetUserStack(), user_task, user_task))
         {
             STK_ASSERT(false);
         }
@@ -240,6 +265,38 @@ protected:
         kernel_task->m_user = user_task;
 
         return kernel_task;
+    }
+
+    KernelTask *FindTask(const ITask *user_task)
+    {
+        for (uint32_t i = 0; i < TASKS_MAX; ++i)
+        {
+            KernelTask *task = &m_task_storage[i];
+            if (task->GetUserTask() == user_task)
+                return task;
+        }
+
+        return NULL;
+    }
+
+    KernelTask *FindTask(const Stack *stack)
+    {
+        for (uint32_t i = 0; i < TASKS_MAX; ++i)
+        {
+            KernelTask *task = &m_task_storage[i];
+            if (task->GetUserStack() == stack)
+                return task;
+        }
+
+        return NULL;
+    }
+
+    void RemoveTask(KernelTask *task)
+    {
+        STK_ASSERT(task != NULL);
+
+        m_switch_strategy->RemoveTask(task);
+        task->Unbind();
     }
 
     void UpdateAccessMode(KernelTask *now, KernelTask *next)
@@ -257,21 +314,69 @@ protected:
 
     void OnSysTick(Stack **idle, Stack **active)
     {
-        KernelTask *now = m_task_now;
-        KernelTask *next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now));
-
         m_service.IncrementTick();
+        SwitchTask(idle, active);
+    }
+
+    void OnTaskExit(Stack *stack)
+    {
+        KernelTask *task = FindTask(stack);
+        STK_ASSERT(task != NULL);
+
+        task->ScheduleRemoval();
+    }
+
+    void SwitchTask(Stack **idle, Stack **active)
+    {
+        KernelTask *now = m_task_now;
+
+        KernelTask *next;
+        while ((next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now))) != NULL)
+        {
+        	// process pending task removal
+            if (next->IsPendingRemoval())
+            {
+                RemoveTask(next);
+
+                // check if current task and clear its pointer
+                if (next == now)
+                    m_task_now = now = NULL;
+
+                // check if no tasks left
+                if (m_switch_strategy->GetFirst() == NULL)
+                {
+                	next = NULL;
+                	now = NULL;
+                	break;
+                }
+
+                continue;
+            }
+            else
+            	break;
+        }
 
         if (next != now)
         {
-            (*idle) = now->GetUserStack();
+            (*idle)   = now->GetUserStack();
             (*active) = next->GetUserStack();
 
             m_task_now = next;
 
             UpdateAccessMode(now, next);
-
             m_platform->SwitchContext();
+        }
+        else
+        if ((now == NULL) && (next == NULL))
+        {
+            // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
+            STK_ASSERT(m_main_process.SP != 0);
+
+            (*idle)   = &m_main_process;
+            (*active) = &m_main_process;
+
+            m_platform->SetAccessMode(ACCESS_PRIVILEGED);
+            m_platform->StopScheduling();
         }
     }
 
@@ -291,8 +396,9 @@ protected:
     KernelService        m_service;         //!< run-time kernel service
     IPlatform           *m_platform;        //!< platform driver
     ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
-    TaskStorageType      m_task_storage;    //!< task storage
     KernelTask          *m_task_now;        //!< current task task
+    Stack                m_main_process;    //!< saved stack of the main process
+    TaskStorageType      m_task_storage;    //!< task storage
 };
 
 } // namespace stk

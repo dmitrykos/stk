@@ -26,13 +26,14 @@ class PlatformContext
 public:
     /*! \brief     Initialize context.
         \param[in] handler: Event handler.
+        \param[in] idle_stack: Idle stack (if different from first_stack then this stack will be saved on scheduler start).
         \param[in] first_stack: First task's stack.
         \param[in] tick_resolution: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
     */
-    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
+    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *idle_stack, Stack *first_stack, int32_t tick_resolution)
     {
         m_handler         = handler;
-        m_stack_idle      = first_stack;
+        m_stack_idle      = (idle_stack != NULL ? idle_stack : first_stack);
         m_stack_active    = first_stack;
         m_tick_resolution = tick_resolution;
     }
