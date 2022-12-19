@@ -81,9 +81,13 @@ public:
         if (m_fail_InitStack)
             return false;
 
-        m_stack_InitStack        = stack;
-        m_stack_memory_InitStack = stack_memory;
-        m_user_task_InitStack    = user_task;
+        // if NULL then it is Exit trap is being initialized
+        if (user_task != NULL)
+        {
+            m_stack_InitStack        = stack;
+            m_stack_memory_InitStack = stack_memory;
+            m_user_task_InitStack    = user_task;
+        }
 
         stack->SP = (size_t)stack_memory->GetStack();
         return true;

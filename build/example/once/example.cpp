@@ -127,7 +127,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
+    kernel.Start(PERIODICITY_DEFAULT);
 
     for (int i = 0; i < 3; ++i)
     {
@@ -137,7 +137,7 @@ void RunExample()
 
         g_TaskSwitch = 0;
 
-        kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
+        kernel.Start(PERIODICITY_DEFAULT);
     }
 
     LED_SET_STATE(LED_RED, true);

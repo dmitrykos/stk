@@ -33,7 +33,7 @@ namespace stk {
 
     Usage example:
     \code
-    static Kernel<10> kernel;
+    static Kernel<KERNEL_STATIC, 3> kernel;
     static PlatformArmCortexM platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
@@ -47,12 +47,17 @@ namespace stk {
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(1000);
+    kernel.Start(PERIODICITY_DEFAULT);
     \endcode
 */
 template <EKernelMode _Mode, uint32_t _Size>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
+    /*! \typedef ExitTrapStackMemory
+        \brief   Stack memory wrapper type of the Exit trap.
+    */
+    typedef StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> ExitTrapStackMemory;
+
     /*! \class KernelTask
         \brief Concrete implementation of the IKernelTask interface.
     */
@@ -170,9 +175,7 @@ public:
     */
     enum EConsts
     {
-        TASKS_MAX           = _Size,    //!< Maximum number of tasks supported by the instance of the Kernel.
-        PERIODICITY_MAX     = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
-        PERIODICITY_DEFAULT = 1000,     //!< Default reasonable periodicity (microseconds), 1 millisecond.
+        TASKS_MAX = _Size //!< Maximum number of tasks supported by the instance of the Kernel.
     };
 
     /*! \brief Default initializer.
@@ -228,9 +231,12 @@ public:
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
-        // initialize stack for an Exit trap into the main process
+        // initialize stack for an Exit trap into the main process which called Kernel::Start()
         if (_Mode == KERNEL_DYNAMIC)
-            m_platform->InitStack(&m_exit_trap[0].stack, &m_exit_trap[0].stack_memory, NULL);
+        {
+            ExitTrapStackMemory wrapper(&m_exit_trap[0].stack_memory);
+            m_platform->InitStack(&m_exit_trap[0].stack, &wrapper, NULL);
+        }
 
         m_service.Initialize(m_platform);
 
@@ -427,8 +433,10 @@ protected:
     */
     struct ExitTrap
     {
-        Stack           stack;        //!< stack information
-        StackMemory<32> stack_memory; //!< stack memory
+        typedef ExitTrapStackMemory::MemoryType Memory;
+
+        Stack  stack;        //!< stack information
+        Memory stack_memory; //!< stack memory
     };
 
     KernelService        m_service;         //!< run-time kernel service

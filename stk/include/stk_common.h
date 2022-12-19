@@ -42,12 +42,14 @@ enum EKernelMode
     KERNEL_DYNAMIC      //!< Tasks can be added or removed and therefore exit when done.
 };
 
-/*! \enum  EDefault
-    \brief Default constants.
+/*! \enum  EConsts
+    \brief Constants.
 */
-enum EDefault
+enum EConsts
 {
-    DEFAULT_RESOLUTION_US_ONE_MSEC = 10000, //!< Default resolution (1 millisecond) of the kernel supplied to Kernel::Start().
+    PERIODICITY_MAX      = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
+    PERIODICITY_DEFAULT  = 1000,     //!< Default reasonable periodicity (microseconds), 1 millisecond.
+    EXIT_TRAP_STACK_SIZE = 32        //!< Stack size of the Exit trap.
 };
 
 /*! \class StackMemoryDef
