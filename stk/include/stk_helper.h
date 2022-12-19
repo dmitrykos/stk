@@ -60,7 +60,36 @@ public:
     EAccessMode GetAccessMode() const { return _AccessMode; }
 
 private:
-    __stk_aligned(16) size_t m_stack[_StackSize];
+    typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
+};
+
+/*! \class StackMemoryWrapper
+    \brief Stack memory wrapper into IStackMemory interface.
+    \note  Wrapper design pattern.
+*/
+template <uint32_t _StackSize>
+class StackMemoryWrapper : public IStackMemory
+{
+public:
+    /*! \typedef MemoryType
+        \brief   Memory type which can be wrapped.
+    */
+    typedef typename StackMemoryDef<_StackSize>::Type MemoryType;
+
+    /*! \brief Constructor .
+    */
+    explicit StackMemoryWrapper(MemoryType *stack) : m_stack(stack) {}
+
+    /*! \brief Get pointer to the stack memory.
+    */
+    size_t *GetStack() { return (*m_stack); }
+
+    /*! \brief Get size of the stack memory array (number of size_t elements in the array).
+    */
+    uint32_t GetStackSize() const { return _StackSize; }
+
+private:
+    MemoryType *m_stack; //!< pointer to the wrapped memory region
 };
 
 } // namespace stk

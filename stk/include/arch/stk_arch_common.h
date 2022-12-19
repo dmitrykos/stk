@@ -26,21 +26,22 @@ class PlatformContext
 public:
     /*! \brief     Initialize context.
         \param[in] handler: Event handler.
+        \param[in] exit_trap: Exit trap's stack.
         \param[in] first_stack: First task's stack.
-        \param[in] tick_resolution: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
+        \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
     */
-    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
+    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, Stack *first_stack, int32_t resolution_us)
     {
         m_handler         = handler;
-        m_stack_idle      = first_stack;
+        m_stack_idle      = exit_trap;
         m_stack_active    = first_stack;
-        m_tick_resolution = tick_resolution;
+        m_tick_resolution = resolution_us;
     }
 
-    IPlatform::IEventHandler *m_handler; //!< kernel event handler
-    Stack  *m_stack_idle;                //!< idle task stack
-    Stack  *m_stack_active;              //!< active task stack
-    int32_t m_tick_resolution;           //!< system tick resolution (microseconds)
+    IPlatform::IEventHandler *m_handler;         //!< kernel event handler
+    Stack                    *m_stack_idle;      //!< idle task stack
+    Stack                    *m_stack_active;    //!< active task stack
+    int32_t                   m_tick_resolution; //!< system tick resolution (microseconds)
 };
 
 } // namespace stk

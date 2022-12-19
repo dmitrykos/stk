@@ -48,7 +48,7 @@ TEST(KernelService, DelaySpin)
 
 TEST(KernelService, InitStackFailure)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
@@ -70,11 +70,11 @@ TEST(KernelService, InitStackFailure)
 
 TEST(KernelService, GetTicksResolution)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
-    const uint32_t periodicity = Kernel<2>::PERIODICITY_DEFAULT + 1;
+    const uint32_t periodicity = PERIODICITY_DEFAULT + 1;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
@@ -85,7 +85,7 @@ TEST(KernelService, GetTicksResolution)
 
 TEST(KernelService, GetTicks)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1;
@@ -95,7 +95,7 @@ TEST(KernelService, GetTicks)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
-    kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+    kernel.Start(PERIODICITY_DEFAULT);
 
     // ISR calls OnStart
     platform.m_event_handler->OnStart();

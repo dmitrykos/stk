@@ -94,6 +94,7 @@ private:
             DelaySpin(1000);
 
             g_TaskSwitch = (task_id + 1) % 3;
+            return;
         }
     }
 };
@@ -111,7 +112,7 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<KERNEL_STATIC, 3> kernel;
+    static Kernel<KERNEL_DYNAMIC, 3> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
@@ -128,7 +129,21 @@ void RunExample()
 
     kernel.Start(PERIODICITY_DEFAULT);
 
-    assert(false);
-    while (true);
+    for (int i = 0; i < 3; ++i)
+    {
+        kernel.AddTask(&task1);
+        kernel.AddTask(&task2);
+        kernel.AddTask(&task3);
+
+        g_TaskSwitch = 0;
+
+        kernel.Start(PERIODICITY_DEFAULT);
+    }
+
+    LED_SET_STATE(LED_RED, true);
+    LED_SET_STATE(LED_GREEN, true);
+    LED_SET_STATE(LED_BLUE, true);
+
+    while (true) {}
 }
 

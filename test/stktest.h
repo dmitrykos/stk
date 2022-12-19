@@ -46,44 +46,63 @@ class PlatformTestMock : public IPlatform
 public:
     explicit PlatformTestMock()
     {
-        m_event_handler       = NULL;
-        m_started             = false;
-        m_first_task_Start    = NULL;
-        m_stack_InitStack     = NULL;
-        m_user_task_InitStack = NULL;
-        m_fail_InitStack      = 0;
-        m_resolution          = 0;
-        m_access_mode         = ACCESS_USER;
-        m_context_switch_nr   = 0;
+        m_event_handler          = NULL;
+        m_started                = false;
+        m_first_task_Start       = NULL;
+        m_stack_InitStack        = NULL;
+        m_stack_memory_InitStack = NULL;
+        m_user_task_InitStack    = NULL;
+        m_exit_trap              = NULL;
+        m_fail_InitStack         = 0;
+        m_resolution             = 0;
+        m_access_mode            = ACCESS_USER;
+        m_context_switch_nr      = 0;
     }
+
     virtual ~PlatformTestMock()
     { }
-    void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
+
+    void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
     {
         m_event_handler    = event_handler;
         m_started          = true;
         m_resolution       = resolution_us;
         m_first_task_Start = first_task;
+        m_exit_trap        = exit_trap;
     }
-    bool InitStack(Stack *stack, ITask *user_task)
+
+    void Stop()
+    {
+    	m_started = false;
+    }
+
+    bool InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
     {
         if (m_fail_InitStack)
             return false;
 
-        m_stack_InitStack     = stack;
-        m_user_task_InitStack = user_task;
+        // if NULL then it is Exit trap is being initialized
+        if (user_task != NULL)
+        {
+            m_stack_InitStack        = stack;
+            m_stack_memory_InitStack = stack_memory;
+            m_user_task_InitStack    = user_task;
+        }
 
-        stack->SP = (size_t)user_task->GetStack();
+        stack->SP = (size_t)stack_memory->GetStack();
         return true;
     }
+
     void SwitchContext()
     {
         ++m_context_switch_nr;
     }
+
     int32_t GetTickResolution() const
     {
         return m_resolution;
     }
+
     void SetAccessMode(EAccessMode mode)
     {
         m_access_mode = mode;
@@ -92,7 +111,9 @@ public:
     IEventHandler *m_event_handler;
     IKernelTask   *m_first_task_Start;
     Stack         *m_stack_InitStack;
+    IStackMemory  *m_stack_memory_InitStack;
     ITask         *m_user_task_InitStack;
+    Stack         *m_exit_trap;
     bool           m_fail_InitStack;
     int32_t        m_resolution;
     bool           m_started;
@@ -103,8 +124,9 @@ public:
 /*! \class KernelServiceMock
     \brief IKernelService mock.
 */
-struct KernelServiceMock : public IKernelService
+class KernelServiceMock : public IKernelService
 {
+public:
     KernelServiceMock()
     {
         m_inc_ticks  = false;

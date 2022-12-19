@@ -29,6 +29,30 @@ TEST(UserTask, GetStackSize)
     CHECK_EQUAL(TaskMock<ACCESS_USER>::STACK_SIZE, task.GetStackSize());
 }
 
+TEST_GROUP(StackMemoryWrapper)
+{
+    void setup() {}
+    void teardown() {}
+};
+
+TEST(StackMemoryWrapper, GetStack)
+{
+    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE>::MemoryType memory;
+    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> wrapper(&memory);
+
+    CHECK_TRUE(NULL != wrapper.GetStack());
+    CHECK_EQUAL((size_t *)&memory, wrapper.GetStack());
+}
+
+TEST(StackMemoryWrapper, GetStackSize)
+{
+    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE>::MemoryType memory;
+    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> wrapper(&memory);
+
+    CHECK_EQUAL(EXIT_TRAP_STACK_SIZE, wrapper.GetStackSize());
+    CHECK_EQUAL(sizeof(memory) / sizeof(size_t), wrapper.GetStackSize());
+}
+
 TEST_GROUP(DList)
 {
     void setup() {}
