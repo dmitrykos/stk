@@ -32,9 +32,9 @@ using namespace stk;
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *first_stack, int32_t tick_resolution)
+    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, Stack *first_stack, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, first_stack, tick_resolution);
+        PlatformContext::Initialize(handler, exit_trap, first_stack, resolution_us);
 
         m_winmm_dll    = NULL;
         m_timer_thread = NULL;
@@ -121,7 +121,7 @@ void Context::CreateThreadsForTasks()
 {
     std::list<Context::TaskContext>::iterator first = m_tasks.begin();
 
-    for (std::list<Context::TaskContext>::iterator itr = first;    itr != m_tasks.end(); ++itr)
+    for (std::list<Context::TaskContext>::iterator itr = first; itr != m_tasks.end(); ++itr)
     {
         Context::TaskContext *tctx = &(*itr);
 
@@ -145,16 +145,21 @@ void Context::CreateTimerThreadAndJoin()
     WaitForSingleObject(g_Context.m_timer_thread, INFINITE);
 }
 
-void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task)
+void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
 {
-    g_Context.Initialize(event_handler, first_task->GetUserStack(), resolution_us);
+    g_Context.Initialize(event_handler, exit_trap, first_task->GetUserStack(), resolution_us);
 
     g_Context.ConfigureTime();
     g_Context.CreateThreadsForTasks();
-    g_Context.CreateTimerThreadAndJoin(); // note: never returns after this call
+    g_Context.CreateTimerThreadAndJoin();
 }
 
-bool PlatformX86Win32::InitStack(Stack *stack, ITask *user_task)
+void PlatformX86Win32::Stop()
+{
+	TerminateThread(g_Context.m_timer_thread, 0);
+}
+
+bool PlatformX86Win32::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
 {
     g_Context.m_tasks.push_back(Context::TaskContext(user_task));
 

@@ -24,7 +24,7 @@ TEST_GROUP(SwitchStrategyRoundRobin)
 
 TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
-    Kernel<3> kernel;
+    Kernel<KERNEL_DYNAMIC, 3> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1;

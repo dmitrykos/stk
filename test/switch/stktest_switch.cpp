@@ -88,9 +88,7 @@ private:
 
             g_KernelService->DelaySpin(100);
 
-            g_TaskSwitch = task_id + 1;
-            if (g_TaskSwitch > 2)
-                g_TaskSwitch = 0;
+            g_TaskSwitch = (task_id + 1) % 3;
         }
     }
 };

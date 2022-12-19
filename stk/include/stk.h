@@ -402,7 +402,7 @@ protected:
                     (*active) = &m_exit_trap[0].stack;
 
                     m_platform->SetAccessMode(ACCESS_PRIVILEGED);
-                    m_platform->StopScheduling();
+                    m_platform->Stop();
                 }
             }
         }

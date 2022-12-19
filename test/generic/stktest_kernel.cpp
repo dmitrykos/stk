@@ -25,14 +25,15 @@ TEST_GROUP(Kernel)
 TEST(Kernel, MaxTasks)
 {
     const int32_t TASKS = 10;
-    Kernel<TASKS> kernel;
+    Kernel<KERNEL_STATIC, TASKS> kernel;
+    const int32_t result = Kernel<KERNEL_STATIC, TASKS>::TASKS_MAX;
 
-    CHECK_EQUAL(TASKS, Kernel<TASKS>::TASKS_MAX);
+    CHECK_EQUAL(TASKS, result);
 }
 
 TEST(Kernel, InitFailPlatformNull)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     SwitchStrategyRoundRobin switch_strategy;
 
     try
@@ -50,7 +51,7 @@ TEST(Kernel, InitFailPlatformNull)
 
 TEST(Kernel, InitFailSwitchStrategyNull)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
 
     try
@@ -68,7 +69,7 @@ TEST(Kernel, InitFailSwitchStrategyNull)
 
 TEST(Kernel, Init)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
 
@@ -77,7 +78,7 @@ TEST(Kernel, Init)
 
 TEST(Kernel, InitDoubleFail)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
 
@@ -97,7 +98,7 @@ TEST(Kernel, InitDoubleFail)
 
 TEST(Kernel, AddTaskNoInit)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     TaskMock<ACCESS_USER> task;
 
     try
@@ -115,7 +116,7 @@ TEST(Kernel, AddTaskNoInit)
 
 TEST(Kernel, AddTask)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
@@ -135,7 +136,7 @@ TEST(Kernel, AddTask)
 
 TEST(Kernel, AddTaskInitStack)
 {
-    Kernel<10> kernel;
+    Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
@@ -149,7 +150,7 @@ TEST(Kernel, AddTaskInitStack)
 
 TEST(Kernel, AddTaskMaxOut)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1;
@@ -175,7 +176,7 @@ TEST(Kernel, AddTaskMaxOut)
 
 TEST(Kernel, AddSameTask)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
@@ -198,7 +199,7 @@ TEST(Kernel, AddSameTask)
 
 TEST(Kernel, RemoveTask)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_DYNAMIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1;
@@ -220,7 +221,7 @@ TEST(Kernel, RemoveTask)
 
 TEST(Kernel, RemoveTaskNull)
 {
-    Kernel<1> kernel;
+    Kernel<KERNEL_DYNAMIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
 
@@ -229,8 +230,31 @@ TEST(Kernel, RemoveTaskNull)
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.RemoveTask(NULL);
+        kernel.RemoveTask((ITask *)NULL);
         CHECK_TEXT(false, "expecting to fail with NULL argument");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, RemoveTaskUnsupported)
+{
+    Kernel<KERNEL_STATIC, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.RemoveTask(&task);
+        CHECK_TEXT(false, "expecting to fail in KERNEL_STATIC mode");
     }
     catch (TestAssertPassed &pass)
     {
@@ -241,7 +265,7 @@ TEST(Kernel, RemoveTaskNull)
 
 TEST(Kernel, StartInvalidPeriodicity)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
@@ -264,7 +288,7 @@ TEST(Kernel, StartInvalidPeriodicity)
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Start(Kernel<2>::PERIODICITY_MAX + 1);
+        kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_MAX + 1);
         CHECK_TEXT(false, "expecting to fail with too large periodicity");
     }
     catch (TestAssertPassed &pass)
@@ -276,12 +300,12 @@ TEST(Kernel, StartInvalidPeriodicity)
 
 TEST(Kernel, StartNotIntialized)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+        kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_DEFAULT);
         CHECK_TEXT(false, "expecting to fail when not initialized");
     }
     catch (TestAssertPassed &pass)
@@ -293,7 +317,7 @@ TEST(Kernel, StartNotIntialized)
 
 TEST(Kernel, StartNoTasks)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
 
@@ -302,7 +326,7 @@ TEST(Kernel, StartNoTasks)
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+        kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_DEFAULT);
         CHECK_TEXT(false, "expecting to fail without tasks");
     }
     catch (TestAssertPassed &pass)
@@ -314,11 +338,11 @@ TEST(Kernel, StartNoTasks)
 
 TEST(Kernel, Start)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task;
-    const uint32_t periodicity = Kernel<2>::PERIODICITY_MAX - 1;
+    const uint32_t periodicity = Kernel<KERNEL_STATIC, 2>::PERIODICITY_MAX - 1;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
@@ -334,14 +358,14 @@ TEST(Kernel, Start)
 
 TEST(Kernel, StartBeginISR)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_PRIVILEGED> task;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
-    kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+    kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_DEFAULT);
 
     // ISR calls OnStart
     platform.m_event_handler->OnStart();
@@ -352,7 +376,7 @@ TEST(Kernel, StartBeginISR)
 
 TEST(Kernel, ContextSwitchOnSysTickISR)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1;
@@ -362,7 +386,7 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
-    kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+    kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_DEFAULT);
 
     // ISR calls OnStart
     platform.m_event_handler->OnStart();
@@ -398,7 +422,7 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
 
 TEST(Kernel, ContextSwitchAccessModeChange)
 {
-    Kernel<2> kernel;
+    Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1;
@@ -408,7 +432,7 @@ TEST(Kernel, ContextSwitchAccessModeChange)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
-    kernel.Start(Kernel<2>::PERIODICITY_DEFAULT);
+    kernel.Start(Kernel<KERNEL_STATIC, 2>::PERIODICITY_DEFAULT);
 
     // ISR calls OnStart
     platform.m_event_handler->OnStart();
@@ -425,7 +449,7 @@ TEST(Kernel, ContextSwitchAccessModeChange)
 
 TEST(Kernel, AbiCompatibility)
 {
-    class TaskMockAbiCheck : public Task<16, ACCESS_USER>
+    class TaskMockAbiCheck : public Task<32, ACCESS_USER>
     {
     public:
         TaskMockAbiCheck() : m_result(0) {}

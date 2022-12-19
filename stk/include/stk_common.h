@@ -257,10 +257,14 @@ public:
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
         \param[in] first_task: First kernel task which will be called upon start.
-        \param[in] main_process: Stack of the main process (optional, if provided then tasks can be dynamic).
+        \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */
-    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *main_process) = 0;
+    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap) = 0;
+
+    /*! \brief     Stop scheduling.
+    */
+    virtual void Stop() = 0;
 
     /*! \brief     Initialize stack memory of the user task.
         \param[in] stack: Stack descriptor.
@@ -272,10 +276,6 @@ public:
     /*! \brief     Switches context of the tasks.
     */
     virtual void SwitchContext() = 0;
-
-    /*! \brief     Stop scheduling tasks.
-    */
-    virtual void StopScheduling() = 0;
 
     /*! \brief     Get resolution of the system tick timer in microseconds.
                    Resolution means a number of microseconds between system tick timer ISRs.

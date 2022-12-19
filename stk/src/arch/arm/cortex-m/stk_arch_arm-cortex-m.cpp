@@ -80,9 +80,9 @@ extern "C" void SVC_Handler_Main(size_t *svc_args) __stk_attr_used; // __stk_att
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *main_process, Stack *first_stack, int32_t tick_resolution)
+    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, Stack *first_stack, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, main_process, first_stack, tick_resolution);
+        PlatformContext::Initialize(handler, exit_trap, first_stack, resolution_us);
 
         m_started = false;
         m_exiting = false;
@@ -346,9 +346,9 @@ static void OnSchedulerExit()
     longjmp(g_Context.m_exit_buf, 0);
 }
 
-void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t tick_resolution, IKernelTask *first_task, Stack *main_process)
+void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
 {
-    g_Context.Initialize(event_handler, main_process, first_task->GetUserStack(), tick_resolution);
+    g_Context.Initialize(event_handler, exit_trap, first_task->GetUserStack(), resolution_us);
     g_Context.m_exiting = false;
 
     // save jump location of the Exit trap
@@ -416,7 +416,7 @@ void PlatformArmCortexM::SwitchContext()
     __ISB();
 }
 
-void PlatformArmCortexM::StopScheduling()
+void PlatformArmCortexM::Stop()
 {
     // stop and clear SysTick
     SysTick->CTRL = 0;
