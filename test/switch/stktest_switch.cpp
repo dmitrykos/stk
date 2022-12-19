@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     using namespace stk::test;
     using namespace stk::test::switch_;
 
-    static Kernel<3> kernel;
+    static Kernel<KERNEL_STATIC, _STK_SWITCH_TEST_TASKS_MAX> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC, NULL);
+    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
 
     return TestContext::DEFAULT_FAILURE_EXIT_CODE;
 }

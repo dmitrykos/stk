@@ -112,10 +112,9 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<10> kernel;
+    static Kernel<KERNEL_DYNAMIC, 3> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
-    static StackMemory<256> main_stack;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
     static MyTask<ACCESS_PRIVILEGED> task1(0);
@@ -128,7 +127,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC, &main_stack);
+    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
 
     for (int i = 0; i < 3; ++i)
     {
@@ -138,7 +137,7 @@ void RunExample()
 
         g_TaskSwitch = 0;
 
-        kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC, &main_stack);
+        kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
     }
 
     LED_SET_STATE(LED_RED, true);

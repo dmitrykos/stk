@@ -33,6 +33,15 @@ enum EAccessMode
     ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
 };
 
+/*! \enum  EKernelMode
+    \brief Kernel operating mode.
+*/
+enum EKernelMode
+{
+    KERNEL_STATIC  = 0, //!< All tasks are static and can not exit.
+    KERNEL_DYNAMIC      //!< Tasks can be added or removed and therefore exit when done.
+};
+
 /*! \enum  EDefault
     \brief Default constants.
 */
@@ -339,9 +348,8 @@ public:
 
     /*! \brief     Start kernel.
         \param[in] resolution_us: Resolution of the system tick (SysTick) timer in microseconds, (see IPlatform::GetSysTickResolution).
-        \param[in] main_process: Main process stack memory (optional, required for the dynamic tasks only).
     */
-    virtual void Start(uint32_t resolution_us, IStackMemory *main_process) = 0;
+    virtual void Start(uint32_t resolution_us) = 0;
 };
 
 /*! \class IKernelService

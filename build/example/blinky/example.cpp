@@ -93,9 +93,7 @@ private:
 
             DelaySpin(1000);
 
-            g_TaskSwitch = task_id + 1;
-            if (g_TaskSwitch > 2)
-                g_TaskSwitch = 0;
+            g_TaskSwitch = (task_id + 1) % 3;
         }
     }
 };
@@ -113,7 +111,7 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<10> kernel;
+    static Kernel<KERNEL_STATIC, 3> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
@@ -128,7 +126,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC, NULL);
+    kernel.Start(DEFAULT_RESOLUTION_US_ONE_MSEC);
 
     assert(false);
     while (true);

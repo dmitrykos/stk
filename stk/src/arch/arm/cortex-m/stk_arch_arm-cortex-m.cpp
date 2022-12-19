@@ -85,7 +85,7 @@ static struct Context : public PlatformContext
         PlatformContext::Initialize(handler, main_process, first_stack, tick_resolution);
 
         m_started = false;
-        m_exiting    = false;
+        m_exiting = false;
     }
 
     bool    m_started;  //!< 'true' when in started state

@@ -50,7 +50,7 @@ namespace stk {
     kernel.Start(1000);
     \endcode
 */
-template <uint32_t _Size>
+template <EKernelMode _Mode, uint32_t _Size>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
     /*! \class KernelTask
@@ -111,7 +111,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         class SingletonBinder : private Singleton<IKernelService *>
         {
             //! \note Only Kernel's internal environment has access to the SingletonBinder::Bind() function.
-            template <uint32_t _Size0> friend class Kernel;
+            template <EKernelMode _Mode0, uint32_t _Size0> friend class Kernel;
         };
 
     public:
@@ -177,7 +177,7 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_main_process()
+    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_exit_trap()
     { }
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
@@ -189,7 +189,6 @@ public:
         m_platform        = platform;
         m_switch_strategy = switch_strategy;
         m_task_now        = NULL;
-        m_main_process    = {};
     }
 
     void AddTask(ITask *user_task)
@@ -205,14 +204,22 @@ public:
 
     void RemoveTask(ITask *user_task)
     {
-        STK_ASSERT(user_task != NULL);
+        if (_Mode == KERNEL_DYNAMIC)
+        {
+            STK_ASSERT(user_task != NULL);
 
-        KernelTask *task = FindTask(user_task);
-        if (task != NULL)
-            RemoveTask(task);
+            KernelTask *task = FindTask(user_task);
+            if (task != NULL)
+                RemoveTask(task);
+        }
+        else
+        {
+            // kernel operating mode must be KERNEL_DYNAMIC for tasks to be able to be removed
+            STK_ASSERT(false);
+        }
     }
 
-    void Start(uint32_t resolution_us, IStackMemory *main_process)
+    void Start(uint32_t resolution_us)
     {
         STK_ASSERT(resolution_us != 0);
         STK_ASSERT(resolution_us < PERIODICITY_MAX);
@@ -221,12 +228,13 @@ public:
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
-        if (main_process != NULL)
-            m_platform->InitStack(&m_main_process, main_process, NULL);
+        // initialize stack for an Exit trap into the main process
+        if (_Mode == KERNEL_DYNAMIC)
+            m_platform->InitStack(&m_exit_trap[0].stack, &m_exit_trap[0].stack_memory, NULL);
 
         m_service.Initialize(m_platform);
 
-        m_platform->Start(this, resolution_us, m_task_now, (main_process != NULL ? &m_main_process : NULL));
+        m_platform->Start(this, resolution_us, m_task_now, (_Mode == KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
     }
 
 protected:
@@ -320,10 +328,18 @@ protected:
 
     void OnTaskExit(Stack *stack)
     {
-        KernelTask *task = FindTask(stack);
-        STK_ASSERT(task != NULL);
+        if (_Mode == KERNEL_DYNAMIC)
+        {
+            KernelTask *task = FindTask(stack);
+            STK_ASSERT(task != NULL);
 
-        task->ScheduleRemoval();
+            task->ScheduleRemoval();
+        }
+        else
+        {
+            // kernel operating mode must be KERNEL_DYNAMIC for tasks to be able to exit
+            STK_ASSERT(false);
+        }
     }
 
     void SwitchTask(Stack **idle, Stack **active)
@@ -331,29 +347,36 @@ protected:
         KernelTask *now = m_task_now;
 
         KernelTask *next;
-        while ((next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now))) != NULL)
+        if (_Mode == KERNEL_DYNAMIC)
         {
-        	// process pending task removal
-            if (next->IsPendingRemoval())
+            while ((next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now))) != NULL)
             {
-                RemoveTask(next);
-
-                // check if current task and clear its pointer
-                if (next == now)
-                    m_task_now = now = NULL;
-
-                // check if no tasks left
-                if (m_switch_strategy->GetFirst() == NULL)
+                // process pending task removal
+                if (next->IsPendingRemoval())
                 {
-                	next = NULL;
-                	now = NULL;
-                	break;
-                }
+                    RemoveTask(next);
 
-                continue;
+                    // check if current task and clear its pointer
+                    if (next == now)
+                        m_task_now = now = NULL;
+
+                    // check if no tasks left
+                    if (m_switch_strategy->GetFirst() == NULL)
+                    {
+                        next = NULL;
+                        now = NULL;
+                        break;
+                    }
+
+                    continue;
+                }
+                else
+                    break;
             }
-            else
-            	break;
+        }
+        else
+        {
+            next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now));
         }
 
         if (next != now)
@@ -367,16 +390,21 @@ protected:
             m_platform->SwitchContext();
         }
         else
-        if ((now == NULL) && (next == NULL))
         {
-            // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
-            STK_ASSERT(m_main_process.SP != 0);
+            if (_Mode == KERNEL_DYNAMIC)
+            {
+                if ((now == NULL) && (next == NULL))
+                {
+                    // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
+                    STK_ASSERT(m_exit_trap[0].stack.SP != 0);
 
-            (*idle)   = &m_main_process;
-            (*active) = &m_main_process;
+                    (*idle)   = NULL;
+                    (*active) = &m_exit_trap[0].stack;
 
-            m_platform->SetAccessMode(ACCESS_PRIVILEGED);
-            m_platform->StopScheduling();
+                    m_platform->SetAccessMode(ACCESS_PRIVILEGED);
+                    m_platform->StopScheduling();
+                }
+            }
         }
     }
 
@@ -393,12 +421,22 @@ protected:
     */
     typedef KernelTask TaskStorageType[TASKS_MAX];
 
+    /*! \class ExitTrap
+        \brief Exit trap is used for an exit into the main process from which IKernel::Start() was called
+               when all tasks completed their processing and exited by returning from their Run function.
+    */
+    struct ExitTrap
+    {
+        Stack           stack;        //!< stack information
+        StackMemory<32> stack_memory; //!< stack memory
+    };
+
     KernelService        m_service;         //!< run-time kernel service
     IPlatform           *m_platform;        //!< platform driver
     ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
     KernelTask          *m_task_now;        //!< current task task
-    Stack                m_main_process;    //!< saved stack of the main process
     TaskStorageType      m_task_storage;    //!< task storage
+    ExitTrap             m_exit_trap[_Mode == KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (it does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
 };
 
 } // namespace stk
