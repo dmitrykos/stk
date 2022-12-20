@@ -56,7 +56,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     /*! \typedef ExitTrapStackMemory
         \brief   Stack memory wrapper type of the Exit trap.
     */
-    typedef StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> ExitTrapStackMemory;
+    typedef StackMemoryWrapper<STACK_SIZE_MIN> ExitTrapStackMemory;
 
     /*! \class KernelTask
         \brief Concrete implementation of the IKernelTask interface.
@@ -222,10 +222,10 @@ public:
         }
     }
 
-    void Start(uint32_t resolution_us)
+    void Start(uint32_t resolution_us = PERIODICITY_DEFAULT)
     {
         STK_ASSERT(resolution_us != 0);
-        STK_ASSERT(resolution_us < PERIODICITY_MAX);
+        STK_ASSERT(resolution_us <= PERIODICITY_MAX);
         STK_ASSERT(IsInitialized());
 
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());

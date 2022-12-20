@@ -47,9 +47,9 @@ enum EKernelMode
 */
 enum EConsts
 {
-    PERIODICITY_MAX      = 60000000, //!< Maximum reasonable periodicity (microseconds), 60 seconds.
-    PERIODICITY_DEFAULT  = 1000,     //!< Default reasonable periodicity (microseconds), 1 millisecond.
-    EXIT_TRAP_STACK_SIZE = 32        //!< Stack size of the Exit trap.
+    PERIODICITY_MAX      = 99000, //!< Maximum periodicity (microseconds), 60 seconds (note: this value is the highest working on a real hardware and QEMU).
+    PERIODICITY_DEFAULT  = 1000,  //!< Default periodicity (microseconds), 1 millisecond.
+    STACK_SIZE_MIN       = 32     //!< Stack memory size of the Exit trap (see: StackMemoryDef, StackMemoryWrapper).
 };
 
 /*! \class StackMemoryDef
@@ -59,7 +59,7 @@ enum EConsts
 
     Usage example:
     \code
-    StackMemory<128>::Type my_memory_array;
+    StackMemoryDef<128>::Type my_memory_array;
     \endcode
 */
 template <uint32_t _StackSize> struct StackMemoryDef
@@ -143,8 +143,8 @@ private:
     static _InstanceType m_instance; //!< referenced single instance
 };
 
-/*! \class IMemoryRegion
-    \brief Interface of the memory region.
+/*! \class IStackMemory
+    \brief Interface of the stack memory region.
 */
 class IStackMemory
 {
@@ -350,8 +350,11 @@ public:
 
     /*! \brief     Start kernel.
         \param[in] resolution_us: Resolution of the system tick (SysTick) timer in microseconds, (see IPlatform::GetSysTickResolution).
+        \note      If running on STM32 device with HAL driver or on QEMU do not change the default resolution (PERIODICITY_DEFAULT).
+                   STM32's HAL expects 1 millisecond resolution and QEMU does not have enough resolution on Windows
+                   platform to operate correctly on a sub-millisecond resolution.
     */
-    virtual void Start(uint32_t resolution_us) = 0;
+    virtual void Start(uint32_t resolution_us = PERIODICITY_DEFAULT) = 0;
 };
 
 /*! \class IKernelService

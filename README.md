@@ -99,9 +99,7 @@ private:
 
             g_KernelService->DelaySpin(delay_ms);
 
-            g_TaskSwitch = task_id + 1;
-            if (g_TaskSwitch > 2)
-                g_TaskSwitch = 0;
+            g_TaskSwitch = (task_id + 1) % 3;
         }
     }
 };
@@ -119,19 +117,10 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<10> kernel;
-#if defined(_STK_ARCH_ARM_CORTEX_M)
-    static PlatformArmCortexM platform;
-#elif defined(_STK_ARCH_X86_WIN32)
-    static PlatformX86Win32 platform;
-#else
-    #error Unimplemented platform!
-#endif
+    static Kernel<KERNEL_STATIC, 3> kernel;
+    static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
-
-    static MyTask<ACCESS_PRIVILEGED> task1(0);
-    static MyTask<ACCESS_USER> task2(1);
-    static MyTask<ACCESS_USER> task3(2);
+    static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 
@@ -139,7 +128,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(10000);
+    kernel.Start(PERIODICITY_DEFAULT);
 
     assert(false);
     while (true);

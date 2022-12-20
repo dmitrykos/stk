@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(PERIODICITY_DEFAULT);
+    kernel.Start();
 
     return TestContext::DEFAULT_FAILURE_EXIT_CODE;
 }

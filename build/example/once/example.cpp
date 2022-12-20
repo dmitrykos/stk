@@ -127,7 +127,7 @@ void RunExample()
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    kernel.Start(PERIODICITY_DEFAULT);
+    kernel.Start();
 
     for (int i = 0; i < 3; ++i)
     {
@@ -137,7 +137,7 @@ void RunExample()
 
         g_TaskSwitch = 0;
 
-        kernel.Start(PERIODICITY_DEFAULT);
+        kernel.Start();
     }
 
     LED_SET_STATE(LED_RED, true);

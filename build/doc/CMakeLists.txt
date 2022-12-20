@@ -17,6 +17,7 @@ if (DOXYGEN_FOUND)
     set(DOXYGEN_CONFIG_IN ${CMAKE_CURRENT_SOURCE_DIR}/../../Doxyfile)
     set(DOXYGEN_CONFIG ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
     
+    set(DOXYGEN_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/../../stk ${CMAKE_CURRENT_SOURCE_DIR}/../../test")
     configure_file(${DOXYGEN_CONFIG_IN} ${DOXYGEN_CONFIG} @ONLY)
     message(STATUS "Doxygen config file: ${DOXYGEN_CONFIG}")
 

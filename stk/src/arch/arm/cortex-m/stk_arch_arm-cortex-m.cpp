@@ -31,7 +31,6 @@ using namespace stk;
     #define STK_CORTEX_M_PRIVILEGED_MODE_ON() ((void)0)
     #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() ((void)0)
 #endif
-#define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_MSP_MODE 0xFFFFFFF9
 #define STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE 0xFFFFFFFD
 #define STK_CORTEX_M_ISR_PRIORITY_LOWEST 0xFF
 #define STK_CORTEX_M_EXIT_FROM_HANDLER() __asm volatile("BX LR")
@@ -209,7 +208,7 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 
 __stk_forceinline void OnTaskRun()
 {
-    STK_CORTEX_M_DISABLE_INTERRUPTS();
+    // note: STK_CORTEX_M_DISABLE_INTERRUPTS() must be called prior calling this function
 
     LoadStackActive();
 
@@ -244,20 +243,11 @@ static __stk_forceinline void EnableFullFpuAccess()
 
 static void StartScheduling()
 {
-    // disallow any duplicate attempt
-    STK_ASSERT(!g_Context.m_started);
-    if (g_Context.m_started)
-        return;
-
     // FPU
     EnableFullFpuAccess();
 
     // clear FPU usage status if FPU was used before kernel start
     ClearFpuState();
-
-    // set priority
-    NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
-    NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
     // notify kernel
     g_Context.m_handler->OnStart();
@@ -266,6 +256,10 @@ static void StartScheduling()
     uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * g_Context.m_tick_resolution / 1000000));
     STK_ASSERT(result == 0);
     (void)result;
+
+    // set priority (after SysTick_Config because it may change SysTick priority)
+    NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
+    NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
     g_Context.m_started = true;
 }
@@ -286,6 +280,12 @@ void SVC_Handler_Main(size_t *stack)
     switch (svc_arg)
     {
     case 0: {
+        // disallow any duplicate attempt
+        STK_ASSERT(!g_Context.m_started);
+        if (g_Context.m_started)
+            return;
+
+        STK_CORTEX_M_DISABLE_INTERRUPTS();
         StartScheduling();
         OnTaskRun();
         break; }
@@ -427,6 +427,7 @@ void PlatformArmCortexM::Stop()
     g_Context.m_exiting = true;
 
     // load context of the Exit trap
+    STK_CORTEX_M_DISABLE_INTERRUPTS();
     OnTaskRun();
 }
 

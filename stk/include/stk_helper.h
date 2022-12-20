@@ -78,7 +78,11 @@ public:
 
     /*! \brief Constructor .
     */
-    explicit StackMemoryWrapper(MemoryType *stack) : m_stack(stack) {}
+    explicit StackMemoryWrapper(MemoryType *stack) : m_stack(stack)
+    {
+        // note: stack size must be STACK_SIZE_MIN or bigger
+        STK_STATIC_ASSERT(_StackSize >= STACK_SIZE_MIN);
+    }
 
     /*! \brief Get pointer to the stack memory.
     */

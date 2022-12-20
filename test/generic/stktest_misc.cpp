@@ -37,8 +37,8 @@ TEST_GROUP(StackMemoryWrapper)
 
 TEST(StackMemoryWrapper, GetStack)
 {
-    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE>::MemoryType memory;
-    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> wrapper(&memory);
+    StackMemoryWrapper<STACK_SIZE_MIN>::MemoryType memory;
+    StackMemoryWrapper<STACK_SIZE_MIN> wrapper(&memory);
 
     CHECK_TRUE(NULL != wrapper.GetStack());
     CHECK_EQUAL((size_t *)&memory, wrapper.GetStack());
@@ -46,10 +46,10 @@ TEST(StackMemoryWrapper, GetStack)
 
 TEST(StackMemoryWrapper, GetStackSize)
 {
-    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE>::MemoryType memory;
-    StackMemoryWrapper<EXIT_TRAP_STACK_SIZE> wrapper(&memory);
+    StackMemoryWrapper<STACK_SIZE_MIN>::MemoryType memory;
+    StackMemoryWrapper<STACK_SIZE_MIN> wrapper(&memory);
 
-    CHECK_EQUAL(EXIT_TRAP_STACK_SIZE, wrapper.GetStackSize());
+    CHECK_EQUAL(STACK_SIZE_MIN, wrapper.GetStackSize());
     CHECK_EQUAL(sizeof(memory) / sizeof(size_t), wrapper.GetStackSize());
 }
 
