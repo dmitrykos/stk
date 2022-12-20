@@ -96,17 +96,22 @@ g_Context;
 extern "C" void _STK_SYSTICK_HANDLER()
 {
 #ifdef HAL_MODULE_ENABLED // STM32 HAL
+    // make sure STM32 HAL get timing information as it depends on SysTick in delaying procedures
     HAL_IncTick();
-    // unfortunately STM32 HAL is starting SysTick on its initialization that
-    // will cause a crash on NULL, therefore use additional check
+
+    // STM32 HAL is starting SysTick on its initialization that will cause a crash on NULL,
+    // therefore use additional check if HAL_MODULE_ENABLED is defined
     if (g_Context.m_started)
+    {
 #else
-    // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
-    STK_ASSERT(g_Context.m_started);
-    STK_ASSERT(g_Context.m_handler != NULL);
+    {
+        // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
+        STK_ASSERT(g_Context.m_started);
+        STK_ASSERT(g_Context.m_handler != NULL);
 #endif
-    g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-    __DSB();
+        g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+        __DSB();
+    }
 }
 
 __stk_forceinline void SaveStackIdle()
@@ -324,12 +329,12 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 
 static void OnTaskExit()
 {
-    uint32_t mutex;
-    STK_CORTEX_M_CRITICAL_SESSION_START(mutex);
+    uint32_t cs;
+    STK_CORTEX_M_CRITICAL_SESSION_START(cs);
 
     g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
 
-    STK_CORTEX_M_CRITICAL_SESSION_END(mutex);
+    STK_CORTEX_M_CRITICAL_SESSION_END(cs);
 
     while (true)
     {
@@ -361,7 +366,7 @@ void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution
 
 bool PlatformArmCortexM::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
 {
-    uint32_t stack_size = stack_memory->GetStackSize();
+    int32_t stack_size = stack_memory->GetStackSize();
     if (stack_size <= STK_CORTEX_M_REGISTER_COUNT)
         return false;
 
@@ -442,6 +447,16 @@ void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
         STK_CORTEX_M_PRIVILEGED_MODE_ON();
     else
         STK_CORTEX_M_PRIVILEGED_MODE_OFF();
+}
+
+void PlatformArmCortexM::SwitchToNext()
+{
+    uint32_t cs;
+    STK_CORTEX_M_CRITICAL_SESSION_START(cs);
+
+    g_Context.m_handler->OnTaskSwitch(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+
+    STK_CORTEX_M_CRITICAL_SESSION_END(cs);
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

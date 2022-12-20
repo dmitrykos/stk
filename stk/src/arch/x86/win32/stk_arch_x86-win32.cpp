@@ -41,8 +41,11 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, exit_trap, first_stack, resolution_us);
 
-        m_winmm_dll    = NULL;
-        m_timer_thread = NULL;
+        m_winmm_dll     = NULL;
+        m_timer_thread  = NULL;
+        m_switch_thread = NULL;
+        m_switch_event  = NULL;
+        m_inside_timer  = false;
 
         STK_X86_WIN32_CRITICAL_SECTION_INIT(&m_cs);
 
@@ -84,13 +87,18 @@ static struct Context : public PlatformContext
 
     void ConfigureTime();
     void CreateThreadsForTasks();
+    void CreateSwitchThread();
     void CreateTimerThreadAndJoin();
+    void Cleanup();
 
     HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                         m_timer_thread;  //!< timer thread handle
+    HANDLE                         m_switch_thread; //!< switch thread handle
+    HANDLE                         m_switch_event;  //!< switch event handle
     std::list<TaskContext>         m_tasks;         //!< list of task internal contexts
     std::vector<HANDLE>            m_task_threads;  //!< task threads
     STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
+    volatile bool                  m_inside_timer;  //!< inside timer flag
 }
 g_Context;
 
@@ -101,9 +109,32 @@ static DWORD WINAPI TimerThread(LPVOID param)
     DWORD wait_ms = g_Context.m_tick_resolution / 1000;
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
+        g_Context.m_inside_timer = true;
+
         STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
 
         g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+
+        STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
+
+        g_Context.m_inside_timer = false;
+    }
+
+    return 0;
+}
+
+static DWORD WINAPI SwitchThread(LPVOID param)
+{
+    (void)param;
+
+    while (WaitForSingleObject(g_Context.m_switch_event, INFINITE) == WAIT_OBJECT_0)
+    {
+        if (g_Context.m_inside_timer)
+            continue;
+
+        STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
+
+        g_Context.m_handler->OnTaskSwitch(&g_Context.m_stack_idle, &g_Context.m_stack_active);
 
         STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
     }
@@ -154,6 +185,16 @@ static void OnTaskExit()
     g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
 }
 
+void Context::CreateSwitchThread()
+{
+    // create switch event
+    m_switch_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+    // create switch thread with highest priority
+    g_Context.m_switch_thread = CreateThread(NULL, 0, &SwitchThread, NULL, 0, NULL);
+    SetThreadPriority(g_Context.m_switch_thread, THREAD_PRIORITY_TIME_CRITICAL);
+}
+
 void Context::CreateTimerThreadAndJoin()
 {
     // create tick thread with highest priority
@@ -193,17 +234,36 @@ void Context::CreateTimerThreadAndJoin()
     WaitForSingleObject(g_Context.m_timer_thread, INFINITE);
 }
 
+void Context::Cleanup()
+{
+    // close thread handles of all tasks
+    for (std::list<Context::TaskContext>::iterator itr = m_tasks.begin(); itr != m_tasks.end(); ++itr)
+    {
+        CloseHandle((*itr).m_thread);
+    }
+
+    // close timer thread
+    CloseHandle(m_timer_thread);
+
+    // close switch thread
+    CloseHandle(m_switch_thread);
+    CloseHandle(m_switch_event);
+}
+
 void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
 {
     g_Context.Initialize(event_handler, exit_trap, first_task->GetUserStack(), resolution_us);
 
     g_Context.ConfigureTime();
+    g_Context.CreateSwitchThread();
     g_Context.CreateThreadsForTasks();
     g_Context.CreateTimerThreadAndJoin();
+    g_Context.Cleanup();
 }
 
 void PlatformX86Win32::Stop()
 {
+	TerminateThread(g_Context.m_switch_thread, 0);
 	TerminateThread(g_Context.m_timer_thread, 0);
 }
 
@@ -240,6 +300,11 @@ int32_t PlatformX86Win32::GetTickResolution() const
 void PlatformX86Win32::SetAccessMode(EAccessMode mode)
 {
     (void)mode;
+}
+
+void PlatformX86Win32::SwitchToNext()
+{
+    SetEvent(g_Context.m_switch_event);
 }
 
 #endif // _STK_ARCH_X86_WIN32

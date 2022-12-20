@@ -27,6 +27,7 @@ public:
     void SwitchContext();
     int32_t GetTickResolution() const;
     void SetAccessMode(EAccessMode mode);
+    void SwitchToNext();
 };
 
 /*! \typedef PlatformDefault
