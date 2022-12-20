@@ -1,4 +1,4 @@
-name: Tests Switch (QEMU, Arm Cortex-M0,3,4)
+name: Test - Switch (QEMU, Arm Cortex-M0,3,4)
 
 on:
   push:

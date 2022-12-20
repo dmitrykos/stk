@@ -18,23 +18,21 @@ using namespace stk::test;
 
 STK_TEST_DECL_ASSERT;
 
-#define _STK_SWITCH_TEST_TASKS_MAX 3
-#define _STK_SWITCH_TEST_CYCLES_MAX 2
+#define _STK_CHAIN_TEST_TASKS_MAX 3
 
 namespace stk {
 namespace test {
 
-/*! \namespace stk::test::switch_
+/*! \namespace stk::test::chain
     \brief     Namespace of Switch test.
  */
-namespace switch_ {
+namespace chain {
 
 static volatile uint8_t g_TaskSwitch = 0;
-static volatile uint8_t g_Cycles[_STK_SWITCH_TEST_TASKS_MAX] = {};
 
 /*! \class TestTask
     \brief Switch test task.
-    \note  Counts __STK_SWITCH_TEST_CYCLES_MAX cycles with _STK_SWITCH_TEST_TASKS_MAX. Succeeds if counter incremented correctly.
+    \note  Counts __STK_CHAIN_TEST_CYCLES_MAX cycles with _STK_CHAIN_TEST_TASKS_MAX. Succeeds if counter incremented correctly.
 */
 template <EAccessMode _AccessMode>
 class TestTask : public Task<256, _AccessMode>
@@ -60,40 +58,17 @@ private:
                 continue;
             }
 
-            ++g_Cycles[task_id];
-            //printf("c=%d id=%d\n", g_Cycles[task_id], task_id);
-
-            // count total workload of all tasks
-            uint32_t total = 0;
-            for (int32_t i = 0; i < _STK_SWITCH_TEST_TASKS_MAX; ++i)
-            {
-                total += g_Cycles[i];
-            }
-
-            // check if it is a time to evaluate workload counters
-            if (total >= (_STK_SWITCH_TEST_CYCLES_MAX * _STK_SWITCH_TEST_TASKS_MAX))
-            {
-                STK_TEST_CHECK_EQUAL((_STK_SWITCH_TEST_CYCLES_MAX * _STK_SWITCH_TEST_TASKS_MAX), total);
-
-                // check if workload is spread equally between all tasks
-                for (int32_t i = 0; i < _STK_SWITCH_TEST_TASKS_MAX; ++i)
-                {
-                    STK_TEST_CHECK_EQUAL(_STK_SWITCH_TEST_CYCLES_MAX, g_Cycles[i]);
-                }
-
-                // success, exit process
-                TestContext::ForceExitTestSuie(TestContext::SUCCESS_EXIT_CODE);
-                break;
-            }
+            printf("id=%d\n", task_id);
 
             g_KernelService->DelaySpin(100);
 
             g_TaskSwitch = (task_id + 1) % 3;
+            return;
         }
     }
 };
 
-} // namespace switch_
+} // namespace chain
 } // namespace test
 } // namespace stk
 
@@ -107,9 +82,9 @@ int main(int argc, char **argv)
 
     using namespace stk;
     using namespace stk::test;
-    using namespace stk::test::switch_;
+    using namespace stk::test::chain;
 
-    static Kernel<KERNEL_STATIC, _STK_SWITCH_TEST_TASKS_MAX> kernel;
+    static Kernel<KERNEL_DYNAMIC, _STK_CHAIN_TEST_TASKS_MAX> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
     static TestTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
@@ -124,5 +99,6 @@ int main(int argc, char **argv)
 
     kernel.Start();
 
-    return TestContext::DEFAULT_FAILURE_EXIT_CODE;
+    TestContext::ShowTestSuiteEpilogue(TestContext::SUCCESS_EXIT_CODE);
+    return TestContext::SUCCESS_EXIT_CODE;
 }

@@ -18,14 +18,19 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <list>
 #include <assert.h>
+#include <list>
+#include <vector>
 
 typedef UINT MMRESULT;
 typedef MMRESULT (* timeBeginPeriodF)(UINT uPeriod);
 static timeBeginPeriodF timeBeginPeriod = NULL;
 
-#define _STK_ARCH_X86_WIN32_MIN_RESOLUTION (10 * 1000)
+#define STK_X86_WIN32_CRITICAL_SECTION CRITICAL_SECTION
+#define STK_X86_WIN32_CRITICAL_SECTION_INIT(SES) InitializeCriticalSection(SES)
+#define STK_X86_WIN32_CRITICAL_SECTION_START(SES) EnterCriticalSection(SES)
+#define STK_X86_WIN32_CRITICAL_SECTION_END(SES) LeaveCriticalSection(SES)
+#define STK_X86_WIN32_MIN_RESOLUTION (10 * 1000)
 
 using namespace stk;
 
@@ -38,6 +43,8 @@ static struct Context : public PlatformContext
 
         m_winmm_dll    = NULL;
         m_timer_thread = NULL;
+
+        STK_X86_WIN32_CRITICAL_SECTION_INIT(&m_cs);
 
         LoadWindowsAPI();
     }
@@ -79,9 +86,11 @@ static struct Context : public PlatformContext
     void CreateThreadsForTasks();
     void CreateTimerThreadAndJoin();
 
-    HMODULE                m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
-    HANDLE                 m_timer_thread;  //!< timer thread handle
-    std::list<TaskContext> m_tasks;         //!< list of task internal contexts
+    HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
+    HANDLE                         m_timer_thread;  //!< timer thread handle
+    std::list<TaskContext>         m_tasks;         //!< list of task internal contexts
+    std::vector<HANDLE>            m_task_threads;  //!< task threads
+    STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
 }
 g_Context;
 
@@ -92,7 +101,11 @@ static DWORD WINAPI TimerThread(LPVOID param)
     DWORD wait_ms = g_Context.m_tick_resolution / 1000;
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
+        STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
+
         g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
+
+        STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
     }
 
     return 0;
@@ -110,8 +123,8 @@ static DWORD WINAPI TaskThread(LPVOID param)
 void Context::ConfigureTime()
 {
     // Windows timers are jittery, so make resolution more coarse
-    if (m_tick_resolution < _STK_ARCH_X86_WIN32_MIN_RESOLUTION)
-        m_tick_resolution = _STK_ARCH_X86_WIN32_MIN_RESOLUTION;
+    if (m_tick_resolution < STK_X86_WIN32_MIN_RESOLUTION)
+        m_tick_resolution = STK_X86_WIN32_MIN_RESOLUTION;
 
     // increase precision of ticks to at least 1 ms (although Windows timers will still be quite coarse and have jitter of +1 ms)
     timeBeginPeriod(1);
@@ -129,10 +142,16 @@ void Context::CreateThreadsForTasks()
         uint32_t stack_size = tctx->m_task->GetStackSize() * sizeof(size_t);
 
         tctx->m_thread = CreateThread(NULL, stack_size, &TaskThread, tctx, CREATE_SUSPENDED, NULL);
+        m_task_threads.push_back(tctx->m_thread);
     }
 
     // start first task
     ResumeThread((*first).m_thread);
+}
+
+static void OnTaskExit()
+{
+    g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
 }
 
 void Context::CreateTimerThreadAndJoin()
@@ -141,7 +160,36 @@ void Context::CreateTimerThreadAndJoin()
     g_Context.m_timer_thread = CreateThread(NULL, 0, &TimerThread, NULL, 0, NULL);
     SetThreadPriority(g_Context.m_timer_thread, THREAD_PRIORITY_TIME_CRITICAL);
 
-    // join (never returns to the caller from here unless thread is killed)
+    while (!m_task_threads.empty())
+    {
+        DWORD result = WaitForMultipleObjects(m_task_threads.size(), m_task_threads.data(), FALSE, INFINITE);
+        STK_ASSERT(result != WAIT_TIMEOUT);
+        STK_ASSERT(result != WAIT_ABANDONED);
+        STK_ASSERT(result != WAIT_FAILED);
+
+        STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
+
+        uint32_t i = 0;
+        for (std::vector<HANDLE>::iterator itr = m_task_threads.begin(); itr != m_task_threads.end(); ++itr)
+        {
+            if (result == (WAIT_OBJECT_0 + i))
+            {
+                TaskContext *task_ctx = reinterpret_cast<TaskContext *>(g_Context.m_stack_active->SP);
+                STK_ASSERT(task_ctx->m_thread == (*itr));
+
+                OnTaskExit();
+
+                m_task_threads.erase(itr);
+                break;
+            }
+
+            ++i;
+        }
+
+        STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
+    }
+
+    // join (never returns to the caller from here unless thread is terminated, see KERNEL_DYNAMIC)
     WaitForSingleObject(g_Context.m_timer_thread, INFINITE);
 }
 
@@ -161,9 +209,16 @@ void PlatformX86Win32::Stop()
 
 bool PlatformX86Win32::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
 {
-    g_Context.m_tasks.push_back(Context::TaskContext(user_task));
+    if (user_task != NULL)
+    {
+        g_Context.m_tasks.push_back(Context::TaskContext(user_task));
 
-    stack->SP = reinterpret_cast<size_t>(&g_Context.m_tasks.back());
+        stack->SP = reinterpret_cast<size_t>(&g_Context.m_tasks.back());
+    }
+    else // Exit trap
+    {
+        stack->SP = reinterpret_cast<size_t>(stack_memory);
+    }
 
     return true;
 }

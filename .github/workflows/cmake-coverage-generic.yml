@@ -1,4 +1,4 @@
-name: Code Coverage Generic
+name: Code Coverage - Generic
 
 on:
   push:

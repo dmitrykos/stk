@@ -46,7 +46,7 @@ message(STATUS "System: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
 if (GCC)
-	add_compile_options("-std=c++11")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 if (MSVC)
 	link_libraries("Winmm") # for CppUTest

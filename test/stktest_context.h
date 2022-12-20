@@ -46,6 +46,11 @@ public:
     */
     static inline void ShowTestSuitePrologue()
     {
+        // required to show log in Eclipse IDE Console for 64-bit binary
+    #if defined(_WIN32) || defined(WIN32)
+        setbuf(stdout, NULL);
+    #endif
+
         printf("STKTEST-START\n");
     }
 
