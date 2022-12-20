@@ -48,6 +48,7 @@ public:
     {
         m_event_handler          = NULL;
         m_started                = false;
+        m_switch_to_next_nr      = 0;
         m_first_task_Start       = NULL;
         m_stack_InitStack        = NULL;
         m_stack_memory_InitStack = NULL;
@@ -57,6 +58,8 @@ public:
         m_resolution             = 0;
         m_access_mode            = ACCESS_USER;
         m_context_switch_nr      = 0;
+        m_stack_idle             = NULL;
+        m_stack_active           = NULL;
     }
 
     virtual ~PlatformTestMock()
@@ -108,6 +111,12 @@ public:
         m_access_mode = mode;
     }
 
+    void SwitchToNext()
+    {
+        ++m_switch_to_next_nr;
+        m_event_handler->OnTaskSwitch(&m_stack_idle, &m_stack_active);
+    }
+
     IEventHandler *m_event_handler;
     IKernelTask   *m_first_task_Start;
     Stack         *m_stack_InitStack;
@@ -116,9 +125,12 @@ public:
     Stack         *m_exit_trap;
     bool           m_fail_InitStack;
     int32_t        m_resolution;
-    bool           m_started;
     EAccessMode    m_access_mode;
     uint32_t       m_context_switch_nr;
+    bool           m_started;
+    uint32_t       m_switch_to_next_nr;
+    Stack         *m_stack_idle;
+    Stack         *m_stack_active;
 };
 
 /*! \class KernelServiceMock
@@ -129,9 +141,10 @@ class KernelServiceMock : public IKernelService
 public:
     KernelServiceMock()
     {
-        m_inc_ticks  = false;
-        m_ticks      = 0;
-        m_resolution = 0;
+        m_inc_ticks      = false;
+        m_switch_to_next = false;
+        m_ticks          = 0;
+        m_resolution     = 0;
     }
     virtual ~KernelServiceMock()
     { }
@@ -149,7 +162,13 @@ public:
         return m_resolution;
     }
 
+    void SwitchToNext()
+    {
+        m_switch_to_next = true;
+    }
+
     bool    m_inc_ticks;
+    bool    m_switch_to_next;
     int64_t m_ticks;
     int32_t m_resolution;
 };

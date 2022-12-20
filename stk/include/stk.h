@@ -160,6 +160,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             return m_platform->GetTickResolution();
         }
 
+        void SwitchToNext()
+        {
+            m_platform->SwitchToNext();
+        }
+
     private:
         void IncrementTick()
         {
@@ -329,6 +334,11 @@ protected:
     void OnSysTick(Stack **idle, Stack **active)
     {
         m_service.IncrementTick();
+        SwitchTask(idle, active);
+    }
+
+    void OnTaskSwitch(Stack **idle, Stack **active)
+    {
         SwitchTask(idle, active);
     }
 

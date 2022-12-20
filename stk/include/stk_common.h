@@ -245,9 +245,15 @@ public:
 
         /*! \brief      Called by ISR handler to notify about the next system tick.
             \param[out] idle: Stack of the task which shall go into Idle state.
-            \param[out] active:  Stack of the task which shall go into Active state (to which context will switch).
+            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
         */
         virtual void OnSysTick(Stack **idle, Stack **active) = 0;
+
+        /*! \brief      Called by ISR handler or Thread process (via IKernelService::SwitchToNext) to switch to a next task.
+            \param[out] idle: Stack of the task which shall go into Idle state.
+            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
+        */
+        virtual void OnTaskSwitch(Stack **idle, Stack **active) = 0;
 
         /*! \brief      Called from the Thread process when task finished (its Run function exited by return).
             \param[out] stack: Stack of the exited task.
@@ -290,6 +296,10 @@ public:
         \param[in] mode: Access mode.
     */
     virtual void SetAccessMode(EAccessMode mode) = 0;
+
+    /*! \brief     Switch to a next task.
+    */
+    virtual void SwitchToNext() = 0;
 };
 
 /*! \class ITaskSwitchStrategy
@@ -393,6 +403,10 @@ public:
             __stk_relax_cpu();
         }
     }
+
+    /*! \brief     Notify scheduler that it can switch to a next task.
+    */
+    virtual void SwitchToNext() = 0;
 };
 
 } // namespace stk
