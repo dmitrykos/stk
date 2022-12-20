@@ -87,5 +87,7 @@ int main(void) {
 #endif
 
     RunExample();
-    return 0 ;
+    
+    // should not reach here
+    return 1;
 }

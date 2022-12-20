@@ -63,5 +63,7 @@ int main(int argc, char* argv[])
     (void)argv;
 
     RunExample();
-    return 0 ;
+
+    // should not reach here
+    return 1;
 }

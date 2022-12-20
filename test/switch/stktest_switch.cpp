@@ -19,7 +19,7 @@ using namespace stk::test;
 STK_TEST_DECL_ASSERT;
 
 #define _STK_SWITCH_TEST_TASKS_MAX 3
-#define _STK_SWITCH_TEST_CYCLES_MAX 2
+#define _STK_SWITCH_TEST_CYCLES_MAX 3
 
 namespace stk {
 namespace test {
@@ -61,7 +61,7 @@ private:
             }
 
             ++g_Cycles[task_id];
-            //printf("c=%d id=%d\n", g_Cycles[task_id], task_id);
+            printf("id=%d c=%d\n", task_id, g_Cycles[task_id]);
 
             // count total workload of all tasks
             uint32_t total = 0;
@@ -105,6 +105,8 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
+    TestContext::ShowTestSuitePrologue();
+
     using namespace stk;
     using namespace stk::test;
     using namespace stk::test::switch_;
@@ -113,8 +115,6 @@ int main(int argc, char **argv)
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
     static TestTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
-
-    TestContext::ShowTestSuitePrologue();
 
     kernel.Initialize(&platform, &tsstrategy);
 

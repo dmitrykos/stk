@@ -51,5 +51,7 @@ int main(void)
     setbuf(stdout, NULL);
 
     RunExample();
-    return 0 ;
+
+    // should not reach here
+    return 1;
 }

@@ -126,7 +126,6 @@ void RunExample()
 
     kernel.Start();
 
-    assert(false);
-    while (true);
+    STK_ASSERT(false);
 }
 

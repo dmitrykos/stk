@@ -79,6 +79,8 @@ int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+    
+    TestContext::ShowTestSuitePrologue();
 
     using namespace stk;
     using namespace stk::test;
@@ -88,8 +90,6 @@ int main(int argc, char **argv)
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
     static TestTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
-
-    TestContext::ShowTestSuitePrologue();
 
     kernel.Initialize(&platform, &tsstrategy);
 
