@@ -103,8 +103,10 @@
 #endif
 
 /*! \def   __stk_relax_cpu
+    \note  Can be redefined by STK tests to intercept control inside the waiting loops in the Kernel.
     \brief Emits CPU relaxing instruction for usage inside a hot-spinning loop.
 */
+#ifndef __stk_relax_cpu
 #ifdef __GNUC__
     #if defined(__i386__) || defined(__x86_64__)
         #define __stk_relax_cpu() __builtin_ia32_pause()
@@ -113,6 +115,7 @@
     #endif
 #else
     #define __stk_relax_cpu()
+#endif
 #endif
 
 /*! \def   STK_ASSERT
@@ -135,6 +138,11 @@
     \brief Complie-time assert.
 */
 #define STK_STATIC_ASSERT(X) STK_STATIC_ASSERT_N(_, X)
+
+/*! \def   STK_STACK_MEMORY_FILLER
+    \brief Stack memory filler (stack memory is filled with this value when intialized).
+*/
+#define STK_STACK_MEMORY_FILLER ((size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef))
 
 /*! \namespace stk
     \brief     Namespace of STK package.

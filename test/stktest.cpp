@@ -13,8 +13,8 @@
 using namespace stk;
 using namespace stk::test;
 
-// Define TestContext instance.
 TestContext test::g_TestContext;
+void (* g_RelaxCpuHandler)() = NULL;
 
 /*! \fn    _STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.

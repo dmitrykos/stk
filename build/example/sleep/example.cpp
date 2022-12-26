@@ -11,28 +11,6 @@
 #include <stk.h>
 #include "example.h"
 
-static volatile uint8_t g_TaskSwitch = 0;
-
-#if 0
-static void Delay(uint32_t delay_ms)
-{
-    // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
-
-    // ldr     r3, [sp, #4]
-    // subs    r3, #1
-    // cmp     r3, #0
-    // str     r3, [sp, #4]
-
-    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 1 + 2) * 4));
-    while (--i > 0);
-}
-#else
-static __stk_forceinline void Delay(uint32_t delay_ms)
-{
-    g_KernelService->Delay(delay_ms);
-}
-#endif
-
 template <stk::EAccessMode _AccessMode>
 class MyTask : public stk::Task<256, _AccessMode>
 {
@@ -57,44 +35,28 @@ private:
 
     void RunInner()
     {
-        uint8_t task_id = m_task_id;
+        // task 0: sleep 1000 ms
+        // task 1: sleep 2000 ms
+        // task 2: sleep 3000 ms
+        g_KernelService->Sleep(1000 * (m_task_id + 1));
 
-        volatile float count = 0;
-        volatile uint64_t count_skip = 0;
-
-        while (true)
+        switch (m_task_id)
         {
-            if (g_TaskSwitch != task_id)
-            {
-                ++count_skip;
-                continue;
-            }
-
-            ++count;
-
-            switch (task_id)
-            {
-            case 0:
-                LED_SET_STATE(LED_RED, true);
-                LED_SET_STATE(LED_GREEN, false);
-                LED_SET_STATE(LED_BLUE, false);
-                break;
-            case 1:
-                LED_SET_STATE(LED_RED, false);
-                LED_SET_STATE(LED_GREEN, true);
-                LED_SET_STATE(LED_BLUE, false);
-                break;
-            case 2:
-                LED_SET_STATE(LED_RED, false);
-                LED_SET_STATE(LED_GREEN, false);
-                LED_SET_STATE(LED_BLUE, true);
-                break;
-            }
-
-            Delay(1000);
-
-            g_TaskSwitch = (task_id + 1) % 3;
-            return;
+        case 0:
+            LED_SET_STATE(LED_RED, true);
+            LED_SET_STATE(LED_GREEN, false);
+            LED_SET_STATE(LED_BLUE, false);
+            break;
+        case 1:
+            LED_SET_STATE(LED_RED, false);
+            LED_SET_STATE(LED_GREEN, true);
+            LED_SET_STATE(LED_BLUE, false);
+            break;
+        case 2:
+            LED_SET_STATE(LED_RED, false);
+            LED_SET_STATE(LED_GREEN, false);
+            LED_SET_STATE(LED_BLUE, true);
+            break;
         }
     }
 };
@@ -117,9 +79,7 @@ void RunExample()
     static SwitchStrategyRoundRobin tsstrategy;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
-    static MyTask<ACCESS_PRIVILEGED> task1(0);
-    static MyTask<ACCESS_PRIVILEGED> task2(1);
-    static MyTask<ACCESS_PRIVILEGED> task3(2);
+    static MyTask<ACCESS_USER> task1(0), task2(1), task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 
@@ -134,8 +94,6 @@ void RunExample()
         kernel.AddTask(&task1);
         kernel.AddTask(&task2);
         kernel.AddTask(&task3);
-
-        g_TaskSwitch = 0;
 
         kernel.Start();
     }

@@ -42,6 +42,17 @@ enum EKernelMode
     KERNEL_DYNAMIC      //!< Tasks can be added or removed and therefore exit when done.
 };
 
+/*! \enum  EStackType
+    \brief Stack type.
+    \see   IPlatform::InitStack
+*/
+enum EStackType
+{
+    STACK_USER_TASK = 0, //!< Stack of the user task.
+    STACK_SLEEP_TRAP,    //!< Stack of the Sleep trap.
+    STACK_EXIT_TRAP      //!< Stack of the Exit trap.
+};
+
 /*! \enum  EConsts
     \brief Constants.
 */
@@ -249,11 +260,16 @@ public:
         */
         virtual void OnSysTick(Stack **idle, Stack **active) = 0;
 
-        /*! \brief      Called by ISR handler or Thread process (via IKernelService::SwitchToNext) to switch to a next task.
-            \param[out] idle: Stack of the task which shall go into Idle state.
-            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
+        /*! \brief      Called by Thread process (via IKernelService::SwitchToNext) to switch to a next task.
+            \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
         */
-        virtual void OnTaskSwitch(Stack **idle, Stack **active) = 0;
+        virtual void OnTaskSwitch(size_t caller_SP) = 0;
+
+        /*! \brief      Called by Thread process (via IKernelService::Sleep) for exclusion of the calling process from scheduling (sleeping).
+            \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
+            \param[in]  sleep_ticks: Time to sleep (ticks).
+        */
+        virtual void OnTaskSleep(size_t caller_SP, uint32_t sleep_ticks) = 0;
 
         /*! \brief      Called from the Thread process when task finished (its Run function exited by return).
             \param[out] stack: Stack of the exited task.
@@ -275,11 +291,12 @@ public:
     virtual void Stop() = 0;
 
     /*! \brief     Initialize stack memory of the user task.
+        \param[in] stack_type: Stack type.
         \param[in] stack: Stack descriptor.
         \param[in] stack_memory: Stack memory.
         \param[in] user_task: User task to which Stack belongs.
     */
-    virtual bool InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task) = 0;
+    virtual bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task) = 0;
 
     /*! \brief     Switches context of the tasks.
     */
@@ -300,6 +317,12 @@ public:
     /*! \brief     Switch to a next task.
     */
     virtual void SwitchToNext() = 0;
+
+    /*! \brief     Put calling process into a sleep state.
+        \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
+        \param[in] ticks: Time to sleep (ticks).
+    */
+    virtual void SleepTicks(uint32_t ticks) = 0;
 };
 
 /*! \class ITaskSwitchStrategy
@@ -382,27 +405,34 @@ public:
     /*! \brief     Get number of microseconds in one tick.
         \note      Tick is a periodicity of the system timer expressed in microseconds.
     */
-    virtual int32_t GetTicksResolution() const = 0;
+    virtual int32_t GetTickResolution() const = 0;
 
-    /*! \brief     Get deadline expressed in ticks.
-        \param[in] deadline_ms: Deadline in milliseconds.
+    /*! \brief     Convert microseconds to ticks.
+        \param[in] us: Value (microseconds).
     */
-    int64_t GetDeadlineTicks(int64_t deadline_ms) const
+    int64_t ConvertMicrosecondsToTicks(int64_t us) const
     {
-        return GetTicks() + deadline_ms * 1000 / GetTicksResolution();
+        return us / GetTickResolution();
     }
 
-    /*! \brief     Delay calling user process by spinning in a loop and checking for a deadline expiry.
-        \param[in] delay_ms: Delay in milliseconds.
+    /*! \brief     Delay calling process.
+        \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
+        \param[in] delay_ms: Delay time (milliseconds).
     */
-    void DelaySpin(uint32_t delay_ms) const
+    void Delay(uint32_t delay_ms) const
     {
-        int64_t deadline = GetDeadlineTicks(delay_ms);
+        int64_t deadline = GetTicks() + ConvertMicrosecondsToTicks(delay_ms * 1000);
         while (GetTicks() < deadline)
         {
             __stk_relax_cpu();
         }
     }
+
+    /*! \brief     Put calling process into a sleep state.
+        \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
+        \param[in] sleep_ms: Sleep time (milliseconds).
+    */
+    virtual void Sleep(uint32_t sleep_ms) = 0;
 
     /*! \brief     Notify scheduler that it can switch to a next task.
     */

@@ -65,7 +65,7 @@ public:
     /*! \brief     Exit test suite process forcibly.
         \param[in] result: 0 if no tests are failed otherwise number of failed tests.
     */
-    static inline void ForceExitTestSuie(int32_t result)
+    static inline void ForceExitTestSuite(int32_t result)
     {
         ShowTestSuiteEpilogue(result);
         exit(result);

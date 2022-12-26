@@ -35,6 +35,7 @@ using namespace stk;
 #define STK_CORTEX_M_ISR_PRIORITY_LOWEST 0xFF
 #define STK_CORTEX_M_EXIT_FROM_HANDLER() __asm volatile("BX LR")
 #define STK_CORTEX_M_START_SCHEDULING() __asm volatile("SVC #0")
+#define STK_CORTEX_M_FORCE_SWITCH() __asm volatile("SVC #1")
 
 //! Do sanity check for a compiler define, __CORTEX_M must be defined.
 #ifndef __CORTEX_M
@@ -83,15 +84,24 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, exit_trap, first_stack, resolution_us);
 
-        m_started = false;
-        m_exiting = false;
+        m_access_mode = ACCESS_PRIVILEGED;
+        m_started     = false;
+        m_exiting     = false;
     }
 
-    bool    m_started;  //!< 'true' when in started state
-    bool    m_exiting;  //!< 'true' when is exiting the scheduling process
-    jmp_buf m_exit_buf; //!< saved context of the exit point
+    EAccessMode m_access_mode; //!< hardware access mode
+    bool        m_started;     //!< 'true' when in started state
+    bool        m_exiting;     //!< 'true' when is exiting the scheduling process
+    jmp_buf     m_exit_buf;    //!< saved context of the exit point
 }
 g_Context;
+
+/*! \brief Get SP of the calling process.
+*/
+__stk_forceinline size_t GetCallerSP()
+{
+    return __get_PSP();
+}
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
@@ -109,8 +119,13 @@ extern "C" void _STK_SYSTICK_HANDLER()
         STK_ASSERT(g_Context.m_started);
         STK_ASSERT(g_Context.m_handler != NULL);
 #endif
+        uint32_t cs;
+        STK_CORTEX_M_CRITICAL_SESSION_START(cs);
+
         g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
         __DSB();
+
+        STK_CORTEX_M_CRITICAL_SESSION_END(cs);
     }
 }
 
@@ -194,7 +209,7 @@ __stk_forceinline void LoadStackActive()
     "MSR        psp, r0         \n");
 }
 
-__stk_forceinline void OnTaskSwitch()
+extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 {
     STK_CORTEX_M_DISABLE_INTERRUPTS();
 
@@ -204,11 +219,6 @@ __stk_forceinline void OnTaskSwitch()
     STK_CORTEX_M_ENABLE_INTERRUPTS();
 
     STK_CORTEX_M_EXIT_FROM_HANDLER();
-}
-
-extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
-{
-    OnTaskSwitch();
 }
 
 __stk_forceinline void OnTaskRun()
@@ -294,9 +304,10 @@ void SVC_Handler_Main(size_t *stack)
         StartScheduling();
         OnTaskRun();
         break; }
-    default:
+
+    default: {
         STK_ASSERT(false);
-        break;
+        break; }
     }
 }
 
@@ -342,6 +353,22 @@ static void OnTaskExit()
     }
 }
 
+static void OnSchedulerSleep()
+{
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_OnIdle();
+#endif
+
+    for (;;)
+    {
+        SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk; // disable deep-sleep, go into a WAIT mode (sleep)
+        __DSB();                            // ensure store takes effect (see ARM info)
+
+        __WFI();                            // enter sleep mode
+        __ISB();
+    }
+}
+
 static void OnSchedulerExit()
 {
     __set_CONTROL(0); // switch to MSP
@@ -364,22 +391,15 @@ void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution
     STK_CORTEX_M_START_SCHEDULING();
 }
 
-bool PlatformArmCortexM::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
+bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task)
 {
-    int32_t stack_size = stack_memory->GetStackSize();
-    if (stack_size <= STK_CORTEX_M_REGISTER_COUNT)
-        return false;
+    STK_ASSERT(stack_memory->GetStackSize() > STK_CORTEX_M_REGISTER_COUNT);
 
-    size_t *stack_top = stack_memory->GetStack() + stack_size;
+    // initialize stack memory (up to depth -3 as we fill xPSR, PC and LR explicitly)
+    size_t *stack_top = g_Context.InitStackMemory(stack_memory, 3);
 
     // initialize Stack Pointer (SP)
     stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
-
-    // initialize stack memory
-    for (int32_t i = -stack_size; i <= -4; ++i)
-    {
-        stack_top[i] = (size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef);
-    }
 
     // xPSR, PC, LR, R12, R3, R2, R1, R0
     // -1    -2  -3  -4   -5  -6  -7  -8
@@ -390,17 +410,28 @@ bool PlatformArmCortexM::InitStack(Stack *stack, IStackMemory *stack_memory, ITa
     stack_top[-1] = xPSR;
 
     // initialize registers for the user task's first start
-    if (user_task != NULL)
+    switch (stack_type)
     {
+    case STACK_USER_TASK: {
         PC = (size_t)user_task->GetFunc() & ~0x1UL; // "Bit [0] is always 0, so instructions are always aligned to halfword boundaries" (https://developer.arm.com/documentation/ddi0413/c/programmer-s-model/registers/general-purpose-registers)
         LR = (size_t)OnTaskExit;
         R0 = (size_t)user_task->GetFuncUserData();
-    }
-    else
-    {
-        PC = (size_t)OnSchedulerExit & ~0x1UL; // scheduler's Exit trap
+        break; }
+
+    case STACK_SLEEP_TRAP: {
+        PC = (size_t)OnSchedulerSleep & ~0x1UL;
+        LR = (size_t)OnSchedulerSleep;
+        R0 = 0;
+        break; }
+
+    case STACK_EXIT_TRAP: {
+        PC = (size_t)OnSchedulerExit & ~0x1UL;
         LR = (size_t)OnSchedulerExit;
         R0 = 0;
+        break; }
+
+    default:
+        return false;
     }
 
     stack_top[-2] = PC;
@@ -417,8 +448,8 @@ bool PlatformArmCortexM::InitStack(Stack *stack, IStackMemory *stack_memory, ITa
 
 void PlatformArmCortexM::SwitchContext()
 {
-    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
-    __ISB();
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // schedule PendSV interrupt
+    __ISB();                             // flush instructions cache
 }
 
 void PlatformArmCortexM::Stop()
@@ -443,20 +474,25 @@ int32_t PlatformArmCortexM::GetTickResolution() const
 
 void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
 {
+    if (g_Context.m_access_mode == mode)
+        return;
+
     if (mode == ACCESS_PRIVILEGED)
         STK_CORTEX_M_PRIVILEGED_MODE_ON();
     else
         STK_CORTEX_M_PRIVILEGED_MODE_OFF();
+
+    g_Context.m_access_mode = mode;
 }
 
 void PlatformArmCortexM::SwitchToNext()
 {
-    uint32_t cs;
-    STK_CORTEX_M_CRITICAL_SESSION_START(cs);
+    g_Context.m_handler->OnTaskSwitch(GetCallerSP());
+}
 
-    g_Context.m_handler->OnTaskSwitch(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-
-    STK_CORTEX_M_CRITICAL_SESSION_END(cs);
+void PlatformArmCortexM::SleepTicks(uint32_t ticks)
+{
+    g_Context.m_handler->OnTaskSleep(GetCallerSP(), ticks);
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M
