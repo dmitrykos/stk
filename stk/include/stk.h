@@ -53,10 +53,10 @@ namespace stk {
 template <EKernelMode _Mode, uint32_t _Size>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
-    /*! \typedef ExitTrapStackMemory
+    /*! \typedef TrapStackStackMemory
         \brief   Stack memory wrapper type of the Exit trap.
     */
-    typedef StackMemoryWrapper<STACK_SIZE_MIN> ExitTrapStackMemory;
+    typedef StackMemoryWrapper<STACK_SIZE_MIN> TrapStackStackMemory;
 
     /*! \class KernelTask
         \brief Concrete implementation of the IKernelTask interface.
@@ -74,7 +74,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     public:
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack()
+        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack(), m_time_sleep(0)
         { }
 
         ITask *GetUserTask() { return m_user; }
@@ -86,18 +86,33 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     private:
         void Unbind()
         {
-            m_user  = NULL;
-            m_stack = {};
-            m_state = STATE_NONE;
+            Clear();
+        }
+
+        void Clear()
+        {
+            m_user       = NULL;
+            m_stack      = {};
+            m_state      = STATE_NONE;
+            m_time_sleep = 0;
         }
 
         void ScheduleRemoval() { m_state |= STATE_REMOVE_PENDING; }
 
         bool IsPendingRemoval() const { return (m_state & STATE_REMOVE_PENDING) != 0; }
 
-        ITask   *m_user;  //!< user task
-        uint32_t m_state; //!< state flags
-        Stack    m_stack; //!< stack descriptor
+        bool IsMemoryOfSP(size_t caller_SP) const
+        {
+            size_t *start = m_user->GetStack();
+            size_t *end   = start + m_user->GetStackSize();
+
+            return (caller_SP >= (size_t)start) && (caller_SP <= (size_t)end);
+        }
+
+        ITask   *m_user;       //!< user task
+        uint32_t m_state;      //!< state flags
+        Stack    m_stack;      //!< stack descriptor
+        int32_t  m_time_sleep; //!< time to sleep
     };
 
     /*! \class KernelService
@@ -120,6 +135,27 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         };
 
     public:
+        int64_t GetTicks() const
+        {
+            return m_ticks;
+        }
+
+        int32_t GetTickResolution() const
+        {
+            return m_platform->GetTickResolution();
+        }
+
+        void Sleep(uint32_t sleep_ms)
+        {
+            m_platform->SleepTicks((uint32_t)ConvertMicrosecondsToTicks(sleep_ms * 1000));
+        }
+
+        void SwitchToNext()
+        {
+            m_platform->SwitchToNext();
+        }
+
+    private:
         /*! \brief     Default initializer.
         */
         explicit KernelService() : m_platform(0), m_ticks(0)
@@ -150,22 +186,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 SingletonBinder::Bind(this);
         }
 
-        int64_t GetTicks() const
-        {
-            return m_ticks;
-        }
-
-        int32_t GetTicksResolution() const
-        {
-            return m_platform->GetTickResolution();
-        }
-
-        void SwitchToNext()
-        {
-            m_platform->SwitchToNext();
-        }
-
-    private:
         void IncrementTick()
         {
             ++m_ticks;
@@ -185,7 +205,8 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_exit_trap()
+    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_sleep_trap(), m_exit_trap(),
+        m_fsm_state(FSM_STATE_NONE)
     { }
 
     void Initialize(IPlatform *platform, ITaskSwitchStrategy *switch_strategy)
@@ -197,6 +218,7 @@ public:
         m_platform        = platform;
         m_switch_strategy = switch_strategy;
         m_task_now        = NULL;
+        m_fsm_state       = FSM_STATE_NONE;
     }
 
     void AddTask(ITask *user_task)
@@ -236,12 +258,11 @@ public:
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
-        // initialize stack for an Exit trap into the main process which called Kernel::Start()
-        if (_Mode == KERNEL_DYNAMIC)
-        {
-            ExitTrapStackMemory wrapper(&m_exit_trap[0].stack_memory);
-            m_platform->InitStack(&m_exit_trap[0].stack, &wrapper, NULL);
-        }
+        // stacks of the traps must be re-initilized on every subsequent Start
+        InitTraps();
+
+        // make sure SFM is in switching state after re-start
+        m_fsm_state = FSM_STATE_SWITCHING;
 
         m_service.Initialize(m_platform);
 
@@ -249,6 +270,41 @@ public:
     }
 
 protected:
+    enum EFsmState : int8_t
+    {
+        FSM_STATE_NONE = -1,
+        FSM_STATE_SWITCHING,
+        FSM_STATE_SLEEPING,
+        FSM_STATE_AWAKENING,
+        FSM_STATE_EXITING,
+        FSM_STATE_MAX
+    };
+
+    enum EFsmEvent : int8_t
+    {
+        FSM_EVENT_SWITCH = 0,
+        FSM_EVENT_SLEEP,
+        FSM_EVENT_WAKE,
+        FSM_EVENT_EXIT,
+        FSM_EVENT_MAX
+    };
+
+    void InitTraps()
+    {
+        // init stack for a Sleep trap
+        {
+            TrapStackStackMemory wrapper(&m_sleep_trap[0].memory);
+            m_platform->InitStack(STACK_SLEEP_TRAP, &m_sleep_trap[0].stack, &wrapper, NULL);
+        }
+
+        // init stack for an Exit trap
+        if (_Mode == KERNEL_DYNAMIC)
+        {
+            TrapStackStackMemory wrapper(&m_exit_trap[0].memory);
+            m_platform->InitStack(STACK_EXIT_TRAP, &m_exit_trap[0].stack, &wrapper, NULL);
+        }
+    }
+
     KernelTask *AllocateNewTask(ITask *user_task)
     {
         // look for a free kernel task
@@ -275,7 +331,7 @@ protected:
         STK_ASSERT(kernel_task != NULL);
 
         // init stack of the user task
-        if (!m_platform->InitStack(kernel_task->GetUserStack(), user_task, user_task))
+        if (!m_platform->InitStack(STACK_USER_TASK, kernel_task->GetUserStack(), user_task, user_task))
         {
             STK_ASSERT(false);
         }
@@ -310,6 +366,26 @@ protected:
         return NULL;
     }
 
+    KernelTask *FindTaskBySP(size_t SP)
+    {
+        for (uint32_t i = 0; i < TASKS_MAX; ++i)
+        {
+            KernelTask *task = &m_task_storage[i];
+            if (task->IsMemoryOfSP(SP))
+                return task;
+        }
+
+        return NULL;
+    }
+
+    KernelTask *GetTaskForSP(size_t caller_SP)
+    {
+        if (m_task_now->IsMemoryOfSP(caller_SP))
+            return m_task_now;
+
+        return FindTaskBySP(caller_SP);
+    }
+
     void RemoveTask(KernelTask *task)
     {
         STK_ASSERT(task != NULL);
@@ -318,28 +394,38 @@ protected:
         task->Unbind();
     }
 
-    void UpdateAccessMode(KernelTask *now, KernelTask *next)
+    void UpdateAccessMode(KernelTask *task)
     {
-        EAccessMode next_access_mode = next->GetUserTask()->GetAccessMode();
-
-        if (now->GetUserTask()->GetAccessMode() != next_access_mode)
-            m_platform->SetAccessMode(next_access_mode);
+        m_platform->SetAccessMode(task->GetUserTask()->GetAccessMode());
     }
 
     void OnStart()
     {
-        m_platform->SetAccessMode(m_task_now->GetUserTask()->GetAccessMode());
+        UpdateAccessMode(m_task_now);
     }
 
     void OnSysTick(Stack **idle, Stack **active)
     {
         m_service.IncrementTick();
-        SwitchTask(idle, active);
+        SwitchTask(idle, active, 1);
     }
 
-    void OnTaskSwitch(Stack **idle, Stack **active)
+    void OnTaskSwitch(size_t caller_SP)
     {
-        SwitchTask(idle, active);
+        OnTaskSleep(caller_SP, 1);
+    }
+
+    void OnTaskSleep(size_t caller_SP, uint32_t sleep_ticks)
+    {
+        KernelTask *task = GetTaskForSP(caller_SP);
+        STK_ASSERT(task != NULL);
+
+        task->m_time_sleep -= sleep_ticks;
+
+        while (task->m_time_sleep < 0)
+        {
+            __stk_relax_cpu();
+        }
     }
 
     void OnTaskExit(Stack *stack)
@@ -358,69 +444,177 @@ protected:
         }
     }
 
-    void SwitchTask(Stack **idle, Stack **active)
+    EFsmEvent FetchNextEvent(int32_t time_tick, KernelTask **next)
     {
-        KernelTask *now = m_task_now;
+        EFsmEvent type = FSM_EVENT_SWITCH;
+        KernelTask *itr = m_task_now, *prev = m_task_now, *end = NULL;
 
-        KernelTask *next;
-        if (_Mode == KERNEL_DYNAMIC)
-        {
-            while ((next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now))) != NULL)
-            {
-                // process pending task removal
-                if (next->IsPendingRemoval())
-                {
-                    RemoveTask(next);
-
-                    // check if current task and clear its pointer
-                    if (next == now)
-                        m_task_now = now = NULL;
-
-                    // check if no tasks left
-                    if (m_switch_strategy->GetFirst() == NULL)
-                    {
-                        next = NULL;
-                        now = NULL;
-                        break;
-                    }
-
-                    continue;
-                }
-                else
-                    break;
-            }
-        }
-        else
-        {
-            next = static_cast<KernelTask *>(m_switch_strategy->GetNext(now));
-        }
-
-        if (next != now)
-        {
-            (*idle)   = now->GetUserStack();
-            (*active) = next->GetUserStack();
-
-            m_task_now = next;
-
-            UpdateAccessMode(now, next);
-            m_platform->SwitchContext();
-        }
-        else
+        for (;;)
         {
             if (_Mode == KERNEL_DYNAMIC)
             {
-                if ((now == NULL) && (next == NULL))
+                while ((itr = static_cast<KernelTask *>(m_switch_strategy->GetNext(prev))) != NULL)
                 {
-                    // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
-                    STK_ASSERT(m_exit_trap[0].stack.SP != 0);
+                    // process pending task removal
+                    if (itr->IsPendingRemoval())
+                    {
+                        RemoveTask(itr);
 
-                    (*idle)   = NULL;
-                    (*active) = &m_exit_trap[0].stack;
+                        // check if current task and clear its pointer
+                        if (itr == m_task_now)
+                            m_task_now = NULL;
 
-                    m_platform->SetAccessMode(ACCESS_PRIVILEGED);
-                    m_platform->Stop();
+                        // check if no tasks left
+                        if (m_switch_strategy->GetFirst() == NULL)
+                        {
+                            itr        = NULL;
+                            m_task_now = NULL;
+                            type       = FSM_EVENT_EXIT;
+                            break;
+                        }
+
+                        continue;
+                    }
+                    else
+                        break;
                 }
             }
+            else
+            {
+                itr = static_cast<KernelTask *>(m_switch_strategy->GetNext(prev));
+            }
+
+            // check if task is sleeping
+            if ((itr != NULL) && (itr->m_time_sleep < 0))
+            {
+                if (itr == end)
+                {
+                    itr  = NULL;
+                    type = FSM_EVENT_SLEEP;
+                    break;
+                }
+
+                if (end == NULL)
+                    end = itr;
+
+                itr->m_time_sleep += time_tick;
+
+                // if still need to sleep get next
+                if (itr->m_time_sleep < 0)
+                {
+                    prev = itr;
+                    continue;
+                }
+
+                itr->m_time_sleep = 0;
+
+                // if was sleeping send wake event first
+                if (m_fsm_state == FSM_STATE_SLEEPING)
+                    type = FSM_EVENT_WAKE;
+            }
+
+            break;
+        }
+
+        (*next) = itr;
+        return type;
+    }
+
+    void SwitchTask(Stack **idle, Stack **active, int32_t time_tick)
+    {
+        KernelTask *now = m_task_now, *next;
+
+        EFsmState new_state = m_fsm[m_fsm_state][FetchNextEvent(time_tick, &next)];
+        if (new_state != FSM_STATE_NONE)
+            m_fsm_state = new_state;
+
+        switch (new_state)
+        {
+        case FSM_STATE_SWITCHING: {
+            if (next != now)
+                StateSwitch(now, next, idle, active);
+            break; }
+
+        case FSM_STATE_AWAKENING: {
+            StateAwaken(now, next, idle, active);
+            break; }
+
+        case FSM_STATE_SLEEPING: {
+            StateSleep(now, next, idle, active);
+            break; }
+
+        case FSM_STATE_EXITING: {
+            StateExit(now, next, idle, active);
+            break; }
+
+        default:
+            break;
+        }
+    }
+
+    void StateSwitch(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
+    {
+        (*idle)   = now->GetUserStack();
+        (*active) = next->GetUserStack();
+
+        // if stack memory is exceeded these assertions will be hit
+        STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+        STK_ASSERT(next->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+
+        m_task_now = next;
+
+        UpdateAccessMode(next);
+        m_platform->SwitchContext();
+    }
+
+    void StateAwaken(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
+    {
+        (void)now;
+
+        (*idle)   = &m_sleep_trap[0].stack;
+        (*active) = next->GetUserStack();
+
+        // if stack memory is exceeded these assertions will be hit
+        STK_ASSERT(m_sleep_trap[0].memory[0] == STK_STACK_MEMORY_FILLER);
+        STK_ASSERT(next->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+
+        m_task_now = next;
+
+        UpdateAccessMode(next);
+        m_platform->SwitchContext();
+    }
+
+    void StateSleep(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
+    {
+        (void)now;
+        (void)next;
+
+        STK_ASSERT(m_sleep_trap[0].stack.SP != 0);
+
+        (*idle)   = now->GetUserStack();
+        (*active) = &m_sleep_trap[0].stack;
+
+        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
+
+        m_platform->SetAccessMode(ACCESS_PRIVILEGED);
+        m_platform->SwitchContext();
+    }
+
+    void StateExit(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
+    {
+        (void)now;
+        (void)next;
+
+        if (_Mode == KERNEL_DYNAMIC)
+        {
+            // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
+            STK_ASSERT(m_exit_trap[0].stack.SP != 0);
+
+            (*idle)   = NULL;
+            (*active) = &m_exit_trap[0].stack;
+
+            m_platform->SetAccessMode(ACCESS_PRIVILEGED);
+            m_platform->Stop();
         }
     }
 
@@ -437,16 +631,21 @@ protected:
     */
     typedef KernelTask TaskStorageType[TASKS_MAX];
 
-    /*! \class ExitTrap
-        \brief Exit trap is used for an exit into the main process from which IKernel::Start() was called
-               when all tasks completed their processing and exited by returning from their Run function.
-    */
-    struct ExitTrap
-    {
-        typedef ExitTrapStackMemory::MemoryType Memory;
+    /*! \class TrapStack
+        \brief Trap stack is used to execute exit, sleep traps when required.
 
-        Stack  stack;        //!< stack information
-        Memory stack_memory; //!< stack memory
+        \note  Exit trap - used for an exit into the main process from which IKernel::Start() was called
+               when all tasks completed their processing and exited by returning from their Run function.
+
+               Sleep trap - used to execute a sleep procedure of the driver when all user tasks are currently
+               in a sleep state.
+    */
+    struct TrapStack
+    {
+        typedef TrapStackStackMemory::MemoryType Memory;
+
+        Stack  stack;  //!< stack information
+        Memory memory; //!< stack memory
     };
 
     KernelService        m_service;         //!< run-time kernel service
@@ -454,7 +653,17 @@ protected:
     ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
     KernelTask          *m_task_now;        //!< current task task
     TaskStorageType      m_task_storage;    //!< task storage
-    ExitTrap             m_exit_trap[_Mode == KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (it does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    TrapStack            m_sleep_trap[1];   //!< sleep trap
+    TrapStack            m_exit_trap[_Mode == KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (it does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    EFsmState            m_fsm_state;       //!< FSM state
+
+    const EFsmState      m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
+    //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE       FSM_EVENT_EXIT
+        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,      FSM_STATE_EXITING }, // FSM_STATE_SWITCHING
+        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_AWAKENING, FSM_STATE_NONE },    // FSM_STATE_SLEEPING
+        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,      FSM_STATE_EXITING }, // FSM_STATE_AWAKENING
+        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,      FSM_STATE_NONE }     // FSM_STATE_EXITING
+    };
 };
 
 } // namespace stk

@@ -82,11 +82,11 @@ private:
                 }
 
                 // success, exit process
-                TestContext::ForceExitTestSuie(TestContext::SUCCESS_EXIT_CODE);
+                TestContext::ForceExitTestSuite(TestContext::SUCCESS_EXIT_CODE);
                 break;
             }
 
-            g_KernelService->DelaySpin(100);
+            g_KernelService->Delay(100);
 
             g_TaskSwitch = (task_id + 1) % 3;
         }

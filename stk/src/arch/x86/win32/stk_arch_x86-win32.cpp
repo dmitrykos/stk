@@ -30,7 +30,8 @@ static timeBeginPeriodF timeBeginPeriod = NULL;
 #define STK_X86_WIN32_CRITICAL_SECTION_INIT(SES) InitializeCriticalSection(SES)
 #define STK_X86_WIN32_CRITICAL_SECTION_START(SES) EnterCriticalSection(SES)
 #define STK_X86_WIN32_CRITICAL_SECTION_END(SES) LeaveCriticalSection(SES)
-#define STK_X86_WIN32_MIN_RESOLUTION (10 * 1000)
+#define STK_X86_WIN32_MIN_RESOLUTION (1000)
+#define STK_X86_WIN32_GET_SP(STACK) (STACK + 2) // +2 to overcome stack filler check inside Kernel (adjusting to +2 preserves 8-byte alignment)
 
 using namespace stk;
 
@@ -43,9 +44,6 @@ static struct Context : public PlatformContext
 
         m_winmm_dll     = NULL;
         m_timer_thread  = NULL;
-        m_switch_thread = NULL;
-        m_switch_event  = NULL;
-        m_inside_timer  = false;
 
         STK_X86_WIN32_CRITICAL_SECTION_INIT(&m_cs);
 
@@ -78,27 +76,35 @@ static struct Context : public PlatformContext
 
     struct TaskContext
     {
-        TaskContext(ITask *task) : m_task(task), m_thread(NULL)
+        TaskContext() : m_task(NULL), m_thread(NULL), m_thread_id(0)
         { }
 
-        ITask *m_task;   //!< user task
-        HANDLE m_thread; //!< task's thread handle
+        void Initialize(ITask *task)
+        {
+            m_task      = task;
+            m_thread    = NULL;
+            m_thread_id = 0;
+        }
+
+        ITask *m_task;      //!< user task
+        HANDLE m_thread;    //!< task's thread handle
+        DWORD  m_thread_id; //!< task's thread id
     };
 
     void ConfigureTime();
     void CreateThreadsForTasks();
-    void CreateSwitchThread();
     void CreateTimerThreadAndJoin();
     void Cleanup();
+    void SysTick();
+    void SwitchContext();
+    void SwitchToNext();
+    void SleepTicks(uint32_t ticks);
 
     HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                         m_timer_thread;  //!< timer thread handle
-    HANDLE                         m_switch_thread; //!< switch thread handle
-    HANDLE                         m_switch_event;  //!< switch event handle
-    std::list<TaskContext>         m_tasks;         //!< list of task internal contexts
+    std::list<TaskContext *>       m_tasks;         //!< list of task internal contexts
     std::vector<HANDLE>            m_task_threads;  //!< task threads
     STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
-    volatile bool                  m_inside_timer;  //!< inside timer flag
 }
 g_Context;
 
@@ -107,36 +113,10 @@ static DWORD WINAPI TimerThread(LPVOID param)
     (void)param;
 
     DWORD wait_ms = g_Context.m_tick_resolution / 1000;
+
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
-        g_Context.m_inside_timer = true;
-
-        STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
-
-        g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-
-        STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
-
-        g_Context.m_inside_timer = false;
-    }
-
-    return 0;
-}
-
-static DWORD WINAPI SwitchThread(LPVOID param)
-{
-    (void)param;
-
-    while (WaitForSingleObject(g_Context.m_switch_event, INFINITE) == WAIT_OBJECT_0)
-    {
-        if (g_Context.m_inside_timer)
-            continue;
-
-        STK_X86_WIN32_CRITICAL_SECTION_START(&g_Context.m_cs);
-
-        g_Context.m_handler->OnTaskSwitch(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-
-        STK_X86_WIN32_CRITICAL_SECTION_END(&g_Context.m_cs);
+        g_Context.SysTick();
     }
 
     return 0;
@@ -163,36 +143,26 @@ void Context::ConfigureTime()
 
 void Context::CreateThreadsForTasks()
 {
-    std::list<Context::TaskContext>::iterator first = m_tasks.begin();
+    std::list<TaskContext *>::iterator first = m_tasks.begin();
 
-    for (std::list<Context::TaskContext>::iterator itr = first; itr != m_tasks.end(); ++itr)
+    for (std::list<TaskContext *>::iterator itr = first; itr != m_tasks.end(); ++itr)
     {
-        Context::TaskContext *tctx = &(*itr);
+        TaskContext *tctx = (*itr);
 
         // simulate stack size limitation
         uint32_t stack_size = tctx->m_task->GetStackSize() * sizeof(size_t);
 
-        tctx->m_thread = CreateThread(NULL, stack_size, &TaskThread, tctx, CREATE_SUSPENDED, NULL);
+        tctx->m_thread = CreateThread(NULL, stack_size, &TaskThread, tctx, CREATE_SUSPENDED, &tctx->m_thread_id);
         m_task_threads.push_back(tctx->m_thread);
     }
 
     // start first task
-    ResumeThread((*first).m_thread);
+    ResumeThread((*first)->m_thread);
 }
 
 static void OnTaskExit()
 {
     g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
-}
-
-void Context::CreateSwitchThread()
-{
-    // create switch event
-    m_switch_event = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-    // create switch thread with highest priority
-    g_Context.m_switch_thread = CreateThread(NULL, 0, &SwitchThread, NULL, 0, NULL);
-    SetThreadPriority(g_Context.m_switch_thread, THREAD_PRIORITY_TIME_CRITICAL);
 }
 
 void Context::CreateTimerThreadAndJoin()
@@ -237,17 +207,49 @@ void Context::CreateTimerThreadAndJoin()
 void Context::Cleanup()
 {
     // close thread handles of all tasks
-    for (std::list<Context::TaskContext>::iterator itr = m_tasks.begin(); itr != m_tasks.end(); ++itr)
+    for (std::list<TaskContext *>::iterator itr = m_tasks.begin(); itr != m_tasks.end(); ++itr)
     {
-        CloseHandle((*itr).m_thread);
+        CloseHandle((*itr)->m_thread);
     }
 
     // close timer thread
     CloseHandle(m_timer_thread);
+}
 
-    // close switch thread
-    CloseHandle(m_switch_thread);
-    CloseHandle(m_switch_event);
+void Context::SysTick()
+{
+    STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+
+    m_handler->OnSysTick(&m_stack_idle, &m_stack_active);
+
+    STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
+}
+
+void Context::SwitchContext()
+{
+    TaskContext *idle_task = reinterpret_cast<TaskContext *>(m_stack_idle->SP);
+    TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
+
+    if (idle_task != NULL)
+        SuspendThread(idle_task->m_thread);
+
+    ResumeThread(active_task->m_thread);
+}
+
+void Context::SwitchToNext()
+{
+    TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
+    size_t caller_SP = (size_t)STK_X86_WIN32_GET_SP(active_task->m_task->GetStack());
+
+    m_handler->OnTaskSwitch(caller_SP);
+}
+
+void Context::SleepTicks(uint32_t ticks)
+{
+    TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
+    size_t caller_SP = (size_t)STK_X86_WIN32_GET_SP(active_task->m_task->GetStack());
+
+    m_handler->OnTaskSleep(caller_SP, ticks);
 }
 
 void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
@@ -255,7 +257,6 @@ void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_u
     g_Context.Initialize(event_handler, exit_trap, first_task->GetUserStack(), resolution_us);
 
     g_Context.ConfigureTime();
-    g_Context.CreateSwitchThread();
     g_Context.CreateThreadsForTasks();
     g_Context.CreateTimerThreadAndJoin();
     g_Context.Cleanup();
@@ -263,33 +264,32 @@ void PlatformX86Win32::Start(IEventHandler *event_handler, uint32_t resolution_u
 
 void PlatformX86Win32::Stop()
 {
-	TerminateThread(g_Context.m_switch_thread, 0);
 	TerminateThread(g_Context.m_timer_thread, 0);
 }
 
-bool PlatformX86Win32::InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task)
+bool PlatformX86Win32::InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task)
 {
-    if (user_task != NULL)
-    {
-        g_Context.m_tasks.push_back(Context::TaskContext(user_task));
+    g_Context.InitStackMemory(stack_memory);
 
-        stack->SP = reinterpret_cast<size_t>(&g_Context.m_tasks.back());
-    }
-    else // Exit trap
+    size_t *stack_top = STK_X86_WIN32_GET_SP(stack_memory->GetStack());
+
+    if (stack_type == STACK_USER_TASK)
     {
-        stack->SP = reinterpret_cast<size_t>(stack_memory);
+        Context::TaskContext *ctx = (Context::TaskContext *)stack_top;
+
+        ctx->Initialize(user_task);
+
+        g_Context.m_tasks.push_back(ctx);
     }
+
+    stack->SP = reinterpret_cast<size_t>(stack_top);
 
     return true;
 }
 
 void PlatformX86Win32::SwitchContext()
 {
-    Context::TaskContext *idle_task = reinterpret_cast<Context::TaskContext *>(g_Context.m_stack_idle->SP);
-    Context::TaskContext *active_task = reinterpret_cast<Context::TaskContext *>(g_Context.m_stack_active->SP);
-
-    SuspendThread(idle_task->m_thread);
-    ResumeThread(active_task->m_thread);
+    g_Context.SwitchContext();
 }
 
 int32_t PlatformX86Win32::GetTickResolution() const
@@ -304,7 +304,12 @@ void PlatformX86Win32::SetAccessMode(EAccessMode mode)
 
 void PlatformX86Win32::SwitchToNext()
 {
-    SetEvent(g_Context.m_switch_event);
+    g_Context.SwitchToNext();
+}
+
+void PlatformX86Win32::SleepTicks(uint32_t ticks)
+{
+    g_Context.SleepTicks(ticks);
 }
 
 #endif // _STK_ARCH_X86_WIN32

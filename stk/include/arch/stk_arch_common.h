@@ -38,6 +38,29 @@ public:
         m_tick_resolution = resolution_us;
     }
 
+    /*! \brief     Initialize stack memory by filling it with STK_STACK_MEMORY_FILLER.
+        \note      Returned pointer is for a stack growing from top to down.
+        \param[in] memory: Stack memory to initialize.
+        \param[in] limit: Initialization depth limit.
+        \return    Pointer to initialized stack memory.
+    */
+    static inline size_t *InitStackMemory(IStackMemory *memory, int32_t limit = 0)
+    {
+        int32_t stack_size = memory->GetStackSize();
+        size_t *stack_top = memory->GetStack() + stack_size;
+
+        STK_ASSERT(stack_size >= STACK_SIZE_MIN);
+        STK_ASSERT(stack_size > limit);
+
+        // initialization of the stack memory satisfies stack integrity check in Kernel::StateSwitch
+        for (int32_t i = -stack_size; i <= -(limit + 1); ++i)
+        {
+            stack_top[i] = STK_STACK_MEMORY_FILLER;
+        }
+
+        return stack_top;
+    }
+
     IPlatform::IEventHandler *m_handler;         //!< kernel event handler
     Stack                    *m_stack_idle;      //!< idle task stack
     Stack                    *m_stack_active;    //!< active task stack

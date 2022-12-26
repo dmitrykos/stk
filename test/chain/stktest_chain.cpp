@@ -60,8 +60,9 @@ private:
 
             printf("id=%d\n", task_id);
 
-            g_KernelService->DelaySpin(100);
+            g_KernelService->Delay(100);
 
+            // activate next task and exit
             g_TaskSwitch = (task_id + 1) % 3;
             return;
         }

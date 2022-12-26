@@ -144,8 +144,8 @@ TEST(Kernel, AddTaskInitStack)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
 
-    CHECK_EQUAL(&task, platform.m_user_task_InitStack);
-    CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_InitStack->SP);
+    CHECK_EQUAL(&task, platform.m_stack_info[STACK_USER_TASK].task);
+    CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_info[STACK_USER_TASK].stack->SP);
 }
 
 TEST(Kernel, AddTaskMaxOut)
@@ -347,7 +347,6 @@ TEST(Kernel, Start)
     kernel.Start(periodicity);
 
     CHECK_TRUE(platform.m_started);
-    CHECK_TRUE(platform.m_event_handler != NULL);
     CHECK_TRUE(g_KernelService != NULL);
     CHECK_EQUAL(&task, platform.m_first_task_Start->GetUserTask());
     CHECK_EQUAL(periodicity, platform.GetTickResolution());
@@ -365,7 +364,7 @@ TEST(Kernel, StartBeginISR)
     kernel.Start();
 
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // expect that first task's access mode is requested by kernel
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -377,20 +376,19 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_USER> task1, task2;
+    Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // ISR calls OnSysTick 1-st time
     {
-        platform.m_event_handler->OnSysTick(&idle, &active);
+        platform.EventSysTick();
 
         CHECK_TRUE(idle != NULL);
         CHECK_TRUE(active != NULL);
@@ -407,7 +405,7 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
 
     // ISR calls OnSysTick 2-nd time
     {
-        platform.m_event_handler->OnSysTick(&idle, &active);
+        platform.EventSysTick();
 
         CHECK_TRUE(idle != NULL);
         CHECK_TRUE(active != NULL);
@@ -436,16 +434,14 @@ TEST(Kernel, ContextSwitchAccessModeChange)
     kernel.AddTask(&task2);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // 1-st task
     CHECK_EQUAL(ACCESS_USER, platform.m_access_mode);
 
     // ISR calls OnSysTick
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     // 2-st task
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -478,22 +474,21 @@ TEST(Kernel, SingleTask)
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_PRIVILEGED> task;
+    Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // ISR calls OnSysTick
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     // expect that with single task nothing changes
     CHECK_EQUAL((Stack *)NULL, idle);
-    CHECK_EQUAL((Stack *)platform.m_stack_InitStack, active);
+    CHECK_EQUAL((Stack *)platform.m_stack_info[STACK_USER_TASK].stack, active);
 }
 
 TEST(Kernel, OnTaskExit)
@@ -502,31 +497,30 @@ TEST(Kernel, OnTaskExit)
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     // task2 exited (will schedule its removal)
-    platform.m_event_handler->OnTaskExit(active);
+    platform.EventTaskExit(active);
 
     // ISR calls OnSysTick (task2 = idle, task1 = active)
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     // task1 exited (will schedule its removal)
-    platform.m_event_handler->OnTaskExit(active);
+    platform.EventTaskExit(active);
 
     // ISR calls OnSysTick
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     // expecting privileged mode when scheduler is exiting
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -550,18 +544,16 @@ TEST(Kernel, OnTaskExitUnknownOrNull)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        platform.m_event_handler->OnTaskExit(&unk_stack);
+        platform.EventTaskExit(&unk_stack);
         CHECK_TEXT(false, "expecting to fail on unknown stack");
     }
     catch (TestAssertPassed &pass)
@@ -573,7 +565,7 @@ TEST(Kernel, OnTaskExitUnknownOrNull)
     try
     {
         g_TestContext.ExpectAssert(true);
-        platform.m_event_handler->OnTaskExit(NULL);
+        platform.EventTaskExit(NULL);
         CHECK_TEXT(false, "expecting to fail on NULL");
     }
     catch (TestAssertPassed &pass)
@@ -589,23 +581,22 @@ TEST(Kernel, OnTaskExitUnsupported)
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
     TaskMock<ACCESS_PRIVILEGED> task1;
+    Stack *&active = platform.m_stack_active;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
-
     // ISR calls OnStart
-    platform.m_event_handler->OnStart();
+    platform.EventStart();
 
     // ISR calls OnSysTick
-    platform.m_event_handler->OnSysTick(&idle, &active);
+    platform.EventSysTick();
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        platform.m_event_handler->OnTaskExit(active);
+        platform.EventTaskExit(active);
         CHECK_TEXT(false, "task exiting unsupported in KERNEL_STATIC mode");
     }
     catch (TestAssertPassed &pass)
@@ -615,29 +606,29 @@ TEST(Kernel, OnTaskExitUnsupported)
     }
 }
 
-TEST(Kernel, SwitchToNext)
+TEST(Kernel, OnTaskNotFoundBySP)
 {
-    Kernel<KERNEL_STATIC, 2> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
-    TaskMock<ACCESS_USER> task1, task2;
+    TaskMock<ACCESS_PRIVILEGED> task1;
 
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
-    kernel.AddTask(&task2);
     kernel.Start();
 
-    Stack *idle = NULL, *active = platform.m_stack_InitStack;
+    platform.EventStart();
+    platform.EventSysTick();
 
-    // ISR calls OnStart (task1 = active, task2 = idle)
-    platform.m_event_handler->OnStart();
-
-    // task1 calls SwitchToNext: task1 = idle, task2 = active
-    g_KernelService->SwitchToNext();
-    CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
-
-    // ISR calls OnSysTick (task1 = active, task2 = idle)
-    platform.m_event_handler->OnSysTick(&idle, &active);
-    CHECK_EQUAL(active->SP, (size_t)task1.GetStack());
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        platform.EventTaskSwitch(0xdeadbeef);
+        CHECK_TEXT(false, "non existent task must not succeed");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
-

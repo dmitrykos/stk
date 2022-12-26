@@ -14,7 +14,7 @@
 static volatile uint8_t g_TaskSwitch = 0;
 
 #if 0
-static void DelaySpin(uint32_t delay_ms)
+static void Delay(uint32_t delay_ms)
 {
     // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
 
@@ -27,9 +27,9 @@ static void DelaySpin(uint32_t delay_ms)
     while (--i > 0);
 }
 #else
-static __stk_forceinline void DelaySpin(uint32_t delay_ms)
+static __stk_forceinline void Delay(uint32_t delay_ms)
 {
-    g_KernelService->DelaySpin(delay_ms);
+    g_KernelService->Delay(delay_ms);
 }
 #endif
 
@@ -91,7 +91,7 @@ private:
                 break;
             }
 
-            DelaySpin(1000);
+            Delay(1000);
 
             g_TaskSwitch = (task_id + 1) % 3;
         }

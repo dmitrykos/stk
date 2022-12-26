@@ -7,10 +7,12 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#include "stk.h"
-#include "arch/stk_arch_common.h"
+#ifndef STK_CONFIG_H_
+#define STK_CONFIG_H_
 
-using namespace stk;
+#include "cmsis_device.h"
 
-// initialize IKernelService instance singleton
-template <> IKernelService *Singleton<IKernelService *>::m_instance = NULL;
+#define _STK_ASSERT
+#define _STK_ARCH_ARM_CORTEX_M
+
+#endif /* STK_CONFIG_H_ */

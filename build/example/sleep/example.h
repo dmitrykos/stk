@@ -7,10 +7,19 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#include "stk.h"
-#include "arch/stk_arch_common.h"
+#ifndef EXAMPLE_H_
+#define EXAMPLE_H_
 
-using namespace stk;
+#include <assert.h>
 
-// initialize IKernelService instance singleton
-template <> IKernelService *Singleton<IKernelService *>::m_instance = NULL;
+enum ELed
+{
+    LED_RED, LED_GREEN, LED_BLUE
+};
+
+void LED_INIT(ELed led, bool init_state);
+void LED_SET_STATE(ELed led, bool state);
+
+extern void RunExample();
+
+#endif /* EXAMPLE_H_ */

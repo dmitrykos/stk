@@ -22,11 +22,12 @@ class PlatformArmCortexM : public IPlatform
 public:
     void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap);
     void Stop();
-    bool InitStack(Stack *stack, IStackMemory *stack_memory, ITask *user_task);
+    bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
     void SwitchContext();
     int32_t GetTickResolution() const;
     void SetAccessMode(EAccessMode mode);
     void SwitchToNext();
+    void SleepTicks(uint32_t ticks);
 };
 
 /*! \typedef PlatformDefault
