@@ -187,7 +187,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         uint32_t m_state;      //!< state flags
         Stack    m_stack;      //!< stack descriptor
         int32_t  m_time_sleep; //!< time to sleep (ticks)
-        HrtInfo  m_hrt[_Mode & KERNEL_HRT ? 1 : 0]; //!< Hard-Realtime info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        HrtInfo  m_hrt[_Mode & KERNEL_HRT ? 1 : 0]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
     /*! \class KernelService
@@ -231,7 +231,15 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         void Sleep(uint32_t sleep_ms)
         {
-            m_platform->SleepTicks((uint32_t)GetTicksFromMilliseconds(sleep_ms, GetTickResolution()));
+            if ((_Mode & KERNEL_HRT) == 0)
+            {
+                m_platform->SleepTicks((uint32_t)GetTicksFromMilliseconds(sleep_ms, GetTickResolution()));
+            }
+            else
+            {
+                // sleeping is not supported in HRT mode, task will sleep according its periodicity and workload
+                STK_ASSERT(false);
+            }
         }
 
         void SwitchToNext()
@@ -272,10 +280,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         /*! \brief     Increment tick by 1.
         */
-        void IncrementTick()
-        {
-            ++m_ticks;
-        }
+        void IncrementTick() { ++m_ticks; }
 
         IPlatform       *m_platform; //!< platform
         volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile to reload value from the memory by the consumer)

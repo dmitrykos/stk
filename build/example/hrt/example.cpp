@@ -53,7 +53,6 @@ private:
                 LED_SET_STATE(LED_RED, false);
                 LED_SET_STATE(LED_GREEN, false);
                 LED_SET_STATE(LED_BLUE, true);
-                g_KernelService->Delay(200);
                 break;
             }
 
@@ -91,9 +90,9 @@ void RunExample()
 
 #define TICKS(MS) GetTicksFromMilliseconds(MS, PERIODICITY_DEFAULT)
 
-    kernel.AddTask(&task1, TICKS(1000 * 3), TICKS(100), TICKS(0));
-    kernel.AddTask(&task2, TICKS(1000 * 3), TICKS(100), TICKS(1000));
-    kernel.AddTask(&task3, TICKS(1000 * 3), TICKS(100), TICKS(2000));
+    kernel.AddTask(&task1, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 0));
+    kernel.AddTask(&task2, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 1));
+    kernel.AddTask(&task3, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 2));
 
     kernel.Start();
 

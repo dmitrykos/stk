@@ -451,12 +451,14 @@ public:
 
     /*! \brief     Delay calling process.
         \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
+        \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
         \param[in] delay_ms: Delay time (milliseconds).
     */
     virtual void Delay(uint32_t delay_ms) const = 0;
 
     /*! \brief     Put calling process into a sleep state.
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
+        \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
         \param[in] sleep_ms: Sleep time (milliseconds).
     */
     virtual void Sleep(uint32_t sleep_ms) = 0;
