@@ -29,6 +29,7 @@ public:
     void SetAccessMode(EAccessMode mode);
     void SwitchToNext();
     void SleepTicks(uint32_t ticks);
+    void HardFault();
 };
 
 /*! \typedef PlatformDefault

@@ -13,6 +13,7 @@
 
 #ifdef _STK_ARCH_ARM_CORTEX_M
 
+#include <stdlib.h>
 #include <setjmp.h>
 
 #include "arch/stk_arch_common.h"
@@ -452,12 +453,23 @@ void PlatformArmCortexM::SwitchContext()
     __ISB();                             // flush instructions cache
 }
 
+static void SysTick_Stop()
+{
+    SysTick->CTRL = 0;
+    SCB->ICSR |= SCB_ICSR_PENDSTCLR_Msk;
+}
+
 void PlatformArmCortexM::Stop()
 {
-    // stop and clear SysTick
-    SysTick->CTRL = 0;
-    SysTick->LOAD = 0;
-    SysTick->VAL  = 0;
+    // stop SysTick timer
+    SysTick_Stop();
+
+    // clear pending PendSV exception
+    SCB->ICSR |= SCB_ICSR_PENDSVCLR_Msk;
+
+    // make sure all assignments are set and executed
+    __DSB();
+    __ISB();
 
     g_Context.m_started = false;
     g_Context.m_exiting = true;
@@ -493,6 +505,11 @@ void PlatformArmCortexM::SwitchToNext()
 void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 {
     g_Context.m_handler->OnTaskSleep(GetCallerSP(), ticks);
+}
+
+void PlatformArmCortexM::HardFault()
+{
+    abort();
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

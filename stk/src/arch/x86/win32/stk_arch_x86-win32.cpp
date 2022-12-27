@@ -312,4 +312,9 @@ void PlatformX86Win32::SleepTicks(uint32_t ticks)
     g_Context.SleepTicks(ticks);
 }
 
+void PlatformX86Win32::HardFault()
+{
+    abort();
+}
+
 #endif // _STK_ARCH_X86_WIN32

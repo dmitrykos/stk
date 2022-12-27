@@ -35,29 +35,35 @@ private:
 
     void RunInner()
     {
-        // task 0: sleep 1000 ms
-        // task 1: sleep 2000 ms
-        // task 2: sleep 3000 ms
-        g_KernelService->Sleep(1000 * (m_task_id + 1));
-
-        switch (m_task_id)
+        for (;;)
         {
-        case 0:
-            LED_SET_STATE(LED_RED, true);
-            LED_SET_STATE(LED_GREEN, false);
-            LED_SET_STATE(LED_BLUE, false);
-            break;
-        case 1:
-            LED_SET_STATE(LED_RED, false);
-            LED_SET_STATE(LED_GREEN, true);
-            LED_SET_STATE(LED_BLUE, false);
-            break;
-        case 2:
-            LED_SET_STATE(LED_RED, false);
-            LED_SET_STATE(LED_GREEN, false);
-            LED_SET_STATE(LED_BLUE, true);
-            break;
+            switch (m_task_id)
+            {
+            case 0:
+                LED_SET_STATE(LED_RED, true);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, false);
+                break;
+            case 1:
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, true);
+                LED_SET_STATE(LED_BLUE, false);
+                break;
+            case 2:
+                LED_SET_STATE(LED_RED, false);
+                LED_SET_STATE(LED_GREEN, false);
+                LED_SET_STATE(LED_BLUE, true);
+                g_KernelService->Delay(200);
+                break;
+            }
+
+            g_KernelService->SwitchToNext();
         }
+    }
+
+    void OnDeadlineMissed(uint32_t duration)
+    {
+        (void)duration;
     }
 };
 
@@ -74,7 +80,7 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<KERNEL_DYNAMIC, 3> kernel;
+    static Kernel<KERNEL_STATIC | KERNEL_HRT, 3> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
 
@@ -83,24 +89,13 @@ void RunExample()
 
     kernel.Initialize(&platform, &tsstrategy);
 
-    kernel.AddTask(&task1);
-    kernel.AddTask(&task2);
-    kernel.AddTask(&task3);
+#define TICKS(MS) GetTicksFromMilliseconds(MS, PERIODICITY_DEFAULT)
+
+    kernel.AddTask(&task1, TICKS(1000 * 3), TICKS(100), TICKS(0));
+    kernel.AddTask(&task2, TICKS(1000 * 3), TICKS(100), TICKS(1000));
+    kernel.AddTask(&task3, TICKS(1000 * 3), TICKS(100), TICKS(2000));
 
     kernel.Start();
-
-    for (int i = 0; i < 3; ++i)
-    {
-        kernel.AddTask(&task1);
-        kernel.AddTask(&task2);
-        kernel.AddTask(&task3);
-
-        kernel.Start();
-    }
-
-    LED_SET_STATE(LED_RED, true);
-    LED_SET_STATE(LED_GREEN, true);
-    LED_SET_STATE(LED_BLUE, true);
 
     while (true) {}
 }

@@ -22,28 +22,55 @@ TEST_GROUP(KernelService)
     void teardown() {}
 };
 
-TEST(KernelService, ConvertMicrosecondsToTicks)
+TEST(KernelService, GetMillisecondsToTicks)
 {
-    static KernelServiceMock mock;
+    KernelServiceMock mock;
     mock.m_ticks = 1;
 
-    mock.m_resolution = 1;
-    CHECK_EQUAL(10000, (int32_t)mock.ConvertMicrosecondsToTicks(10 * 1000));
+    mock.m_resolution = 1000;
+    CHECK_EQUAL(10, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
 
-    mock.m_resolution = 100;
-    CHECK_EQUAL(100, (int32_t)mock.ConvertMicrosecondsToTicks(10 * 1000));
+    mock.m_resolution = 10000;
+    CHECK_EQUAL(100, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
+}
+
+static struct DelayContext
+{
+    DelayContext() : platform(NULL) {}
+
+    PlatformTestMock *platform;
+
+    void Process()
+    {
+        platform->EventSysTick();
+    }
+}
+g_DelayContext;
+
+static void DelayRelaxCpu()
+{
+    g_DelayContext.Process();
 }
 
 TEST(KernelService, Delay)
 {
-    KernelServiceMock mock;
-    mock.m_inc_ticks  = true;
-    mock.m_ticks      = 0;
-    mock.m_resolution = 1;
+    Kernel<KERNEL_STATIC, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
 
-    mock.Delay(10);
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task);
+    kernel.Start();
 
-    CHECK_EQUAL(10001, (int32_t)mock.m_ticks);
+    g_RelaxCpuHandler = DelayRelaxCpu;
+    g_DelayContext.platform = &platform;
+
+    g_KernelService->Delay(10);
+
+    g_RelaxCpuHandler = NULL;
+
+    CHECK_EQUAL(10, (int32_t)g_KernelService->GetTicks());
 }
 
 TEST(KernelService, InitStackFailure)

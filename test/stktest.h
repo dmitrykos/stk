@@ -211,6 +211,11 @@ public:
         return m_resolution;
     }
 
+    void Delay(uint32_t delay_ms) const
+    {
+
+    }
+
     void Sleep(uint32_t sleep_ms)
     {
 

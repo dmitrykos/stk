@@ -38,8 +38,9 @@ enum EAccessMode
 */
 enum EKernelMode
 {
-    KERNEL_STATIC  = 0, //!< All tasks are static and can not exit.
-    KERNEL_DYNAMIC      //!< Tasks can be added or removed and therefore exit when done.
+    KERNEL_STATIC  = (1 << 0), //!< All tasks are static and can not exit.
+    KERNEL_DYNAMIC = (1 << 1), //!< Tasks can be added or removed and therefore exit when done.
+    KERNEL_HRT     = (1 << 2), //!< Hard Real-Time (HRT) behavior (tasks are scheduled periodically and have an execution deadline, whole system is failed when task's deadline is failed).
 };
 
 /*! \enum  EStackType
@@ -197,6 +198,12 @@ public:
     /*! \brief     Get hardware access mode of the user task.
     */
     virtual EAccessMode GetAccessMode() const = 0;
+
+    /*! \brief     Called by a scheduler if deadline of the task is missed when Kernel is operating in Hard Real-Time mode (see stk::KERNEL_HRT).
+        \param[in] duration: Actual duration value which will always be larger than deadline value which was missed.
+        \note      Optional handler. Use it for example for logging of the faulty task.
+    */
+    virtual void OnDeadlineMissed(uint32_t duration) = 0;
 };
 
 /*! \class IKernelTask
@@ -323,6 +330,11 @@ public:
         \param[in] ticks: Time to sleep (ticks).
     */
     virtual void SleepTicks(uint32_t ticks) = 0;
+
+    /*! \brief     Cause a hard fault of the system.
+        \note      Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT).
+    */
+    virtual void HardFault() = 0;
 };
 
 /*! \class ITaskSwitchStrategy
@@ -358,23 +370,53 @@ public:
     virtual IKernelTask *GetNext(IKernelTask *current) = 0;
 };
 
+/*! \class IKernelEventHandler
+    \brief Interface of the kernel event handler.
+    \note  Optional. Can be used to extend functionality of default IPlatform driver handlers.
+*/
+class IKernelEventHandler
+{
+public:
+    /*! \brief      Called by Kernel when its entering a sleep mode.
+        \return     True if event is handled otherwise False to let driver handle it.
+    */
+    virtual bool OnSleep() = 0;
+
+    /*! \brief      Called by Kernel when hard fault happens.
+        \note       Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
+        \return     True if event is handled otherwise False to let driver handle it.
+    */
+    virtual bool OnHardFault() = 0;
+};
+
 /*! \class IKernel
-    \brief Interface for the implementation of the kernel of the scheduler.
+    \brief Interface for the implementation of the kernel of the scheduler. It supports Soft and Hard Real-Time modes.
     \note  Mediator design pattern.
 */
 class IKernel
 {
 public:
     /*! \brief     Initialize kernel.
-        \param[in] driver: Pointer to the platform driver implementation.
-        \param[in] switch_strategy: Pointer to the task switching strategy.
+        \param[in] driver: Driver implementation.
+        \param[in] switch_strategy: Task switching strategy.
+        \param[in] event_handler: Kernel events handler (optional, can be NULL).
     */
-    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy) = 0;
+    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy, IKernelEventHandler *event_handler = NULL) = 0;
 
     /*! \brief     Add user task.
+        \note      This function is for Soft Real-time modes only, e.g. stk::KERNEL_HRT is not used as parameter.
         \param[in] user_task: Pointer to the user task to add.
     */
     virtual void AddTask(ITask *user_task) = 0;
+
+    /*! \brief     Add user task.
+        \note      This function is for Hard Real-time mode only, e.g. stk::KERNEL_HRT is used as parameter.
+        \param[in] user_task: Pointer to the user task to add.
+        \param[in] periodicity_ticks: Periodicity time at which task is scheduled.
+        \param[in] deadline_ticks: Deadline time within which a task must complete its work.
+        \param[in] start_delay_ticks: Initial start delay for the task.
+    */
+    virtual void AddTask(ITask *user_task, uint32_t periodicity_ticks, uint32_t deadline_ticks, uint32_t start_delay_ticks) = 0;
 
     /*! \brief     Remove user task.
         \param[in] user_task: Pointer to the user task to remove.
@@ -407,26 +449,11 @@ public:
     */
     virtual int32_t GetTickResolution() const = 0;
 
-    /*! \brief     Convert microseconds to ticks.
-        \param[in] us: Value (microseconds).
-    */
-    int64_t ConvertMicrosecondsToTicks(int64_t us) const
-    {
-        return us / GetTickResolution();
-    }
-
     /*! \brief     Delay calling process.
         \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
         \param[in] delay_ms: Delay time (milliseconds).
     */
-    void Delay(uint32_t delay_ms) const
-    {
-        int64_t deadline = GetTicks() + ConvertMicrosecondsToTicks(delay_ms * 1000);
-        while (GetTicks() < deadline)
-        {
-            __stk_relax_cpu();
-        }
-    }
+    virtual void Delay(uint32_t delay_ms) const = 0;
 
     /*! \brief     Put calling process into a sleep state.
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
