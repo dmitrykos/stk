@@ -256,10 +256,11 @@ public:
     class IEventHandler
     {
     public:
-        /*! \brief     Called by ISR handler to notify that scheduling is about to start.
-            \note      This event can be used to change hardware access mode for the first task.
+        /*! \brief      Called by ISR handler to notify that scheduling is about to start.
+            \note       This event can be used to change hardware access mode for the first task.
+            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
         */
-        virtual void OnStart() = 0;
+        virtual void OnStart(Stack **active) = 0;
 
         /*! \brief      Called by ISR handler to notify about the next system tick.
             \param[out] idle: Stack of the task which shall go into Idle state.
@@ -284,6 +285,25 @@ public:
         virtual void OnTaskExit(Stack *stack) = 0;
     };
 
+    /*! \class IEventOverrider
+        \brief Interface of the platform event overrider.
+        \note  Optional. Can be used to extend functionality of default IPlatform driver handlers from the user-space.
+    */
+    class IEventOverrider
+    {
+    public:
+        /*! \brief      Called by Kernel when its entering a sleep mode.
+            \return     True if event is handled otherwise False to let driver handle it.
+        */
+        virtual bool OnSleep() = 0;
+
+        /*! \brief      Called by Kernel when hard fault happens.
+            \note       Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
+            \return     True if event is handled otherwise False to let driver handle it.
+        */
+        virtual bool OnHardFault() = 0;
+    };
+
     /*! \brief     Start scheduling.
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
@@ -291,7 +311,7 @@ public:
         \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */
-    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap) = 0;
+    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
 
     /*! \brief     Stop scheduling.
     */
@@ -335,6 +355,12 @@ public:
         \note      Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT).
     */
     virtual void HardFault() = 0;
+
+    /*! \brief     Set platform event overrider.
+        \note      Must be set prior call to IKernel::Start.
+        \param[in] overrider: Platform event overrider.
+    */
+    virtual void SetEventOverrider(IEventOverrider *overrider) = 0;
 };
 
 /*! \class ITaskSwitchStrategy
@@ -370,25 +396,6 @@ public:
     virtual IKernelTask *GetNext(IKernelTask *current) = 0;
 };
 
-/*! \class IKernelEventHandler
-    \brief Interface of the kernel event handler.
-    \note  Optional. Can be used to extend functionality of default IPlatform driver handlers.
-*/
-class IKernelEventHandler
-{
-public:
-    /*! \brief      Called by Kernel when its entering a sleep mode.
-        \return     True if event is handled otherwise False to let driver handle it.
-    */
-    virtual bool OnSleep() = 0;
-
-    /*! \brief      Called by Kernel when hard fault happens.
-        \note       Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
-        \return     True if event is handled otherwise False to let driver handle it.
-    */
-    virtual bool OnHardFault() = 0;
-};
-
 /*! \class IKernel
     \brief Interface for the implementation of the kernel of the scheduler. It supports Soft and Hard Real-Time modes.
     \note  Mediator design pattern.
@@ -399,9 +406,8 @@ public:
     /*! \brief     Initialize kernel.
         \param[in] driver: Driver implementation.
         \param[in] switch_strategy: Task switching strategy.
-        \param[in] event_handler: Kernel events handler (optional, can be NULL).
     */
-    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy, IKernelEventHandler *event_handler = NULL) = 0;
+    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy) = 0;
 
     /*! \brief     Add user task.
         \note      This function is for Soft Real-time modes only, e.g. stk::KERNEL_HRT is not used as parameter.

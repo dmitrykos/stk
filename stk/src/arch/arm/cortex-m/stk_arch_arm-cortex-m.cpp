@@ -81,9 +81,9 @@ extern "C" void SVC_Handler_Main(size_t *svc_args) __stk_attr_used; // __stk_att
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, Stack *first_stack, int32_t resolution_us)
+    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, exit_trap, first_stack, resolution_us);
+        PlatformContext::Initialize(handler, exit_trap, resolution_us);
 
         m_access_mode = ACCESS_PRIVILEGED;
         m_started     = false;
@@ -96,6 +96,9 @@ static struct Context : public PlatformContext
     jmp_buf     m_exit_buf;    //!< saved context of the exit point
 }
 g_Context;
+
+//! Platform events overrider.
+static IPlatform::IEventOverrider *g_Overrider = NULL;
 
 /*! \brief Get SP of the calling process.
 */
@@ -124,7 +127,6 @@ extern "C" void _STK_SYSTICK_HANDLER()
         STK_CORTEX_M_CRITICAL_SESSION_START(cs);
 
         g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-        __DSB();
 
         STK_CORTEX_M_CRITICAL_SESSION_END(cs);
     }
@@ -266,7 +268,7 @@ static void StartScheduling()
     ClearFpuState();
 
     // notify kernel
-    g_Context.m_handler->OnStart();
+    g_Context.m_handler->OnStart(&g_Context.m_stack_active);
 
     // schedule ticks
     uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * g_Context.m_tick_resolution / 1000000));
@@ -370,6 +372,12 @@ static void OnSchedulerSleep()
     }
 }
 
+static void OnSchedulerSleepOverride()
+{
+    if (!g_Overrider->OnSleep())
+        OnSchedulerSleep();
+}
+
 static void OnSchedulerExit()
 {
     __set_CONTROL(0); // switch to MSP
@@ -379,9 +387,9 @@ static void OnSchedulerExit()
     longjmp(g_Context.m_exit_buf, 0);
 }
 
-void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap)
+void PlatformArmCortexM::Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
 {
-    g_Context.Initialize(event_handler, exit_trap, first_task->GetUserStack(), resolution_us);
+    g_Context.Initialize(event_handler, exit_trap, resolution_us);
     g_Context.m_exiting = false;
 
     // save jump location of the Exit trap
@@ -420,14 +428,14 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
         break; }
 
     case STACK_SLEEP_TRAP: {
-        PC = (size_t)OnSchedulerSleep & ~0x1UL;
-        LR = (size_t)OnSchedulerSleep;
+        PC = (size_t)(g_Overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep) & ~0x1UL;
+        LR = (size_t)STK_STACK_MEMORY_FILLER; // should not attempt to exit
         R0 = 0;
         break; }
 
     case STACK_EXIT_TRAP: {
         PC = (size_t)OnSchedulerExit & ~0x1UL;
-        LR = (size_t)OnSchedulerExit;
+        LR = (size_t)STK_STACK_MEMORY_FILLER; // should not attempt to exit
         R0 = 0;
         break; }
 
@@ -509,7 +517,14 @@ void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 
 void PlatformArmCortexM::HardFault()
 {
-    abort();
+    if ((g_Overrider == NULL) || !g_Overrider->OnHardFault())
+        abort();
+}
+
+void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)
+{
+    STK_ASSERT(!g_Context.m_started);
+    g_Overrider = overrider;
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

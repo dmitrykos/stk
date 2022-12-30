@@ -73,6 +73,25 @@ static void InitLeds()
     LED_INIT(LED_BLUE, false);
 }
 
+// optional: you can override sleep and hard fault default behaviors
+class PlatformEventHandler : public stk::IPlatform::IEventOverrider
+{
+private:
+    bool OnSleep()
+    {
+        // if handled return true, otherwise event will be handler by the driver
+        // note: if returned false once this function will not be called again until Kernel is re-started
+        return false;
+    }
+
+    bool OnHardFault()
+    {
+        // if handled return true, otherwise event will be handler by the driver
+        // note: prior a call to this function a task which had deadline missed had a call to OnDeadlineMissed
+        return false;
+    }
+};
+
 void RunExample()
 {
     using namespace stk;
@@ -82,14 +101,19 @@ void RunExample()
     static Kernel<KERNEL_STATIC | KERNEL_HRT, 3> kernel;
     static PlatformDefault platform;
     static SwitchStrategyRoundRobin tsstrategy;
+    static PlatformEventHandler overrider;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
     static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 
+    // optional: you can override sleep and hard fault default behaviors
+    platform.SetEventOverrider(&overrider);
+
 #define TICKS(MS) GetTicksFromMilliseconds(MS, PERIODICITY_DEFAULT)
 
+    //                     periodicity      deadline    start delay
     kernel.AddTask(&task1, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 0));
     kernel.AddTask(&task2, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 1));
     kernel.AddTask(&task3, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 2));
