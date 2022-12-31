@@ -14,7 +14,21 @@ STK is developed in C++ and follows an Object-Oriented Design principles while
 at the same time does not pollute namespace with exceeding declarations, nor 
 using fancy new C++ features. It just tries to be very friendly to C developers ;)
 
-## Supports:
+## Features:
+STK supports soft real-time (default) and hard-real time (HRT) modes of operation. 
+It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) 
+and periodic (HRT mode - ```KERNEL_HRT```) tasks.
+
+STK intercepts main process program flow if it is in ```KERNEL_STATIC``` mode but it can
+also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` 
+mode.
+
+HRT mode allows to run periodic tasks which can be finite or infinite depending on whether
+```KERNEL_STATIC``` or ```KERNEL_DYNAMIC``` mode is used in addition to the ```KERNEL_HRT```.
+HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees 
+a ***fully deterministic behavior*** of the application.
+
+## Hardware support:
 * Arm Cortex-M0
 * Arm Cortex-M3
 * Arm Cortex-M4
@@ -45,14 +59,8 @@ class MyTask : public stk::Task<256, _AccessMode>
     uint8_t m_taskId;
 
 public:
-    MyTask(uint8_t taskId) : m_taskId(taskId)
-    { }
-
-#if 0
-    stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&MyTask::RunInner); }
-#else
+    MyTask(uint8_t taskId) : m_taskId(taskId) {}
     stk::RunFuncType GetFunc() { return &Run; }
-#endif
     void *GetFuncUserData() { return this; }
 
 private:
