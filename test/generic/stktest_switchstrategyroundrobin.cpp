@@ -9,8 +9,8 @@
 
 #include "stktest.h"
 
-using namespace stk;
-using namespace stk::test;
+namespace stk {
+namespace test {
 
 // ============================================================================ //
 // ============================ SwitchStrategyRoundRobin ====================== //
@@ -61,3 +61,5 @@ TEST(SwitchStrategyRoundRobin, EndlessNext)
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2 (endless looping)");
 }
 
+} // namespace stk
+} // namespace test

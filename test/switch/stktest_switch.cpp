@@ -98,7 +98,7 @@ private:
 } // namespace stk
 
 /*! \fn    main
-    \brief Counts number of workloads processed by each task.
+    \brief Entry to the test case.
 */
 int main(int argc, char **argv)
 {

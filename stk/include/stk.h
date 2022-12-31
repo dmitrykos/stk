@@ -265,7 +265,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
                        instance (see g_KernelService).
-            \param[in] platform: Pointer to the IPlatform instance.
+            \param[in] platform: IPlatform instance.
         */
         void Initialize(IPlatform *platform)
         {
@@ -388,6 +388,9 @@ public:
     }
 
 protected:
+    /*! \enum  EFsmState
+        \brief Finite-state machine (FSM) state.
+    */
     enum EFsmState : int8_t
     {
         FSM_STATE_NONE = -1,
@@ -398,6 +401,9 @@ protected:
         FSM_STATE_MAX
     };
 
+    /*! \enum  EFsmEvent
+        \brief Finite-state machine (FSM) event.
+    */
     enum EFsmEvent : int8_t
     {
         FSM_EVENT_SWITCH = 0,
@@ -426,6 +432,8 @@ protected:
     }
 
     /*! \brief     Allocate new instance of KernelTask.
+        \param[in] user_task: User task for which kernel task object is allocated.
+        \return    Kernel task.
     */
     KernelTask *AllocateNewTask(ITask *user_task)
     {
@@ -464,6 +472,10 @@ protected:
         return kernel_task;
     }
 
+    /*! \brief     Find kernel task for the bound ITask instance.
+        \param[in] user_task: User task.
+        \return    Kernel task.
+    */
     KernelTask *FindTask(const ITask *user_task)
     {
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
@@ -476,6 +488,10 @@ protected:
         return NULL;
     }
 
+    /*! \brief     Find kernel task for the bound Stack instance.
+        \param[in] stack: Stack.
+        \return    Kernel task.
+    */
     KernelTask *FindTask(const Stack *stack)
     {
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
@@ -488,8 +504,15 @@ protected:
         return NULL;
     }
 
+    /*! \brief     Find kernel task for a Stack Pointer (SP).
+        \param[in] SP: Stack pointer.
+        \return    Kernel task.
+    */
     KernelTask *FindTaskBySP(size_t SP)
     {
+        if (m_task_now->IsMemoryOfSP(SP))
+            return m_task_now;
+
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
@@ -500,14 +523,10 @@ protected:
         return NULL;
     }
 
-    KernelTask *GetTaskForSP(size_t caller_SP)
-    {
-        if (m_task_now->IsMemoryOfSP(caller_SP))
-            return m_task_now;
-
-        return FindTaskBySP(caller_SP);
-    }
-
+    /*! \brief     Remove kernel task.
+        \note      Removal of the kernel task means releasing it from the user task details.
+        \param[in] task: Kernel task.
+    */
     void RemoveTask(KernelTask *task)
     {
         STK_ASSERT(task != NULL);
@@ -516,6 +535,9 @@ protected:
         task->Unbind();
     }
 
+    /*! \brief     Update access mode of the Thread process.
+        \param[in] task: Kernel task.
+    */
     void UpdateAccessMode(KernelTask *task)
     {
         m_platform->SetAccessMode(task->GetUserTask()->GetAccessMode());
@@ -573,7 +595,7 @@ protected:
 
     void OnTaskSleep(size_t caller_SP, uint32_t sleep_ticks)
     {
-        KernelTask *task = GetTaskForSP(caller_SP);
+        KernelTask *task = FindTaskBySP(caller_SP);
         STK_ASSERT(task != NULL);
 
         if (_Mode & KERNEL_HRT)
@@ -605,6 +627,8 @@ protected:
         }
     }
 
+    /*! \brief     Update sleep timers of the sleeping tasks.
+    */
     void UpdateTaskSleep()
     {
         for (int32_t i = 0; i < TASKS_MAX; ++i)
@@ -616,6 +640,10 @@ protected:
         }
     }
 
+    /*! \brief     Fetch next event for the FSM.
+        \param[in] next: Next kernel task to which Kernel can switch.
+        \return    FSM event.
+    */
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
@@ -705,37 +733,45 @@ protected:
         return type;
     }
 
+    /*! \brief     Get new FSM state.
+        \param[in] next: Next kernel task to which Kernel can switch.
+        \return    FSM state.
+    */
     EFsmState GetNewFsmState(KernelTask **next)
     {
         STK_ASSERT(m_fsm_state != FSM_STATE_NONE);
-
-        EFsmState new_state = m_fsm[m_fsm_state][FetchNextEvent(next)];
-        if (new_state != FSM_STATE_NONE)
-            m_fsm_state = new_state;
-
-        return new_state;
+        return m_fsm[m_fsm_state][FetchNextEvent(next)];
     }
 
+    /*! \brief      Update FSM state.
+        \param[out] idle: Stack of the task which must enter Idle state.
+        \param[out] active: Stack of the task which must enter Active state (to which context will switch).
+        \return     FSM state.
+    */
     void UpdateFsmState(Stack **idle, Stack **active)
     {
         KernelTask *now = m_task_now, *next;
+        EFsmState new_state = GetNewFsmState(&next);
 
-        switch (GetNewFsmState(&next))
+        switch (new_state)
         {
         case FSM_STATE_SWITCHING: {
-            if (next != now)
-                StateSwitch(now, next, idle, active);
+            m_fsm_state = new_state;
+            StateSwitch(now, next, idle, active);
             break; }
 
         case FSM_STATE_AWAKENING: {
+            m_fsm_state = new_state;
             StateAwaken(now, next, idle, active);
             break; }
 
         case FSM_STATE_SLEEPING: {
+            m_fsm_state = new_state;
             StateSleep(now, next, idle, active);
             break; }
 
         case FSM_STATE_EXITING: {
+            m_fsm_state = new_state;
             StateExit(now, next, idle, active);
             break; }
 
@@ -744,8 +780,19 @@ protected:
         }
     }
 
+    /*! \brief      Switches contexts.
+        \note       FSM state: stk::FSM_STATE_SWITCHING.
+        \param[in]  now: Currently active kernel task.
+        \param[in]  next: Next kernel task.
+        \param[out] idle: Stack of the task which must enter Idle state.
+        \param[out] active: Stack of the task which must enter Active state (to which context will switch).
+    */
     void StateSwitch(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
+        // do nothing if task does not change
+        if (next == now)
+            return;
+
         STK_ASSERT(now != NULL);
         STK_ASSERT(next != NULL);
 
@@ -770,6 +817,13 @@ protected:
         m_platform->SwitchContext();
     }
 
+    /*! \brief      Awakens after sleeping.
+        \note       FSM state: stk::FSM_STATE_AWAKENING.
+        \param[in]  now: Currently active kernel task (ignored).
+        \param[in]  next: Next kernel task.
+        \param[out] idle: Stack of the task which must enter Idle state.
+        \param[out] active: Stack of the task which must enter Active state (to which context will switch).
+    */
     void StateAwaken(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
         (void)now;
@@ -794,6 +848,13 @@ protected:
         m_platform->SwitchContext();
     }
 
+    /*! \brief      Enters into a sleeping mode.
+        \note       FSM state: stk::FSM_STATE_SLEEPING.
+        \param[in]  now: Currently active kernel task.
+        \param[in]  next: Next kernel task (ignored).
+        \param[out] idle: Stack of the task which must enter Idle state.
+        \param[out] active: Stack of the task which must enter Active state (to which context will switch).
+    */
     void StateSleep(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
         (void)next;
@@ -815,6 +876,14 @@ protected:
         m_platform->SwitchContext();
     }
 
+    /*! \brief      Exits from scheduling.
+        \note       FSM state: stk::FSM_STATE_EXITING.
+        \note       Exits only if stk::KERNEL_DYNAMIC mode is specified, otherwise ignored.
+        \param[in]  now: Currently active kernel task (ignored).
+        \param[in]  next: Next kernel task (ignored).
+        \param[out] idle: Stack of the task which must enter Idle state.
+        \param[out] active: Stack of the task which must enter Active state (to which context will switch).
+    */
     void StateExit(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
         (void)now;
@@ -833,15 +902,23 @@ protected:
             m_platform->SetAccessMode(ACCESS_PRIVILEGED);
             m_platform->Stop();
         }
+        else
+        {
+            (void)idle;
+            (void)active;
+        }
     }
 
+    /*! \brief     Check if Kernel is properly initialized.
+        \return    True if initialized.
+    */
     bool IsInitialized() const
     {
         return (m_platform != NULL) && (m_switch_strategy != NULL);
     }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
-    STK_STATIC_ASSERT(TASKS_MAX > 0);
+    STK_STATIC_ASSERT_N(TASKS_MAX, TASKS_MAX > 0);
 
     /*! \typedef TaskStorageType
         \brief   KernelTask array type used as a storage for the KernelTask instances.
@@ -880,7 +957,7 @@ protected:
         { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_AWAKENING, FSM_STATE_NONE },    // FSM_STATE_SLEEPING
         { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,      FSM_STATE_EXITING }, // FSM_STATE_AWAKENING
         { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,      FSM_STATE_NONE }     // FSM_STATE_EXITING
-    };
+    }; //!< FSM state table (Kernel implements table-based FSM)
 };
 
 } // namespace stk

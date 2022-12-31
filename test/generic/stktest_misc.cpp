@@ -9,8 +9,8 @@
 
 #include "stktest.h"
 
-using namespace stk;
-using namespace stk::test;
+namespace stk {
+namespace test {
 
 // ============================================================================ //
 // ============================= UserTask ===================================== //
@@ -236,3 +236,6 @@ TEST(DList, Relink)
     CHECK_EQUAL(&list2, e2.GetHead());
     CHECK_EQUAL(&list2, e3.GetHead());
 }
+
+} // namespace stk
+} // namespace test

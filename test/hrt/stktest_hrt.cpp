@@ -31,6 +31,9 @@ namespace test {
  */
 namespace hrt {
 
+/*! \class TimeInfo
+    \brief Task pass time info.
+*/
 struct TimeInfo
 {
     uint8_t id;
@@ -40,42 +43,30 @@ struct TimeInfo
 static TimeInfo g_Time[_STK_HRT_TEST_TASKS_MAX][_STK_HRT_TEST_ITRS] = {};
 
 /*! \class TestTask
-    \brief Sleep test task.
-    \note  Tests sleep capability of the Kernel.
+    \brief HRT test task.
+    \note  Tests hard-real time (HRT) capability of the Kernel.
 */
-template <stk::EAccessMode _AccessMode>
-class TestTask : public stk::Task<256, _AccessMode>
+template <EAccessMode _AccessMode>
+class TestTask : public Task<256, _AccessMode>
 {
     uint8_t m_task_id;
 
 public:
-    TestTask(uint8_t task_id) : m_task_id(task_id)
-    { }
-
-    stk::RunFuncType GetFunc() { return &Run; }
+    TestTask(uint8_t task_id) : m_task_id(task_id) {}
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&TestTask::RunInner); }
     void *GetFuncUserData() { return this; }
 
 private:
-    static void Run(void *user_data)
-    {
-        ((TestTask *)user_data)->RunInner();
-    }
-
-    static int64_t GetMilliseconds()
-    {
-        return (g_KernelService->GetTicks() * g_KernelService->GetTickResolution()) / 1000;
-    }
-
     void RunInner()
     {
         for (int32_t i = 0; i < _STK_HRT_TEST_ITRS; ++i)
         {
-            int64_t start = GetMilliseconds();
+            int64_t start = GetTimeNowMilliseconds();
 
             // add varying workload (10, 20, 30 ms) with deadline max 50 ms
             g_KernelService->Delay(_STK_HRT_TEST_SLEEP * (m_task_id + 1));
 
-            int64_t diff = GetMilliseconds() - start;
+            int64_t diff = GetTimeNowMilliseconds() - start;
 
             printf("id=%d start=%d diff=%d\n", m_task_id, (int)start, (int)diff);
 
@@ -93,7 +84,7 @@ private:
 } // namespace stk
 
 /*! \fn    main
-    \brief Counts number of workloads processed by each task.
+    \brief Entry to the test case.
 */
 int main(int argc, char **argv)
 {

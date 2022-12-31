@@ -9,8 +9,8 @@
 
 #include "stktest.h"
 
-using namespace stk;
-using namespace stk::test;
+namespace stk {
+namespace test {
 
 // ============================================================================ //
 // =+========================= KernelService ================================== //
@@ -360,3 +360,6 @@ TEST(KernelService, SleepAllAndWake)
 
     g_RelaxCpuHandler = NULL;
 }
+
+} // namespace stk
+} // namespace test

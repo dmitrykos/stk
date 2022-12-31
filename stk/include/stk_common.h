@@ -258,13 +258,13 @@ public:
     public:
         /*! \brief      Called by ISR handler to notify that scheduling is about to start.
             \note       This event can be used to change hardware access mode for the first task.
-            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
+            \param[out] active: Stack of the task which must enter Active state (to which context will switch).
         */
         virtual void OnStart(Stack **active) = 0;
 
         /*! \brief      Called by ISR handler to notify about the next system tick.
-            \param[out] idle: Stack of the task which shall go into Idle state.
-            \param[out] active: Stack of the task which shall go into Active state (to which context will switch).
+            \param[out] idle: Stack of the task which must enter Idle state.
+            \param[out] active: Stack of the task which must enter Active state (to which context will switch).
         */
         virtual void OnSysTick(Stack **idle, Stack **active) = 0;
 
@@ -307,7 +307,6 @@ public:
     /*! \brief     Start scheduling.
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
-        \param[in] first_task: First kernel task which will be called upon start.
         \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */

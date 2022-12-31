@@ -112,6 +112,15 @@ __stk_forceinline int64_t GetTicksFromMilliseconds(int64_t ms, int32_t resolutio
     return ms * 1000LL / resolution;
 }
 
+/*! \brief     Get current time in milliseconds.
+    \return    Milliseconds.
+*/
+__stk_forceinline int64_t GetTimeNowMilliseconds()
+{
+    IKernelService *service = Singleton<IKernelService *>::Get();
+    return (service->GetTicks() * service->GetTickResolution()) / 1000LL;
+}
+
 } // namespace stk
 
 #endif /* STK_HELPER_H_ */

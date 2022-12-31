@@ -9,8 +9,8 @@
 
 #include "stktest.h"
 
-using namespace stk;
-using namespace stk::test;
+namespace stk {
+namespace test {
 
 // ============================================================================ //
 // ============================== Kernel ====================================== //
@@ -851,3 +851,6 @@ TEST(Kernel, HrtSleepingAwakeningStateChange)
     CHECK_EQUAL(platform.m_stack_idle, platform.m_stack_info[STACK_SLEEP_TRAP].stack);
     CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task.GetStack());
 }
+
+} // namespace stk
+} // namespace test

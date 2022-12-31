@@ -18,14 +18,14 @@ using namespace stk::test;
 
 STK_TEST_DECL_ASSERT;
 
-#define _STK_SLEEP_TEST_TASKS_MAX 3
+#define _STK_SLEEP_TEST_TASKS_MAX  3
 #define _STK_SLEEP_TEST_SLEEP_TIME 100
 
 namespace stk {
 namespace test {
 
 /*! \namespace stk::test::sleep
-    \brief     Namespace of Switch test.
+    \brief     Namespace of Sleep test.
  */
 namespace sleep {
 
@@ -35,44 +35,28 @@ static int32_t g_Time[_STK_SLEEP_TEST_TASKS_MAX] = {0};
     \brief Sleep test task.
     \note  Tests sleep capability of the Kernel.
 */
-template <stk::EAccessMode _AccessMode>
-class TestTask : public stk::Task<256, _AccessMode>
+template <EAccessMode _AccessMode>
+class TestTask : public Task<256, _AccessMode>
 {
     uint8_t m_task_id;
 
 public:
-    TestTask(uint8_t task_id) : m_task_id(task_id)
-    { }
-
-#if 0
-    stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&TestTask::RunInner); }
-#else
-    stk::RunFuncType GetFunc() { return &Run; }
-#endif
+    TestTask(uint8_t task_id) : m_task_id(task_id) {}
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&TestTask::RunInner); }
     void *GetFuncUserData() { return this; }
 
 private:
-    static void Run(void *user_data)
-    {
-        ((TestTask *)user_data)->RunInner();
-    }
-
-    static int64_t GetMilliseconds()
-    {
-        return (g_KernelService->GetTicks() * g_KernelService->GetTickResolution()) / 1000;
-    }
-
     void RunInner()
     {
         // task 0: sleep 100 ms
         // task 1: sleep 200 ms
         // task 2: sleep 300 ms
 
-        int64_t start = GetMilliseconds();
+        int64_t start = GetTimeNowMilliseconds();
 
         g_KernelService->Sleep(_STK_SLEEP_TEST_SLEEP_TIME * (m_task_id + 1));
 
-        int64_t diff = GetMilliseconds() - start;
+        int64_t diff = GetTimeNowMilliseconds() - start;
 
         printf("id=%d time=%d\n", m_task_id, (int)diff);
 
@@ -85,7 +69,7 @@ private:
 } // namespace stk
 
 /*! \fn    main
-    \brief Counts number of workloads processed by each task.
+    \brief Entry to the test case.
 */
 int main(int argc, char **argv)
 {

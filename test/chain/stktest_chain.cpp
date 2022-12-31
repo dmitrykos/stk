@@ -24,14 +24,14 @@ namespace stk {
 namespace test {
 
 /*! \namespace stk::test::chain
-    \brief     Namespace of Switch test.
+    \brief     Namespace of Chain test.
  */
 namespace chain {
 
 static volatile uint8_t g_TaskSwitch = 0;
 
 /*! \class TestTask
-    \brief Switch test task.
+    \brief Chain test task.
     \note  Counts __STK_CHAIN_TEST_CYCLES_MAX cycles with _STK_CHAIN_TEST_TASKS_MAX. Succeeds if counter incremented correctly.
 */
 template <EAccessMode _AccessMode>
@@ -74,7 +74,7 @@ private:
 } // namespace stk
 
 /*! \fn    main
-    \brief Counts number of workloads processed by each task.
+    \brief Entry to the test case.
 */
 int main(int argc, char **argv)
 {
