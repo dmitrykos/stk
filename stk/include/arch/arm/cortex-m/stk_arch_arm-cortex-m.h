@@ -20,7 +20,7 @@ namespace stk {
 class PlatformArmCortexM : public IPlatform
 {
 public:
-    void Start(IEventHandler *event_handler, uint32_t resolution_us, IKernelTask *first_task, Stack *exit_trap);
+    void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap);
     void Stop();
     bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
     void SwitchContext();
@@ -28,6 +28,8 @@ public:
     void SetAccessMode(EAccessMode mode);
     void SwitchToNext();
     void SleepTicks(uint32_t ticks);
+    void HardFault();
+    void SetEventOverrider(IEventOverrider *overrider);
 };
 
 /*! \typedef PlatformDefault

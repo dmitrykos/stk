@@ -22,28 +22,55 @@ TEST_GROUP(KernelService)
     void teardown() {}
 };
 
-TEST(KernelService, ConvertMicrosecondsToTicks)
+TEST(KernelService, GetMillisecondsToTicks)
 {
-    static KernelServiceMock mock;
+    KernelServiceMock mock;
     mock.m_ticks = 1;
 
-    mock.m_resolution = 1;
-    CHECK_EQUAL(10000, (int32_t)mock.ConvertMicrosecondsToTicks(10 * 1000));
+    mock.m_resolution = 1000;
+    CHECK_EQUAL(10, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
 
-    mock.m_resolution = 100;
-    CHECK_EQUAL(100, (int32_t)mock.ConvertMicrosecondsToTicks(10 * 1000));
+    mock.m_resolution = 10000;
+    CHECK_EQUAL(100, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
+}
+
+static struct DelayContext
+{
+    DelayContext() : platform(NULL) {}
+
+    PlatformTestMock *platform;
+
+    void Process()
+    {
+        platform->EventSysTick();
+    }
+}
+g_DelayContext;
+
+static void DelayRelaxCpu()
+{
+    g_DelayContext.Process();
 }
 
 TEST(KernelService, Delay)
 {
-    KernelServiceMock mock;
-    mock.m_inc_ticks  = true;
-    mock.m_ticks      = 0;
-    mock.m_resolution = 1;
+    Kernel<KERNEL_STATIC, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
 
-    mock.Delay(10);
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task);
+    kernel.Start();
 
-    CHECK_EQUAL(10001, (int32_t)mock.m_ticks);
+    g_RelaxCpuHandler = DelayRelaxCpu;
+    g_DelayContext.platform = &platform;
+
+    g_KernelService->Delay(10);
+
+    g_RelaxCpuHandler = NULL;
+
+    CHECK_EQUAL(10, (int32_t)g_KernelService->GetTicks());
 }
 
 TEST(KernelService, InitStackFailure)
@@ -95,9 +122,6 @@ TEST(KernelService, GetTicks)
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start(PERIODICITY_DEFAULT);
-
-    // ISR calls OnStart
-    platform.EventStart();
 
     // ISR calls OnSysTick 1-st time
     platform.EventSysTick();
@@ -168,9 +192,6 @@ TEST(KernelService, SwitchToNext)
     kernel.AddTask(&task2);
     kernel.Start();
 
-    // ISR calls OnStart (task1 = active, task2 = idle)
-    platform.EventStart();
-
     // ISR calls OnSysTick (task1 = idle, task2 = active)
     platform.EventSysTick();
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
@@ -223,14 +244,8 @@ static struct SleepRelaxCpuContext
             CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
         }
         else
-        // ISR calls OnSysTick (task1 = active, task2 = idle)
-        if (counter == 1)
-        {
-            CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
-        }
-        else
         // ISR calls OnSysTick (task1 = idle, task2 = active)
-        if (counter == 2)
+        if (counter == 1)
         {
             CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
         }
@@ -257,9 +272,6 @@ TEST(KernelService, Sleep)
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
-
-    // ISR calls OnStart (task1 = active, task2 = idle)
-    platform.EventStart();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
     platform.EventSysTick();
@@ -333,18 +345,15 @@ TEST(KernelService, SleepAllAndWake)
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin switch_strategy;
-    TaskMock<ACCESS_USER> task1;
+    TaskMock<ACCESS_USER> task;
 
     kernel.Initialize(&platform, &switch_strategy);
-    kernel.AddTask(&task1);
+    kernel.AddTask(&task);
     kernel.Start();
-
-    // ISR calls OnStart (task1 = active)
-    platform.EventStart();
 
     g_RelaxCpuHandler = SleepAllAndWakeRelaxCpu;
     g_SleepAllAndWakeRelaxCpuContext.platform = &platform;
-    g_SleepAllAndWakeRelaxCpuContext.task1    = &task1;
+    g_SleepAllAndWakeRelaxCpuContext.task1    = &task;
 
     // task1 calls Sleep
     g_KernelService->Sleep(3);

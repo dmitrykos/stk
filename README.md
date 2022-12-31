@@ -97,7 +97,7 @@ private:
                 break;
             }
 
-            g_KernelService->DelaySpin(delay_ms);
+            g_KernelService->Sleep(delay_ms);
 
             g_TaskSwitch = (task_id + 1) % 3;
         }

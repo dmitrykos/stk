@@ -27,14 +27,13 @@ public:
     /*! \brief     Initialize context.
         \param[in] handler: Event handler.
         \param[in] exit_trap: Exit trap's stack.
-        \param[in] first_stack: First task's stack.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
     */
-    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, Stack *first_stack, int32_t resolution_us)
+    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
     {
         m_handler         = handler;
         m_stack_idle      = exit_trap;
-        m_stack_active    = first_stack;
+        m_stack_active    = NULL;
         m_tick_resolution = resolution_us;
     }
 

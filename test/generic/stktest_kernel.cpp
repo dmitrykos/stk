@@ -348,7 +348,8 @@ TEST(Kernel, Start)
 
     CHECK_TRUE(platform.m_started);
     CHECK_TRUE(g_KernelService != NULL);
-    CHECK_EQUAL(&task, platform.m_first_task_Start->GetUserTask());
+    CHECK_TRUE(platform.m_stack_active != NULL);
+    CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_active->SP);
     CHECK_EQUAL(periodicity, platform.GetTickResolution());
 }
 
@@ -362,9 +363,6 @@ TEST(Kernel, StartBeginISR)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task);
     kernel.Start();
-
-    // ISR calls OnStart
-    platform.EventStart();
 
     // expect that first task's access mode is requested by kernel
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -382,9 +380,6 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
-
-    // ISR calls OnStart
-    platform.EventStart();
 
     // ISR calls OnSysTick 1-st time
     {
@@ -434,9 +429,6 @@ TEST(Kernel, ContextSwitchAccessModeChange)
     kernel.AddTask(&task2);
     kernel.Start();
 
-    // ISR calls OnStart
-    platform.EventStart();
-
     // 1-st task
     CHECK_EQUAL(ACCESS_USER, platform.m_access_mode);
 
@@ -480,9 +472,6 @@ TEST(Kernel, SingleTask)
     kernel.AddTask(&task);
     kernel.Start();
 
-    // ISR calls OnStart
-    platform.EventStart();
-
     // ISR calls OnSysTick
     platform.EventSysTick();
 
@@ -503,9 +492,6 @@ TEST(Kernel, OnTaskExit)
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
-
-    // ISR calls OnStart
-    platform.EventStart();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
     platform.EventSysTick();
@@ -543,9 +529,6 @@ TEST(Kernel, OnTaskExitUnknownOrNull)
     kernel.Initialize(&platform, &switch_strategy);
     kernel.AddTask(&task1);
     kernel.Start();
-
-    // ISR calls OnStart
-    platform.EventStart();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
     platform.EventSysTick();
@@ -587,9 +570,6 @@ TEST(Kernel, OnTaskExitUnsupported)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    // ISR calls OnStart
-    platform.EventStart();
-
     // ISR calls OnSysTick
     platform.EventSysTick();
 
@@ -617,7 +597,6 @@ TEST(Kernel, OnTaskNotFoundBySP)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    platform.EventStart();
     platform.EventSysTick();
 
     try
@@ -631,4 +610,244 @@ TEST(Kernel, OnTaskNotFoundBySP)
         CHECK(true);
         g_TestContext.ExpectAssert(false);
     }
+}
+
+TEST(Kernel, Hrt)
+{
+    Kernel<KERNEL_STATIC | KERNEL_HRT, 2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task1, 1, 1, 0);
+    kernel.AddTask(&task2, 2, 1, 0);
+    kernel.Start();
+
+    platform.EventSysTick();
+    CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task2.GetStack());
+
+    platform.EventSysTick();
+    CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task1.GetStack());
+}
+
+TEST(Kernel, HrtAddNonHrt)
+{
+    Kernel<KERNEL_STATIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.AddTask(&task);
+        CHECK_TEXT(false, "non-HRT AddTask not supported in HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, HrtAddNotAllowedForNonHrtMode)
+{
+    Kernel<KERNEL_STATIC, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.AddTask(&task, 1, 1, 0);
+        CHECK_TEXT(false, "HRT-related AddTask not supported in non-HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, HrtSleepNotAllowed)
+{
+    Kernel<KERNEL_STATIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task, 1, 1, 0);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        g_KernelService->Sleep(1);
+        CHECK_TEXT(false, "IKernelService::Sleep not allowed in HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, HrtTaskCompleted)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task, 1, 1, 0);
+    kernel.Start();
+
+    CHECK_TRUE(switch_strategy.GetFirst() != NULL);
+
+    platform.EventTaskExit(platform.m_stack_active);
+    platform.EventSysTick();
+
+    CHECK_TRUE(switch_strategy.GetFirst() == NULL);
+}
+
+static struct HrtTaskDeadlineMissedRelaxCpuContext
+{
+    HrtTaskDeadlineMissedRelaxCpuContext()
+    {
+        counter  = 0;
+        platform = NULL;
+    }
+
+    uint32_t          counter;
+    PlatformTestMock *platform;
+
+    void Process()
+    {
+        platform->EventSysTick();
+        ++counter;
+    }
+}
+g_HrtTaskDeadlineMissedRelaxCpuContext;
+
+static void HrtTaskDeadlineMissedRelaxCpu()
+{
+    g_HrtTaskDeadlineMissedRelaxCpuContext.Process();
+}
+
+TEST(Kernel, HrtTaskDeadlineMissed)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task, 2, 1, 0);
+    kernel.Start();
+
+    // 2-nd tick goes outside the deadline
+    platform.EventSysTick();
+
+    g_HrtTaskDeadlineMissedRelaxCpuContext.platform = &platform;
+    g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
+        g_KernelService->SwitchToNext();
+        CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    CHECK_TRUE(platform.m_hard_fault);
+    CHECK_EQUAL(2, task.m_deadline_missed);
+}
+
+TEST(Kernel, HrtDeadlineMissedOnTaskExit)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task, 1, 1, 0);
+    kernel.Start();
+
+    // 2-nd tick goes outside the deadline
+    platform.EventSysTick();
+
+    // task returns (exiting) without calling SwitchToNext
+    platform.EventTaskExit(platform.m_stack_active);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        // on next tick kernel will attempt to remove pending task and will check its deadline
+        platform.EventSysTick();
+        CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    CHECK_TRUE(platform.m_hard_fault);
+    CHECK_EQUAL(2, task.m_deadline_missed);
+}
+
+TEST(Kernel, HrtTaskExitDuringSleepState)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task1, 1, 1, 0);
+    kernel.AddTask(&task2, 1, 1, 2);
+    kernel.Start();
+
+    // task returns (exiting) without calling SwitchToNext
+    platform.EventTaskExit(platform.m_stack_active);
+
+    platform.EventSysTick();
+    platform.EventSysTick();
+    platform.EventSysTick();
+    platform.EventSysTick();
+}
+
+TEST(Kernel, HrtSleepingAwakeningStateChange)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin switch_strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &switch_strategy);
+    kernel.AddTask(&task, 1, 1, 1);
+    kernel.Start();
+
+    // due to 1 tick delayed start of the task Kernel enters into a SLEEPING state
+    CHECK_EQUAL(platform.m_stack_active, platform.m_stack_info[STACK_SLEEP_TRAP].stack);
+
+    platform.EventSysTick();
+
+    // after a tick task become active and Kernel enters into a AWAKENING state
+    CHECK_EQUAL(platform.m_stack_idle, platform.m_stack_info[STACK_SLEEP_TRAP].stack);
+    CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task.GetStack());
 }

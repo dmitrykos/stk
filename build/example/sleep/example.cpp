@@ -79,7 +79,7 @@ void RunExample()
     static SwitchStrategyRoundRobin tsstrategy;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
-    static MyTask<ACCESS_USER> task1(0), task2(1), task3(2);
+    static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
 
     kernel.Initialize(&platform, &tsstrategy);
 

@@ -58,6 +58,7 @@ public:
     size_t *GetStack() { return m_stack; }
     uint32_t GetStackSize() const { return _StackSize; }
     EAccessMode GetAccessMode() const { return _AccessMode; }
+    virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
 
 private:
     typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
@@ -84,17 +85,32 @@ public:
         STK_STATIC_ASSERT(_StackSize >= STACK_SIZE_MIN);
     }
 
-    /*! \brief Get pointer to the stack memory.
-    */
     size_t *GetStack() { return (*m_stack); }
-
-    /*! \brief Get size of the stack memory array (number of size_t elements in the array).
-    */
     uint32_t GetStackSize() const { return _StackSize; }
 
 private:
     MemoryType *m_stack; //!< pointer to the wrapped memory region
 };
+
+/*! \brief     Get milliseconds from ticks.
+    \param[in] ticks: Ticks to convert.
+    \param[in] resolution: Resolution (see IKernelService::GetTickResolution).
+    \return    Milliseconds.
+*/
+__stk_forceinline int64_t GetMillisecondsFromTicks(int64_t ticks, int32_t resolution)
+{
+    return (ticks * resolution) / 1000;
+}
+
+/*! \brief     Get ticks from milliseconds.
+    \param[in] ms: Milliseconds to convert.
+    \param[in] resolution: Resolution (see IKernelService::GetTickResolution).
+    \return    Ticks.
+*/
+__stk_forceinline int64_t GetTicksFromMilliseconds(int64_t ms, int32_t resolution)
+{
+    return ms * 1000LL / resolution;
+}
 
 } // namespace stk
 

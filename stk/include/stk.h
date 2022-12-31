@@ -50,7 +50,7 @@ namespace stk {
     kernel.Start(PERIODICITY_DEFAULT);
     \endcode
 */
-template <EKernelMode _Mode, uint32_t _Size>
+template <int32_t _Mode, uint32_t _Size>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
     /*! \typedef TrapStackStackMemory
@@ -74,7 +74,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     public:
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack(), m_time_sleep(0)
+        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack(), m_time_sleep(0), m_hrt()
         { }
 
         ITask *GetUserTask() { return m_user; }
@@ -84,12 +84,29 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         bool IsBusy() const { return (m_user != NULL); }
 
     private:
-        void Unbind()
+        /*! \class HrtInfo
+            \brief Hard Real-Time info of the bound task.
+            \note  Related to stk::KERNEL_HRT mode only.
+        */
+        struct HrtInfo
         {
-            Clear();
-        }
+            HrtInfo()
+            {
+                periodicity = 0;
+                deadline    = 0;
+                duration    = 0;
+                last_ticks  = 0;
+            }
 
-        void Clear()
+            int32_t periodicity; //!< scheduling periodicity (ticks)
+            int32_t deadline;    //!< work deadline (ticks)
+            int32_t duration;    //!< current duration of the active state when work is being carried out by the task (ticks)
+            int64_t last_ticks;  //!< last saved tick value obtained by IKernelService::GetTicks (ticks)
+        };
+
+        /*! \brief     Clear from bound values to make it 'free'.
+        */
+        void Unbind()
         {
             m_user       = NULL;
             m_stack      = {};
@@ -97,22 +114,78 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             m_time_sleep = 0;
         }
 
+        /*! \brief     Schedule the removal of the task from the kernel on next tick.
+        */
         void ScheduleRemoval() { m_state |= STATE_REMOVE_PENDING; }
 
+        /*! \brief     Check if task is pending removal.
+        */
         bool IsPendingRemoval() const { return (m_state & STATE_REMOVE_PENDING) != 0; }
 
-        bool IsMemoryOfSP(size_t caller_SP) const
+        /*! \brief     Check if Stack Pointer (SP) belongs to this task.
+            \param[in] SP: Stack Pointer.
+        */
+        bool IsMemoryOfSP(size_t SP) const
         {
             size_t *start = m_user->GetStack();
             size_t *end   = start + m_user->GetStackSize();
 
-            return (caller_SP >= (size_t)start) && (caller_SP <= (size_t)end);
+            return (SP >= (size_t)start) && (SP <= (size_t)end);
         }
 
-        ITask   *m_user;       //!< user task
-        uint32_t m_state;      //!< state flags
-        Stack    m_stack;      //!< stack descriptor
-        int32_t  m_time_sleep; //!< time to sleep
+        /*! \brief     Called when task is switched into the scheduling process.
+            \note      Related to stk::KERNEL_HRT mode only.
+            \param[in] ticks: Current ticks of the Kernel.
+        */
+        void HrtOnSwitchedIn(int64_t ticks)
+        {
+            m_hrt[0].last_ticks = ticks;
+        }
+
+        /*! \brief     Called when task is switched out from the scheduling process.
+            \note      Related to stk::KERNEL_HRT mode only.
+            \param[in] platform: Platform driver instance.
+            \param[in] ticks: Current ticks of the Kernel.
+        */
+        void HrtOnSwitchedOut(IPlatform *platform, int64_t ticks)
+        {
+            int32_t duration = m_hrt[0].duration + (ticks - m_hrt[0].last_ticks);
+            m_hrt[0].duration = 0;
+
+            STK_ASSERT(duration >= 0);
+
+            // check if deadline is missed (HRT failure)
+            if (HrtIsDeadlineMissed(duration))
+            {
+                m_user->OnDeadlineMissed(duration);
+                platform->HardFault();
+                STK_ASSERT(false);
+            }
+
+            m_time_sleep = -(m_hrt[0].periodicity - duration);
+        }
+
+        /*! \brief     Called when task process called IKernelService::SwitchToNext to inform Kernel that work is completed.
+            \note      Related to stk::KERNEL_HRT mode only.
+        */
+        void HrtOnWorkCompleted()
+        {
+            m_time_sleep = -INT32_MAX;
+        }
+
+        /*! \brief     Check if deadline missed.
+            \note      Related to stk::KERNEL_HRT mode only.
+        */
+        bool HrtIsDeadlineMissed(int32_t duration) const
+        {
+            return (duration > m_hrt[0].deadline);
+        }
+
+        ITask   *m_user;  //!< user task
+        uint32_t m_state; //!< state flags
+        Stack    m_stack; //!< stack descriptor
+        int32_t  m_time_sleep; //!< time to sleep (ticks)
+        HrtInfo  m_hrt[_Mode & KERNEL_HRT ? 1 : 0]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
     /*! \class KernelService
@@ -131,7 +204,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         class SingletonBinder : private Singleton<IKernelService *>
         {
             //! \note Only Kernel's internal environment has access to the SingletonBinder::Bind() function.
-            template <EKernelMode _Mode0, uint32_t _Size0> friend class Kernel;
+            template <int32_t _Mode0, uint32_t _Size0> friend class Kernel;
         };
 
     public:
@@ -145,9 +218,26 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             return m_platform->GetTickResolution();
         }
 
+        void Delay(uint32_t delay_ms) const
+        {
+            int64_t deadline = GetTicks() + GetTicksFromMilliseconds(delay_ms, GetTickResolution());
+            while (GetTicks() < deadline)
+            {
+                __stk_relax_cpu();
+            }
+        }
+
         void Sleep(uint32_t sleep_ms)
         {
-            m_platform->SleepTicks((uint32_t)ConvertMicrosecondsToTicks(sleep_ms * 1000));
+            if ((_Mode & KERNEL_HRT) == 0)
+            {
+                m_platform->SleepTicks((uint32_t)GetTicksFromMilliseconds(sleep_ms, GetTickResolution()));
+            }
+            else
+            {
+                // sleeping is not supported in HRT mode, task will sleep according its periodicity and workload
+                STK_ASSERT(false);
+            }
         }
 
         void SwitchToNext()
@@ -186,10 +276,9 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 SingletonBinder::Bind(this);
         }
 
-        void IncrementTick()
-        {
-            ++m_ticks;
-        }
+        /*! \brief     Increment tick by 1.
+        */
+        void IncrementTick() { ++m_ticks; }
 
         IPlatform       *m_platform; //!< platform
         volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile to reload value from the memory by the consumer)
@@ -223,18 +312,51 @@ public:
 
     void AddTask(ITask *user_task)
     {
-        STK_ASSERT(user_task != NULL);
-        STK_ASSERT(IsInitialized());
+        if ((_Mode & KERNEL_HRT) == 0)
+        {
+            STK_ASSERT(user_task != NULL);
+            STK_ASSERT(IsInitialized());
 
-        KernelTask *task = AllocateNewTask(user_task);
-        STK_ASSERT(task != NULL);
+            KernelTask *task = AllocateNewTask(user_task);
+            STK_ASSERT(task != NULL);
 
-        m_switch_strategy->AddTask(task);
+            m_switch_strategy->AddTask(task);
+        }
+        else
+        {
+            STK_ASSERT(false);
+        }
+    }
+
+    void AddTask(ITask *user_task, uint32_t periodicity_ticks, uint32_t deadline_ticks, uint32_t start_delay_ticks)
+    {
+        if (_Mode & KERNEL_HRT)
+        {
+            STK_ASSERT(periodicity_ticks != 0);
+            STK_ASSERT(deadline_ticks != 0);
+            STK_ASSERT(periodicity_ticks < INT32_MAX);
+            STK_ASSERT(deadline_ticks < INT32_MAX);
+            STK_ASSERT(user_task != NULL);
+            STK_ASSERT(IsInitialized());
+
+            KernelTask *task = AllocateNewTask(user_task);
+            STK_ASSERT(task != NULL);
+
+            task->m_hrt[0].periodicity = periodicity_ticks;
+            task->m_hrt[0].deadline    = deadline_ticks;
+            task->m_time_sleep         = -start_delay_ticks;
+
+            m_switch_strategy->AddTask(task);
+        }
+        else
+        {
+            STK_ASSERT(false);
+        }
     }
 
     void RemoveTask(ITask *user_task)
     {
-        if (_Mode == KERNEL_DYNAMIC)
+        if (_Mode & KERNEL_DYNAMIC)
         {
             STK_ASSERT(user_task != NULL);
 
@@ -255,18 +377,14 @@ public:
         STK_ASSERT(resolution_us <= PERIODICITY_MAX);
         STK_ASSERT(IsInitialized());
 
-        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
-        STK_ASSERT(m_task_now != NULL);
+        m_task_now = NULL;
 
         // stacks of the traps must be re-initilized on every subsequent Start
         InitTraps();
 
-        // make sure SFM is in switching state after re-start
-        m_fsm_state = FSM_STATE_SWITCHING;
-
         m_service.Initialize(m_platform);
 
-        m_platform->Start(this, resolution_us, m_task_now, (_Mode == KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
+        m_platform->Start(this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
     }
 
 protected:
@@ -289,6 +407,8 @@ protected:
         FSM_EVENT_MAX
     };
 
+    /*! \brief     Initialize stack of the traps.
+    */
     void InitTraps()
     {
         // init stack for a Sleep trap
@@ -298,13 +418,15 @@ protected:
         }
 
         // init stack for an Exit trap
-        if (_Mode == KERNEL_DYNAMIC)
+        if (_Mode & KERNEL_DYNAMIC)
         {
             TrapStackStackMemory wrapper(&m_exit_trap[0].memory);
             m_platform->InitStack(STACK_EXIT_TRAP, &m_exit_trap[0].stack, &wrapper, NULL);
         }
     }
 
+    /*! \brief     Allocate new instance of KernelTask.
+    */
     KernelTask *AllocateNewTask(ITask *user_task)
     {
         // look for a free kernel task
@@ -399,15 +521,49 @@ protected:
         m_platform->SetAccessMode(task->GetUserTask()->GetAccessMode());
     }
 
-    void OnStart()
+    void OnStart(Stack **active)
     {
-        UpdateAccessMode(m_task_now);
+        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
+        STK_ASSERT(m_task_now != NULL);
+
+        // init FSM start state
+        m_fsm_state = FSM_STATE_SWITCHING;
+
+        // in HRT mode all tasks can have delayed start therefore get correct one
+        if (_Mode & KERNEL_HRT)
+        {
+            KernelTask *next = NULL;
+            m_fsm_state = GetNewFsmState(&next);
+
+            // expecting only SLEEPING or SWITCHING states
+            STK_ASSERT((m_fsm_state == FSM_STATE_SLEEPING) || (m_fsm_state == FSM_STATE_SWITCHING));
+        }
+
+        if (m_fsm_state == FSM_STATE_SWITCHING)
+        {
+            (*active) = m_task_now->GetUserStack();
+
+            if (_Mode & KERNEL_HRT)
+            {
+                m_task_now->HrtOnSwitchedIn(m_service.GetTicks());
+            }
+
+            UpdateAccessMode(m_task_now);
+        }
+        else
+        if (m_fsm_state == FSM_STATE_SLEEPING)
+        {
+            (*active) = &m_sleep_trap[0].stack;
+
+            m_platform->SetAccessMode(ACCESS_PRIVILEGED);
+        }
     }
 
     void OnSysTick(Stack **idle, Stack **active)
     {
         m_service.IncrementTick();
-        SwitchTask(idle, active, 1);
+        UpdateTaskSleep();
+        UpdateFsmState(idle, active);
     }
 
     void OnTaskSwitch(size_t caller_SP)
@@ -420,6 +576,11 @@ protected:
         KernelTask *task = GetTaskForSP(caller_SP);
         STK_ASSERT(task != NULL);
 
+        if (_Mode & KERNEL_HRT)
+        {
+            task->HrtOnWorkCompleted();
+        }
+
         task->m_time_sleep -= sleep_ticks;
 
         while (task->m_time_sleep < 0)
@@ -430,7 +591,7 @@ protected:
 
     void OnTaskExit(Stack *stack)
     {
-        if (_Mode == KERNEL_DYNAMIC)
+        if (_Mode & KERNEL_DYNAMIC)
         {
             KernelTask *task = FindTask(stack);
             STK_ASSERT(task != NULL);
@@ -444,32 +605,62 @@ protected:
         }
     }
 
-    EFsmEvent FetchNextEvent(int32_t time_tick, KernelTask **next)
+    void UpdateTaskSleep()
+    {
+        for (int32_t i = 0; i < TASKS_MAX; ++i)
+        {
+            KernelTask *task = &m_task_storage[i];
+
+            if (task->m_time_sleep < 0)
+                ++task->m_time_sleep;
+        }
+    }
+
+    EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = m_task_now, *prev = m_task_now, *end = NULL;
+        KernelTask *itr = m_task_now, *prev = m_task_now, *sleep_end = NULL, *pending_end = NULL;
 
         for (;;)
         {
-            if (_Mode == KERNEL_DYNAMIC)
+            if (_Mode & KERNEL_DYNAMIC)
             {
                 while ((itr = static_cast<KernelTask *>(m_switch_strategy->GetNext(prev))) != NULL)
                 {
                     // process pending task removal
                     if (itr->IsPendingRemoval())
                     {
+                        // we can't remove current task because task switching driver context is branchless
+                        // therefore make any other task as current, switch to it and then remove pending
+                        if ((itr == m_task_now) && (itr != pending_end))
+                        {
+                            // memorize as end to avoid endless loop if all entries are pending exit
+                            if (pending_end == NULL)
+                                pending_end = itr;
+
+                            if (_Mode & KERNEL_HRT)
+                            {
+                                // current task will not be switched out in StateSwitch because it is the last one
+                                // therefore make sure deadline is checked for this task
+                                if (itr->GetHead()->GetSize() == 1)
+                                    itr->HrtOnSwitchedOut(m_platform, m_service.GetTicks());
+                            }
+
+                            // move to the next
+                            prev = itr;
+                            continue;
+                        }
+
                         RemoveTask(itr);
 
-                        // check if current task and clear its pointer
-                        if (itr == m_task_now)
-                            m_task_now = NULL;
+                        // reset pending end to restore looping to the next non-pending
+                        pending_end = NULL;
 
                         // check if no tasks left
                         if (m_switch_strategy->GetFirst() == NULL)
                         {
-                            itr        = NULL;
-                            m_task_now = NULL;
-                            type       = FSM_EVENT_EXIT;
+                            itr  = NULL;
+                            type = FSM_EVENT_EXIT;
                             break;
                         }
 
@@ -487,31 +678,25 @@ protected:
             // check if task is sleeping
             if ((itr != NULL) && (itr->m_time_sleep < 0))
             {
-                if (itr == end)
+                // if iterated back to self then all tasks are sleeping and kernel must enter a sleep mode
+                if (itr == sleep_end)
                 {
                     itr  = NULL;
                     type = FSM_EVENT_SLEEP;
                     break;
                 }
 
-                if (end == NULL)
-                    end = itr;
+                // memorize as end to avoid endless loop if all entries are pending sleep
+                if (sleep_end == NULL)
+                    sleep_end = itr;
 
-                itr->m_time_sleep += time_tick;
-
-                // if still need to sleep get next
-                if (itr->m_time_sleep < 0)
-                {
-                    prev = itr;
-                    continue;
-                }
-
-                itr->m_time_sleep = 0;
-
-                // if was sleeping send wake event first
-                if (m_fsm_state == FSM_STATE_SLEEPING)
-                    type = FSM_EVENT_WAKE;
+                prev = itr;
+                continue;
             }
+
+            // if was sleeping send wake event first
+            if (m_fsm_state == FSM_STATE_SLEEPING)
+                type = FSM_EVENT_WAKE;
 
             break;
         }
@@ -520,15 +705,22 @@ protected:
         return type;
     }
 
-    void SwitchTask(Stack **idle, Stack **active, int32_t time_tick)
+    EFsmState GetNewFsmState(KernelTask **next)
     {
-        KernelTask *now = m_task_now, *next;
+        STK_ASSERT(m_fsm_state != FSM_STATE_NONE);
 
-        EFsmState new_state = m_fsm[m_fsm_state][FetchNextEvent(time_tick, &next)];
+        EFsmState new_state = m_fsm[m_fsm_state][FetchNextEvent(next)];
         if (new_state != FSM_STATE_NONE)
             m_fsm_state = new_state;
 
-        switch (new_state)
+        return new_state;
+    }
+
+    void UpdateFsmState(Stack **idle, Stack **active)
+    {
+        KernelTask *now = m_task_now, *next;
+
+        switch (GetNewFsmState(&next))
         {
         case FSM_STATE_SWITCHING: {
             if (next != now)
@@ -554,6 +746,9 @@ protected:
 
     void StateSwitch(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
+        STK_ASSERT(now != NULL);
+        STK_ASSERT(next != NULL);
+
         (*idle)   = now->GetUserStack();
         (*active) = next->GetUserStack();
 
@@ -563,6 +758,14 @@ protected:
 
         m_task_now = next;
 
+        if (_Mode & KERNEL_HRT)
+        {
+            int64_t ticks = m_service.GetTicks();
+
+            now->HrtOnSwitchedOut(m_platform, ticks);
+            next->HrtOnSwitchedIn(ticks);
+        }
+
         UpdateAccessMode(next);
         m_platform->SwitchContext();
     }
@@ -570,6 +773,8 @@ protected:
     void StateAwaken(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
         (void)now;
+
+        STK_ASSERT(next != NULL);
 
         (*idle)   = &m_sleep_trap[0].stack;
         (*active) = next->GetUserStack();
@@ -580,21 +785,31 @@ protected:
 
         m_task_now = next;
 
+        if (_Mode & KERNEL_HRT)
+        {
+            next->HrtOnSwitchedIn(m_service.GetTicks());
+        }
+
         UpdateAccessMode(next);
         m_platform->SwitchContext();
     }
 
     void StateSleep(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
-        (void)now;
         (void)next;
 
+        STK_ASSERT(now != NULL);
         STK_ASSERT(m_sleep_trap[0].stack.SP != 0);
 
         (*idle)   = now->GetUserStack();
         (*active) = &m_sleep_trap[0].stack;
 
         m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
+
+        if (_Mode & KERNEL_HRT)
+        {
+            now->HrtOnSwitchedOut(m_platform, m_service.GetTicks());
+        }
 
         m_platform->SetAccessMode(ACCESS_PRIVILEGED);
         m_platform->SwitchContext();
@@ -605,13 +820,15 @@ protected:
         (void)now;
         (void)next;
 
-        if (_Mode == KERNEL_DYNAMIC)
+        if (_Mode & KERNEL_DYNAMIC)
         {
             // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
             STK_ASSERT(m_exit_trap[0].stack.SP != 0);
 
             (*idle)   = NULL;
             (*active) = &m_exit_trap[0].stack;
+
+            m_task_now = NULL;
 
             m_platform->SetAccessMode(ACCESS_PRIVILEGED);
             m_platform->Stop();
@@ -654,7 +871,7 @@ protected:
     KernelTask          *m_task_now;        //!< current task task
     TaskStorageType      m_task_storage;    //!< task storage
     TrapStack            m_sleep_trap[1];   //!< sleep trap
-    TrapStack            m_exit_trap[_Mode == KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (it does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    TrapStack            m_exit_trap[_Mode & KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
     EFsmState            m_fsm_state;       //!< FSM state
 
     const EFsmState      m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {

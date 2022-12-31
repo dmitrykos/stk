@@ -120,9 +120,9 @@ int main(int argc, char **argv)
             diff = -diff;
 
         // check if time difference for every task is not more than 10 ms
-        if (diff > 10)
+        if (diff > 3)
         {
-            printf("failed time: id=%d diff=%d (>10)\n", (int)i, (int)diff);
+            printf("failed time: id=%d diff=%d (>3)\n", (int)i, (int)diff);
             result = TestContext::DEFAULT_FAILURE_EXIT_CODE;
         }
     }
