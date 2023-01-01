@@ -756,28 +756,26 @@ protected:
         switch (new_state)
         {
         case FSM_STATE_SWITCHING: {
-            m_fsm_state = new_state;
             StateSwitch(now, next, idle, active);
             break; }
 
         case FSM_STATE_AWAKENING: {
-            m_fsm_state = new_state;
             StateAwaken(now, next, idle, active);
             break; }
 
         case FSM_STATE_SLEEPING: {
-            m_fsm_state = new_state;
             StateSleep(now, next, idle, active);
             break; }
 
         case FSM_STATE_EXITING: {
-            m_fsm_state = new_state;
             StateExit(now, next, idle, active);
             break; }
 
         default:
-            break;
+            return;
         }
+
+        m_fsm_state = new_state;
     }
 
     /*! \brief      Switches contexts.
@@ -789,12 +787,12 @@ protected:
     */
     void StateSwitch(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
+        STK_ASSERT(now != NULL);
+        STK_ASSERT(next != NULL);
+
         // do nothing if task does not change
         if (next == now)
             return;
-
-        STK_ASSERT(now != NULL);
-        STK_ASSERT(next != NULL);
 
         (*idle)   = now->GetUserStack();
         (*active) = next->GetUserStack();
