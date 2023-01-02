@@ -31,13 +31,6 @@ if (BUILD_TESTS)
     endif()
 endif()
 
-# Small binary (note: optimization towards smaller binary may result in a run-time overhead)
-option(ENABLE_SMALL_BINARY "enable Small binary size of STK library" OFF)
-if (ENABLE_SMALL_BINARY OR ENABLE_SMALL)
-    message(STATUS "Small STK binary")
-    add_definitions(-D_STK_SMALL_BINARY)
-endif()
-
 # Compiler related
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
     set(CLANGC TRUE)

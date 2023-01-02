@@ -12,14 +12,6 @@ env:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - name: "Configure CMake (Type: Standard)"
-            
-          - name: "Configure CMake (Type: Small Binary)"
-            cmake_flags: -DENABLE_SMALL_BINARY=ON
-  
     # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
     # You can convert this to a matrix build if you need cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
@@ -29,7 +21,7 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build ${{matrix.cmake_flags}} -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=ON
+      run: cmake -B ${{github.workspace}}/build -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=ON
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 4
