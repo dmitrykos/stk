@@ -753,6 +753,7 @@ protected:
         KernelTask *now = m_task_now, *next;
         EFsmState new_state = GetNewFsmState(&next);
 
+    #ifndef _STK_SMALL_BINARY
         switch (new_state)
         {
         case FSM_STATE_SWITCHING: {
@@ -760,7 +761,7 @@ protected:
             break; }
 
         case FSM_STATE_WAKING: {
-            StateAwaken(now, next, idle, active);
+            StateWake(now, next, idle, active);
             break; }
 
         case FSM_STATE_SLEEPING: {
@@ -774,6 +775,12 @@ protected:
         default:
             return;
         }
+    #else
+        if (new_state == FSM_STATE_NONE)
+            return;
+
+        (this->*m_fsm_handler[new_state])(now, next, idle, active);
+    #endif
 
         m_fsm_state = new_state;
     }
@@ -815,14 +822,14 @@ protected:
         m_platform->SwitchContext();
     }
 
-    /*! \brief      Awakens after sleeping.
+    /*! \brief      Wakes up after sleeping.
         \note       FSM state: stk::FSM_STATE_AWAKENING.
         \param[in]  now: Currently active kernel task (ignored).
         \param[in]  next: Next kernel task.
         \param[out] idle: Stack of the task which must enter Idle state.
         \param[out] active: Stack of the task which must enter Active state (to which context will switch).
     */
-    void StateAwaken(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
+    void StateWake(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
         (void)now;
 
@@ -956,6 +963,19 @@ protected:
         { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,   FSM_STATE_EXITING }, // FSM_STATE_WAKING
         { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,   FSM_STATE_NONE }     // FSM_STATE_EXITING
     }; //!< FSM state table (Kernel implements table-based FSM)
+
+#ifdef _STK_SMALL_BINARY
+    /*! \typedef FsmStateHandler
+        \brief   FSM state handler function type.
+    */
+    typedef void (Kernel:: *FsmStateHandler) (KernelTask *now, KernelTask *next, Stack **idle, Stack **active);
+    const FsmStateHandler m_fsm_handler[FSM_STATE_MAX] = {
+        &Kernel::StateSwitch,
+        &Kernel::StateSleep,
+        &Kernel::StateWake,
+        &Kernel::StateExit
+    }; //!< FSM state handlers
+#endif
 };
 
 } // namespace stk

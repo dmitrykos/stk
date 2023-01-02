@@ -76,6 +76,7 @@ public:
         m_context_switch_nr = 0;
         m_stack_idle        = NULL;
         m_stack_active      = NULL;
+        m_overrider         = NULL;
     }
 
     virtual ~PlatformTestMock()
@@ -224,12 +225,12 @@ public:
 
     void Delay(uint32_t delay_ms) const
     {
-
+        (void)delay_ms;
     }
 
     void Sleep(uint32_t sleep_ms)
     {
-
+        (void)sleep_ms;
     }
 
     void SwitchToNext()

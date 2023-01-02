@@ -19,6 +19,11 @@ jobs:
             cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M4=ON -DTARGET_CPU_FAMILY=STM32F407xx
             cpu: cortex-m4
             board: STM32F4-Discovery
+            
+          - name: "Configure CMake (Board: STM32F407DISC1, CPU: Arm Cortex-M4, Type: Small Binary)"
+            cmake_flags: -DVENDOR_STM32=ON -DTARGET_CORTEX_M4=ON -DTARGET_CPU_FAMILY=STM32F407xx -DENABLE_SMALL_BINARY=ON
+            cpu: cortex-m4
+            board: STM32F4-Discovery
 
     # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
     # You can convert this to a matrix build if you need cross-platform coverage.
