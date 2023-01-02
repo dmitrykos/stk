@@ -396,7 +396,7 @@ protected:
         FSM_STATE_NONE = -1,
         FSM_STATE_SWITCHING,
         FSM_STATE_SLEEPING,
-        FSM_STATE_AWAKENING,
+        FSM_STATE_WAKING,
         FSM_STATE_EXITING,
         FSM_STATE_MAX
     };
@@ -759,7 +759,7 @@ protected:
             StateSwitch(now, next, idle, active);
             break; }
 
-        case FSM_STATE_AWAKENING: {
+        case FSM_STATE_WAKING: {
             StateAwaken(now, next, idle, active);
             break; }
 
@@ -950,11 +950,11 @@ protected:
     EFsmState            m_fsm_state;       //!< FSM state
 
     const EFsmState      m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
-    //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE       FSM_EVENT_EXIT
-        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,      FSM_STATE_EXITING }, // FSM_STATE_SWITCHING
-        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_AWAKENING, FSM_STATE_NONE },    // FSM_STATE_SLEEPING
-        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,      FSM_STATE_EXITING }, // FSM_STATE_AWAKENING
-        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,      FSM_STATE_NONE }     // FSM_STATE_EXITING
+    //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE    FSM_EVENT_EXIT
+        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,   FSM_STATE_EXITING }, // FSM_STATE_SWITCHING
+        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_WAKING, FSM_STATE_NONE },    // FSM_STATE_SLEEPING
+        { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,   FSM_STATE_EXITING }, // FSM_STATE_WAKING
+        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,   FSM_STATE_NONE }     // FSM_STATE_EXITING
     }; //!< FSM state table (Kernel implements table-based FSM)
 };
 
