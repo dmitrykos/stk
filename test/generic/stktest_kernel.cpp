@@ -34,12 +34,12 @@ TEST(Kernel, MaxTasks)
 TEST(Kernel, InitFailPlatformNull)
 {
     Kernel<KERNEL_STATIC, 10> kernel;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Initialize(NULL, &switch_strategy);
+        kernel.Initialize(NULL, &strategy);
         CHECK_TEXT(false, "Kernel::Initialize() did not fail with NULL platform");
     }
     catch (TestAssertPassed &pass)
@@ -71,22 +71,22 @@ TEST(Kernel, Init)
 {
     Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 }
 
 TEST(Kernel, InitDoubleFail)
 {
     Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Initialize(&platform, &switch_strategy);
-        kernel.Initialize(&platform, &switch_strategy);
+        kernel.Initialize(&platform, &strategy);
+        kernel.Initialize(&platform, &strategy);
         CHECK_TEXT(false, "duplicate Kernel::Initialize() did not fail");
     }
     catch (TestAssertPassed &pass)
@@ -118,17 +118,17 @@ TEST(Kernel, AddTask)
 {
     Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
-    IKernelTask *ktask = switch_strategy.GetFirst();
+    IKernelTask *ktask = strategy.GetFirst();
     CHECK_TRUE_TEXT(ktask == NULL, "Expecting none kernel tasks");
 
     kernel.AddTask(&task);
 
-    ktask = switch_strategy.GetFirst();
+    ktask = strategy.GetFirst();
     CHECK_TRUE_TEXT(ktask != NULL, "Expecting one kernel task");
 
     CHECK_TRUE_TEXT(ktask->GetUserTask() == &task, "Expecting just added user task");
@@ -138,10 +138,10 @@ TEST(Kernel, AddTaskInitStack)
 {
     Kernel<KERNEL_STATIC, 10> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
 
     CHECK_EQUAL(&task, platform.m_stack_info[STACK_USER_TASK].task);
@@ -152,10 +152,10 @@ TEST(Kernel, AddTaskMaxOut)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1, task2, task3;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -176,10 +176,10 @@ TEST(Kernel, AddSameTask)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -199,30 +199,30 @@ TEST(Kernel, RemoveTask)
 {
     Kernel<KERNEL_DYNAMIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1, task2;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
 
     kernel.RemoveTask(&task1);
-    CHECK_EQUAL_TEXT(&task2, switch_strategy.GetFirst()->GetUserTask(), "Expecting task2 as first");
+    CHECK_EQUAL_TEXT(&task2, strategy.GetFirst()->GetUserTask(), "Expecting task2 as first");
 
     kernel.RemoveTask(&task1);
-    CHECK_EQUAL_TEXT(&task2, switch_strategy.GetFirst()->GetUserTask(), "Expecting task2 as first (duplicate task1 removal attempt)");
+    CHECK_EQUAL_TEXT(&task2, strategy.GetFirst()->GetUserTask(), "Expecting task2 as first (duplicate task1 removal attempt)");
 
     kernel.RemoveTask(&task2);
-    CHECK_TRUE_TEXT(switch_strategy.GetFirst() == NULL, "Expecting none tasks");
+    CHECK_TRUE_TEXT(strategy.GetFirst() == NULL, "Expecting none tasks");
 }
 
 TEST(Kernel, RemoveTaskNull)
 {
     Kernel<KERNEL_DYNAMIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -241,10 +241,10 @@ TEST(Kernel, RemoveTaskUnsupported)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
 
     try
@@ -264,10 +264,10 @@ TEST(Kernel, StartInvalidPeriodicity)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
 
     try
@@ -316,9 +316,9 @@ TEST(Kernel, StartNoTasks)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -337,11 +337,11 @@ TEST(Kernel, Start)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
     const uint32_t periodicity = PERIODICITY_MAX - 1;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
 
     kernel.Start(periodicity);
@@ -357,10 +357,10 @@ TEST(Kernel, StartBeginISR)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
     kernel.Start();
 
@@ -372,11 +372,11 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1, task2;
     Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
@@ -420,11 +420,11 @@ TEST(Kernel, ContextSwitchAccessModeChange)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1;
     TaskMock<ACCESS_PRIVILEGED> task2;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
@@ -464,11 +464,11 @@ TEST(Kernel, SingleTask)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task;
     Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task);
     kernel.Start();
 
@@ -484,11 +484,11 @@ TEST(Kernel, OnTaskExit)
 {
     Kernel<KERNEL_DYNAMIC, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task1, task2;
     Stack *&idle = platform.m_stack_idle, *&active = platform.m_stack_active;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.Start();
@@ -522,11 +522,11 @@ TEST(Kernel, OnTaskExitUnknownOrNull)
 {
     Kernel<KERNEL_DYNAMIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task1;
     Stack unk_stack;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.Start();
 
@@ -562,11 +562,11 @@ TEST(Kernel, OnTaskExitUnsupported)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task1;
     Stack *&active = platform.m_stack_active;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.Start();
 
@@ -590,10 +590,10 @@ TEST(Kernel, OnTaskNotFoundBySP)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_PRIVILEGED> task1;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1);
     kernel.Start();
 
@@ -616,10 +616,10 @@ TEST(Kernel, Hrt)
 {
     Kernel<KERNEL_STATIC | KERNEL_HRT, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1, task2;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1, 1, 1, 0);
     kernel.AddTask(&task2, 2, 1, 0);
     kernel.Start();
@@ -635,10 +635,10 @@ TEST(Kernel, HrtAddNonHrt)
 {
     Kernel<KERNEL_STATIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -657,10 +657,10 @@ TEST(Kernel, HrtAddNotAllowedForNonHrtMode)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
 
     try
     {
@@ -679,10 +679,10 @@ TEST(Kernel, HrtSleepNotAllowed)
 {
     Kernel<KERNEL_STATIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task, 1, 1, 0);
     kernel.Start();
 
@@ -703,19 +703,19 @@ TEST(Kernel, HrtTaskCompleted)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task, 1, 1, 0);
     kernel.Start();
 
-    CHECK_TRUE(switch_strategy.GetFirst() != NULL);
+    CHECK_TRUE(strategy.GetFirst() != NULL);
 
     platform.EventTaskExit(platform.m_stack_active);
     platform.EventSysTick();
 
-    CHECK_TRUE(switch_strategy.GetFirst() == NULL);
+    CHECK_TRUE(strategy.GetFirst() == NULL);
 }
 
 static struct HrtTaskDeadlineMissedRelaxCpuContext
@@ -746,10 +746,10 @@ TEST(Kernel, HrtTaskDeadlineMissed)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task, 2, 1, 0);
     kernel.Start();
 
@@ -780,10 +780,10 @@ TEST(Kernel, HrtDeadlineMissedOnTaskExit)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task, 1, 1, 0);
     kernel.Start();
 
@@ -814,10 +814,10 @@ TEST(Kernel, HrtTaskExitDuringSleepState)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task1, task2;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task1, 1, 1, 0);
     kernel.AddTask(&task2, 1, 1, 2);
     kernel.Start();
@@ -835,10 +835,10 @@ TEST(Kernel, HrtSleepingAwakeningStateChange)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1> kernel;
     PlatformTestMock platform;
-    SwitchStrategyRoundRobin switch_strategy;
+    SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize(&platform, &switch_strategy);
+    kernel.Initialize(&platform, &strategy);
     kernel.AddTask(&task, 1, 1, 1);
     kernel.Start();
 

@@ -173,12 +173,11 @@ public:
 /*! \class ITask
     \brief Interface of the user task.
 
-    Kernel task hosts user task.
+    Inherit this interface by your task class to make it schedulable by the Kernel.
 
     Usage example:
     \code
-    Task<ACCESS_USER> task1(0);
-    Task<ACCESS_USER> task2(1);
+    Task<ACCESS_USER> task1(0), task2(1);
 
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
@@ -199,9 +198,9 @@ public:
     */
     virtual EAccessMode GetAccessMode() const = 0;
 
-    /*! \brief     Called by a scheduler if deadline of the task is missed when Kernel is operating in Hard Real-Time mode (see stk::KERNEL_HRT).
-        \param[in] duration: Actual duration value which will always be larger than deadline value which was missed.
-        \note      Optional handler. Use it for example for logging of the faulty task.
+    /*! \brief     Called by the scheduler if deadline of the task is missed when Kernel is operating in Hard Real-Time mode (see stk::KERNEL_HRT).
+        \param[in] duration: Actual duration value which will always be larger than a deadline value which was missed.
+        \note      Optional handler. Use it for logging of the faulty task.
     */
     virtual void OnDeadlineMissed(uint32_t duration) = 0;
 };
@@ -404,9 +403,9 @@ class IKernel
 public:
     /*! \brief     Initialize kernel.
         \param[in] driver: Driver implementation.
-        \param[in] switch_strategy: Task switching strategy.
+        \param[in] strategy: Task switching strategy.
     */
-    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *switch_strategy) = 0;
+    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *strategy) = 0;
 
     /*! \brief     Add user task.
         \note      This function is for Soft Real-time modes only, e.g. stk::KERNEL_HRT is not used as parameter.

@@ -294,7 +294,7 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(NULL), m_switch_strategy(NULL), m_task_now(NULL), m_sleep_trap(), m_exit_trap(),
+    explicit Kernel() : m_platform(NULL), m_strategy(NULL), m_task_now(NULL), m_sleep_trap(), m_exit_trap(),
         m_fsm_state(FSM_STATE_NONE)
     { }
 
@@ -304,10 +304,10 @@ public:
         STK_ASSERT(switch_strategy != NULL);
         STK_ASSERT(!IsInitialized());
 
-        m_platform        = platform;
-        m_switch_strategy = switch_strategy;
-        m_task_now        = NULL;
-        m_fsm_state       = FSM_STATE_NONE;
+        m_platform  = platform;
+        m_strategy  = switch_strategy;
+        m_task_now  = NULL;
+        m_fsm_state = FSM_STATE_NONE;
     }
 
     void AddTask(ITask *user_task)
@@ -320,7 +320,7 @@ public:
             KernelTask *task = AllocateNewTask(user_task);
             STK_ASSERT(task != NULL);
 
-            m_switch_strategy->AddTask(task);
+            m_strategy->AddTask(task);
         }
         else
         {
@@ -346,7 +346,7 @@ public:
             task->m_hrt[0].deadline    = deadline_ticks;
             task->m_time_sleep         = -start_delay_ticks;
 
-            m_switch_strategy->AddTask(task);
+            m_strategy->AddTask(task);
         }
         else
         {
@@ -531,7 +531,7 @@ protected:
     {
         STK_ASSERT(task != NULL);
 
-        m_switch_strategy->RemoveTask(task);
+        m_strategy->RemoveTask(task);
         task->Unbind();
     }
 
@@ -545,7 +545,7 @@ protected:
 
     void OnStart(Stack **active)
     {
-        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
+        m_task_now = static_cast<KernelTask *>(m_strategy->GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
         // init FSM start state
@@ -653,7 +653,7 @@ protected:
         {
             if (_Mode & KERNEL_DYNAMIC)
             {
-                while ((itr = static_cast<KernelTask *>(m_switch_strategy->GetNext(prev))) != NULL)
+                while ((itr = static_cast<KernelTask *>(m_strategy->GetNext(prev))) != NULL)
                 {
                     // process pending task removal
                     if (itr->IsPendingRemoval())
@@ -685,7 +685,7 @@ protected:
                         pending_end = NULL;
 
                         // check if no tasks left
-                        if (m_switch_strategy->GetFirst() == NULL)
+                        if (m_strategy->GetFirst() == NULL)
                         {
                             itr  = NULL;
                             type = FSM_EVENT_EXIT;
@@ -700,7 +700,7 @@ protected:
             }
             else
             {
-                itr = static_cast<KernelTask *>(m_switch_strategy->GetNext(prev));
+                itr = static_cast<KernelTask *>(m_strategy->GetNext(prev));
             }
 
             // check if task is sleeping
@@ -863,7 +863,7 @@ protected:
         (*idle)   = now->GetUserStack();
         (*active) = &m_sleep_trap[0].stack;
 
-        m_task_now = static_cast<KernelTask *>(m_switch_strategy->GetFirst());
+        m_task_now = static_cast<KernelTask *>(m_strategy->GetFirst());
 
         if (_Mode & KERNEL_HRT)
         {
@@ -912,7 +912,7 @@ protected:
     */
     bool IsInitialized() const
     {
-        return (m_platform != NULL) && (m_switch_strategy != NULL);
+        return (m_platform != NULL) && (m_strategy != NULL);
     }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
@@ -942,7 +942,7 @@ protected:
 
     KernelService        m_service;         //!< run-time kernel service
     IPlatform           *m_platform;        //!< platform driver
-    ITaskSwitchStrategy *m_switch_strategy; //!< task switching strategy
+    ITaskSwitchStrategy *m_strategy;        //!< task switching strategy
     KernelTask          *m_task_now;        //!< current task task
     TaskStorageType      m_task_storage;    //!< task storage
     TrapStack            m_sleep_trap[1];   //!< sleep trap

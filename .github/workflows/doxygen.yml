@@ -1,0 +1,28 @@
+name: Doxygen documentation
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:   
+    - name: Checkout      
+      uses: actions/checkout@v3
+    
+    - name: Generate Doxygen documentation
+      uses: mattnotmitt/doxygen-action@v1.9.5
+      with:
+        working-directory: '.'
+        doxyfile-path: './Doxyfile'
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: Docs
+        path: ./doxydoc

@@ -21,8 +21,8 @@
 
 using namespace stk;
 
-#define STK_CORTEX_M_CRITICAL_SESSION_START(SES) SES = __get_PRIMASK(); __disable_irq()
-#define STK_CORTEX_M_CRITICAL_SESSION_END(SES) __set_PRIMASK(SES)
+#define STK_CORTEX_M_CRITICAL_SECTION_START(SES) SES = __get_PRIMASK(); __disable_irq()
+#define STK_CORTEX_M_CRITICAL_SECTION_END(SES) __set_PRIMASK(SES)
 #define STK_CORTEX_M_DISABLE_INTERRUPTS() __disable_irq()
 #define STK_CORTEX_M_ENABLE_INTERRUPTS() __enable_irq()
 #ifdef CONTROL_nPRIV_Msk
@@ -124,11 +124,11 @@ extern "C" void _STK_SYSTICK_HANDLER()
         STK_ASSERT(g_Context.m_handler != NULL);
 #endif
         uint32_t cs;
-        STK_CORTEX_M_CRITICAL_SESSION_START(cs);
+        STK_CORTEX_M_CRITICAL_SECTION_START(cs);
 
         g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
 
-        STK_CORTEX_M_CRITICAL_SESSION_END(cs);
+        STK_CORTEX_M_CRITICAL_SECTION_END(cs);
     }
 }
 
@@ -344,11 +344,11 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 static void OnTaskExit()
 {
     uint32_t cs;
-    STK_CORTEX_M_CRITICAL_SESSION_START(cs);
+    STK_CORTEX_M_CRITICAL_SECTION_START(cs);
 
     g_Context.m_handler->OnTaskExit(g_Context.m_stack_active);
 
-    STK_CORTEX_M_CRITICAL_SESSION_END(cs);
+    STK_CORTEX_M_CRITICAL_SECTION_END(cs);
 
     while (true)
     {
