@@ -416,11 +416,11 @@ public:
     /*! \brief     Add user task.
         \note      This function is for Hard Real-time mode only, e.g. stk::KERNEL_HRT is used as parameter.
         \param[in] user_task: Pointer to the user task to add.
-        \param[in] periodicity_ticks: Periodicity time at which task is scheduled.
-        \param[in] deadline_ticks: Deadline time within which a task must complete its work.
-        \param[in] start_delay_ticks: Initial start delay for the task.
+        \param[in] periodicity_tc: Periodicity time at which task is scheduled (ticks).
+        \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
+        \param[in] start_delay_tc: Initial start delay for the task (ticks).
     */
-    virtual void AddTask(ITask *user_task, uint32_t periodicity_ticks, uint32_t deadline_ticks, uint32_t start_delay_ticks) = 0;
+    virtual void AddTask(ITask *user_task, uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc) = 0;
 
     /*! \brief     Remove user task.
         \param[in] user_task: Pointer to the user task to remove.

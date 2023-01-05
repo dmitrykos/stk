@@ -133,6 +133,19 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             return (SP >= (size_t)start) && (SP <= (size_t)end);
         }
 
+        /*! \brief     Initialize task with HRT info.
+            \note      Related to stk::KERNEL_HRT mode only.
+            \param[in] periodicity_tc: Periodicity time at which task is scheduled (ticks).
+            \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
+            \param[in] start_delay_tc: Initial start delay for the task (ticks).
+        */
+        void HrtInit(uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc)
+        {
+            m_hrt[0].periodicity = periodicity_tc;
+            m_hrt[0].deadline    = deadline_tc;
+            m_time_sleep         = -start_delay_tc;
+        }
+
         /*! \brief     Called when task is switched into the scheduling process.
             \note      Related to stk::KERNEL_HRT mode only.
             \param[in] ticks: Current ticks of the Kernel.
@@ -328,23 +341,21 @@ public:
         }
     }
 
-    void AddTask(ITask *user_task, uint32_t periodicity_ticks, uint32_t deadline_ticks, uint32_t start_delay_ticks)
+    void AddTask(ITask *user_task, uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc)
     {
         if (_Mode & KERNEL_HRT)
         {
-            STK_ASSERT(periodicity_ticks != 0);
-            STK_ASSERT(deadline_ticks != 0);
-            STK_ASSERT(periodicity_ticks < INT32_MAX);
-            STK_ASSERT(deadline_ticks < INT32_MAX);
+            STK_ASSERT(periodicity_tc != 0);
+            STK_ASSERT(deadline_tc != 0);
+            STK_ASSERT(periodicity_tc < INT32_MAX);
+            STK_ASSERT(deadline_tc < INT32_MAX);
             STK_ASSERT(user_task != NULL);
             STK_ASSERT(IsInitialized());
 
             KernelTask *task = AllocateNewTask(user_task);
             STK_ASSERT(task != NULL);
 
-            task->m_hrt[0].periodicity = periodicity_ticks;
-            task->m_hrt[0].deadline    = deadline_ticks;
-            task->m_time_sleep         = -start_delay_ticks;
+            task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
 
             m_strategy->AddTask(task);
         }
