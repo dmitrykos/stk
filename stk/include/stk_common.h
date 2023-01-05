@@ -359,6 +359,12 @@ public:
         \param[in] overrider: Platform event overrider.
     */
     virtual void SetEventOverrider(IEventOverrider *overrider) = 0;
+
+    /*! \brief     Get caller's Stack Pointer (SP).
+        \note      Valid for a Thread process only.
+        \return    Current value of the Stack Pointer (SP) of the calling process.
+    */
+    virtual size_t GetCallerSP() = 0;
 };
 
 /*! \class ITaskSwitchStrategy

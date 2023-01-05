@@ -72,9 +72,18 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         };
 
     public:
+        /*! \class AddTaskRequest
+            \brief Serialized add task request.
+            \note  Related to stk::KERNEL_STATIC or stk::KERNEL_DYNAMIC modes only.
+        */
+        struct AddTaskRequest
+        {
+            ITask *user_task; //!< user task to add
+        };
+
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack(), m_time_sleep(0), m_hrt()
+        explicit KernelTask() : m_user(NULL), m_state(STATE_NONE), m_stack(), m_time_sleep(0), m_srt(), m_hrt()
         { }
 
         ITask *GetUserTask() { return m_user; }
@@ -84,6 +93,27 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         bool IsBusy() const { return (m_user != NULL); }
 
     private:
+        /*! \class SrtInfo
+            \brief Soft Real-Time info of the bound task.
+            \note  Related to non stk::KERNEL_HRT mode only.
+        */
+        struct SrtInfo
+        {
+            SrtInfo()
+            {
+                Clear();
+            }
+
+            /*! \brief     Clear values.
+            */
+            void Clear()
+            {
+                add_task_req = NULL;
+            }
+
+            AddTaskRequest *add_task_req; //!< add task request made from another active task (see Kernel::AddTask)
+        };
+
         /*! \class HrtInfo
             \brief Hard Real-Time info of the bound task.
             \note  Related to stk::KERNEL_HRT mode only.
@@ -91,6 +121,13 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         struct HrtInfo
         {
             HrtInfo()
+            {
+                Clear();
+            }
+
+            /*! \brief     Clear values.
+            */
+            void Clear()
             {
                 periodicity = 0;
                 deadline    = 0;
@@ -104,7 +141,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             int64_t last_ticks;  //!< last saved tick value obtained by IKernelService::GetTicks (ticks)
         };
 
-        /*! \brief     Clear from bound values to make it 'free'.
+        /*! \brief     Release variables from info about previous task.
         */
         void Unbind()
         {
@@ -112,6 +149,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             m_stack      = {};
             m_state      = STATE_NONE;
             m_time_sleep = 0;
+
+            if (_Mode & KERNEL_HRT)
+                m_hrt[0].Clear();
+            else
+                m_srt[0].Clear();
         }
 
         /*! \brief     Schedule the removal of the task from the kernel on next tick.
@@ -194,10 +236,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             return (duration > m_hrt[0].deadline);
         }
 
-        ITask   *m_user;  //!< user task
-        uint32_t m_state; //!< state flags
-        Stack    m_stack; //!< stack descriptor
+        ITask   *m_user;       //!< user task
+        uint32_t m_state;      //!< state flags
+        Stack    m_stack;      //!< stack descriptor
         int32_t  m_time_sleep; //!< time to sleep (ticks)
+        SrtInfo  m_srt[_Mode & KERNEL_HRT ? 0 : 1]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
         HrtInfo  m_hrt[_Mode & KERNEL_HRT ? 1 : 0]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
@@ -330,10 +373,25 @@ public:
             STK_ASSERT(user_task != NULL);
             STK_ASSERT(IsInitialized());
 
-            KernelTask *task = AllocateNewTask(user_task);
-            STK_ASSERT(task != NULL);
+            // when started the operation must be serialized by switching out from processing until
+            // kernel processes this request
+            if (IsStarted())
+            {
+                KernelTask *caller = FindTaskBySP(m_platform->GetCallerSP());
+                STK_ASSERT(caller != NULL);
 
-            m_strategy->AddTask(task);
+                typename KernelTask::AddTaskRequest req = { .user_task = user_task };
+                caller->m_srt[0].add_task_req = &req;
+
+                // switch out and wait for completion
+                m_platform->SwitchToNext();
+
+                STK_ASSERT(caller->m_srt[0].add_task_req == NULL);
+            }
+            else
+            {
+                AllocateAndAddNewTask(user_task);
+            }
         }
         else
         {
@@ -351,13 +409,9 @@ public:
             STK_ASSERT(deadline_tc < INT32_MAX);
             STK_ASSERT(user_task != NULL);
             STK_ASSERT(IsInitialized());
+            STK_ASSERT(!IsStarted());
 
-            KernelTask *task = AllocateNewTask(user_task);
-            STK_ASSERT(task != NULL);
-
-            task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
-
-            m_strategy->AddTask(task);
+            AllocateAndAddNewTask(user_task)->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
         }
         else
         {
@@ -370,6 +424,7 @@ public:
         if (_Mode & KERNEL_DYNAMIC)
         {
             STK_ASSERT(user_task != NULL);
+            STK_ASSERT(!IsStarted());
 
             KernelTask *task = FindTask(user_task);
             if (task != NULL)
@@ -481,6 +536,19 @@ protected:
         kernel_task->m_user = user_task;
 
         return kernel_task;
+    }
+
+    /*! \brief     Allocate new instance of KernelTask and add it into the scheduling process.
+        \param[in] user_task: User task for which kernel task object is allocated.
+        \return    Kernel task.
+    */
+    KernelTask *AllocateAndAddNewTask(ITask *user_task)
+    {
+        KernelTask *task = AllocateNewTask(user_task);
+        STK_ASSERT(task != NULL);
+
+        m_strategy->AddTask(task);
+        return task;
     }
 
     /*! \brief     Find kernel task for the bound ITask instance.
@@ -595,7 +663,7 @@ protected:
     void OnSysTick(Stack **idle, Stack **active)
     {
         m_service.IncrementTick();
-        UpdateTaskSleep();
+        UpdateTasks();
         UpdateFsmState(idle, active);
     }
 
@@ -640,12 +708,23 @@ protected:
 
     /*! \brief     Update sleep timers of the sleeping tasks.
     */
-    void UpdateTaskSleep()
+    void UpdateTasks()
     {
         for (int32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
 
+            // process serialized AddTask request made from another active task
+            if ((_Mode & KERNEL_HRT) == 0)
+            {
+                if (task->m_srt[0].add_task_req != NULL)
+                {
+                    AllocateAndAddNewTask(task->m_srt[0].add_task_req->user_task);
+                    task->m_srt[0].add_task_req = NULL;
+                }
+            }
+
+            // update sleep
             if (task->m_time_sleep < 0)
                 ++task->m_time_sleep;
         }
@@ -924,6 +1003,14 @@ protected:
     bool IsInitialized() const
     {
         return (m_platform != NULL) && (m_strategy != NULL);
+    }
+
+    /*! \brief     Check if Kernel is started.
+        \return    True if started.
+    */
+    bool IsStarted() const
+    {
+        return (m_task_now != NULL);
     }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0

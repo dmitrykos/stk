@@ -31,6 +31,7 @@ public:
     void SleepTicks(uint32_t ticks);
     void HardFault();
     void SetEventOverrider(IEventOverrider *overrider);
+    size_t GetCallerSP();
 };
 
 /*! \typedef PlatformDefault

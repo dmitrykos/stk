@@ -24,7 +24,7 @@ TEST_GROUP(Kernel)
 
 TEST(Kernel, MaxTasks)
 {
-    const int32_t TASKS = 10;
+    const int32_t TASKS = 2;
     Kernel<KERNEL_STATIC, TASKS> kernel;
     const int32_t result = Kernel<KERNEL_STATIC, TASKS>::TASKS_MAX;
 
@@ -33,7 +33,7 @@ TEST(Kernel, MaxTasks)
 
 TEST(Kernel, InitFailPlatformNull)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     SwitchStrategyRoundRobin strategy;
 
     try
@@ -51,7 +51,7 @@ TEST(Kernel, InitFailPlatformNull)
 
 TEST(Kernel, InitFailSwitchStrategyNull)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
 
     try
@@ -69,7 +69,7 @@ TEST(Kernel, InitFailSwitchStrategyNull)
 
 TEST(Kernel, Init)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
 
@@ -78,7 +78,7 @@ TEST(Kernel, Init)
 
 TEST(Kernel, InitDoubleFail)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
 
@@ -98,7 +98,7 @@ TEST(Kernel, InitDoubleFail)
 
 TEST(Kernel, AddTaskNoInit)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     TaskMock<ACCESS_USER> task;
 
     try
@@ -116,7 +116,7 @@ TEST(Kernel, AddTaskNoInit)
 
 TEST(Kernel, AddTask)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
@@ -136,7 +136,7 @@ TEST(Kernel, AddTask)
 
 TEST(Kernel, AddTaskInitStack)
 {
-    Kernel<KERNEL_STATIC, 10> kernel;
+    Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
     TaskMock<ACCESS_USER> task;
@@ -148,7 +148,7 @@ TEST(Kernel, AddTaskInitStack)
     CHECK_EQUAL((size_t)task.GetStack(), platform.m_stack_info[STACK_USER_TASK].stack->SP);
 }
 
-TEST(Kernel, AddTaskMaxOut)
+TEST(Kernel, AddTaskFailMaxOut)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
@@ -172,7 +172,7 @@ TEST(Kernel, AddTaskMaxOut)
     }
 }
 
-TEST(Kernel, AddSameTask)
+TEST(Kernel, AddTaskFailSameTask)
 {
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
@@ -193,6 +193,49 @@ TEST(Kernel, AddSameTask)
         CHECK(true);
         g_TestContext.ExpectAssert(false);
     }
+}
+
+static struct AddTaskWhenStartedRelaxCpuContext
+{
+    AddTaskWhenStartedRelaxCpuContext()
+    {
+        counter  = 0;
+        platform = NULL;
+    }
+
+    uint32_t          counter;
+    PlatformTestMock *platform;
+
+    void Process()
+    {
+        platform->EventSysTick();
+        ++counter;
+    }
+}
+g_AddTaskWhenStartedRelaxCpuContext;
+
+static void AddTaskWhenStartedRelaxCpu()
+{
+    g_AddTaskWhenStartedRelaxCpuContext.Process();
+}
+
+TEST(Kernel, AddTaskWhenStarted)
+{
+    Kernel<KERNEL_STATIC, 2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin strategy;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize(&platform, &strategy);
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    g_AddTaskWhenStartedRelaxCpuContext.platform = &platform;
+    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpu;
+
+    kernel.AddTask(&task2);
+
+    CHECK_EQUAL_TEXT(1, g_AddTaskWhenStartedRelaxCpuContext.counter, "Should add new task within 1 cycle");
 }
 
 TEST(Kernel, RemoveTask)
@@ -216,7 +259,7 @@ TEST(Kernel, RemoveTask)
     CHECK_TRUE_TEXT(strategy.GetFirst() == NULL, "Expecting none tasks");
 }
 
-TEST(Kernel, RemoveTaskNull)
+TEST(Kernel, RemoveTaskFailNull)
 {
     Kernel<KERNEL_DYNAMIC, 1> kernel;
     PlatformTestMock platform;
@@ -237,7 +280,7 @@ TEST(Kernel, RemoveTaskNull)
     }
 }
 
-TEST(Kernel, RemoveTaskUnsupported)
+TEST(Kernel, RemoveTaskFailUnsupported)
 {
     Kernel<KERNEL_STATIC, 1> kernel;
     PlatformTestMock platform;
@@ -252,6 +295,30 @@ TEST(Kernel, RemoveTaskUnsupported)
         g_TestContext.ExpectAssert(true);
         kernel.RemoveTask(&task);
         CHECK_TEXT(false, "expecting to fail in KERNEL_STATIC mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, RemoveTaskFailStarted)
+{
+    Kernel<KERNEL_DYNAMIC, 1> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin strategy;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize(&platform, &strategy);
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.RemoveTask(&task);
+        CHECK_TEXT(false, "expecting to fail when Kernel has started");
     }
     catch (TestAssertPassed &pass)
     {

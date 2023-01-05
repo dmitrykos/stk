@@ -527,4 +527,9 @@ void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)
     g_Overrider = overrider;
 }
 
+size_t PlatformArmCortexM::GetCallerSP()
+{
+    return ::GetCallerSP();
+}
+
 #endif // _STK_ARCH_ARM_CORTEX_M

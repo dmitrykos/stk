@@ -177,6 +177,11 @@ public:
         m_event_handler->OnTaskSleep(caller_SP, sleep_ticks);
     }
 
+    size_t GetCallerSP()
+    {
+        return m_stack_active->SP;
+    }
+
     Stack           *m_exit_trap;
     bool             m_fail_InitStack;
     int32_t          m_resolution;
