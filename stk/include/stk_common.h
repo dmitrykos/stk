@@ -210,18 +210,18 @@ public:
 
     Kernel task hosts user task.
 */
-class IKernelTask : public util::DListEntry<IKernelTask>
+class IKernelTask : public util::DListEntry<IKernelTask, true>
 {
 public:
     /*! \typedef   ListHeadType
         \brief     List head type for IKernelTask elements.
     */
-    typedef util::DListHead<IKernelTask> ListHeadType;
+    typedef DLHeadType ListHeadType;
 
     /*! \typedef   ListEntryType
         \brief     List entry type of IKernelTask elements.
     */
-    typedef util::DListEntry<IKernelTask> ListEntryType;
+    typedef DLEntryType ListEntryType;
 
     /*! \brief     Get user task.
     */

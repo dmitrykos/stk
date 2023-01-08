@@ -58,13 +58,13 @@ TEST_GROUP(DList)
     void setup() {}
     void teardown() {}
 
-    struct ListEntry : public stk::util::DListEntry<ListEntry>
+    struct ListEntry : public stk::util::DListEntry<ListEntry, true>
     {
         int32_t m_id;
         ListEntry(int32_t id) : m_id(id) {}
     };
 
-    typedef stk::util::DListHead<ListEntry> ListHead;
+    typedef stk::util::DListHead<ListEntry, true> ListHead;
 };
 
 TEST(DList, Empty)
@@ -201,7 +201,7 @@ TEST(DList, Iteration)
     list.LinkBack(e2);
     list.LinkBack(e3);
 
-    ListHead::EntryType *itr = list.GetFirst();
+    ListHead::DLEntryType *itr = list.GetFirst();
     CHECK_EQUAL(&e1, itr);
 
     itr = itr->GetNext();

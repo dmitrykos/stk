@@ -501,7 +501,7 @@ protected:
     KernelTask *AllocateNewTask(ITask *user_task)
     {
         // look for a free kernel task
-        KernelTask *kernel_task = NULL;
+        KernelTask *new_task = NULL;
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
@@ -514,25 +514,28 @@ protected:
                 STK_ASSERT(task->m_user->GetStack() != user_task->GetStack());
             }
             else
-            if (kernel_task == NULL)
+            if (new_task == NULL)
             {
-                kernel_task = task;
+                new_task = task;
+            #if defined(NDEBUG) && !defined(_STK_ASSERT_REDIRECT)
+                break; // break if assertions are inactive and do not try to validate collision with existing tasks
+            #endif
             }
         }
 
         // if NULL - exceeded max supported kernel task count, application design failure
-        STK_ASSERT(kernel_task != NULL);
+        STK_ASSERT(new_task != NULL);
 
         // init stack of the user task
-        if (!m_platform->InitStack(STACK_USER_TASK, kernel_task->GetUserStack(), user_task, user_task))
+        if (!m_platform->InitStack(STACK_USER_TASK, new_task->GetUserStack(), user_task, user_task))
         {
             STK_ASSERT(false);
         }
 
         // make kernel task busy with user task
-        kernel_task->m_user = user_task;
+        new_task->m_user = user_task;
 
-        return kernel_task;
+        return new_task;
     }
 
     /*! \brief     Allocate new instance of KernelTask and add it into the scheduling process.
@@ -1049,15 +1052,13 @@ protected:
     /*! \brief     Check if Kernel is properly initialized.
         \return    True if initialized.
     */
-    bool IsInitialized() const
-    {
-        return (m_platform != NULL) && (m_strategy != NULL);
-    }
+    bool IsInitialized() const { return (m_platform != NULL) && (m_strategy != NULL); }
 
     /*! \brief     Schedule processing of the add task request.
     */
     void ScheduleAddTask() { m_request |= REQUEST_ADD_TASK; }
-    // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
+
+    // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
     STK_STATIC_ASSERT_N(TASKS_MAX, TASKS_MAX > 0);
 
     // If hit here: Kernel mode must be assigned.
@@ -1100,7 +1101,7 @@ protected:
     TrapStack            m_sleep_trap[1];   //!< sleep trap
     TrapStack            m_exit_trap[_Mode & KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
     EFsmState            m_fsm_state;       //!< FSM state
-    uint8_t              m_request;         //!< pending requests from the tasks
+    uint32_t             m_request;         //!< pending requests from the tasks
 
     const EFsmState      m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
     //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE    FSM_EVENT_EXIT
