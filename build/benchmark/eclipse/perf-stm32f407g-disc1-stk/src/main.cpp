@@ -13,9 +13,7 @@
 
 using namespace stk;
 
-static Kernel<KERNEL_DYNAMIC, _STK_BENCH_TASK_MAX + 1> g_Kernel;
-static PlatformDefault g_Platform;
-static SwitchStrategyRoundRobin g_TSStrategy;
+static Kernel<KERNEL_DYNAMIC, _STK_BENCH_TASK_MAX + 1, SwitchStrategyRoundRobin, PlatformDefault> g_Kernel;
 static volatile int64_t g_Ticks = 0;
 
 extern "C" void SysTick_Handler()
@@ -25,7 +23,7 @@ extern "C" void SysTick_Handler()
     if (g_Kernel.IsStarted())
     {
         ++g_Ticks;
-        g_Platform.ProcessTick();
+        g_Kernel.GetPlatform()->ProcessTick();
     }
 }
 
@@ -90,7 +88,7 @@ int main(int argc, char **argv)
     (void)argc;
     (void)argv;
 
-    g_Kernel.Initialize(&g_Platform, &g_TSStrategy);
+    g_Kernel.Initialize();
 
     for (int32_t i = 0; i < _STK_BENCH_TASK_MAX; ++i)
     {

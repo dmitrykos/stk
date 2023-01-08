@@ -24,40 +24,40 @@ TEST_GROUP(SwitchStrategyRoundRobin)
 
 TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
-    Kernel<KERNEL_DYNAMIC, 3> kernel;
-    PlatformTestMock platform;
-    SwitchStrategyRoundRobin strategy;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
 
-    kernel.Initialize(&platform, &strategy);
+    kernel.Initialize();
     kernel.AddTask(&task1);
 
-    IKernelTask *next = strategy.GetFirst();
-    CHECK_TEXT(strategy.GetNext(next) == next, "Expecting the same next task1 (endless looping)");
+    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+
+    IKernelTask *next = strategy->GetFirst();
+    CHECK_TEXT(strategy->GetNext(next) == next, "Expecting the same next task1 (endless looping)");
 
     kernel.AddTask(&task2);
 
-    next = strategy.GetNext(next);
+    next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
 
     kernel.AddTask(&task3);
 
-    next = strategy.GetNext(next);
+    next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
 
-    next = strategy.GetNext(next);
+    next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1 (endless looping)");
 
     IKernelTask *ktask1 = next;
-    next = strategy.GetNext(ktask1);
+    next = strategy->GetNext(ktask1);
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
 
     kernel.RemoveTask(&task1);
 
-    next = strategy.GetNext(next);
+    next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
 
-    next = strategy.GetNext(next);
+    next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2 (endless looping)");
 }
 

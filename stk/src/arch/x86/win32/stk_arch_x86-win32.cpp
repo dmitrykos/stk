@@ -384,7 +384,7 @@ void PlatformX86Win32::ProcessHardFault()
     if ((g_Overrider == NULL) || !g_Overrider->OnHardFault())
     {
         printf("failure: HardFault\n");
-        abort();
+        exit(1);
     }
 }
 

@@ -111,14 +111,12 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<KERNEL_STATIC, 3> kernel;
-    static PlatformDefault platform;
-    static SwitchStrategyRoundRobin tsstrategy;
+    static Kernel<KERNEL_STATIC, 3, SwitchStrategyRoundRobin, PlatformDefault> kernel;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
     static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
 
-    kernel.Initialize(&platform, &tsstrategy);
+    kernel.Initialize();
 
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);

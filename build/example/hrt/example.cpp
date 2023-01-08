@@ -98,18 +98,16 @@ void RunExample()
 
     InitLeds();
 
-    static Kernel<KERNEL_STATIC | KERNEL_HRT, 3> kernel;
-    static PlatformDefault platform;
-    static SwitchStrategyRoundRobin tsstrategy;
+    static Kernel<KERNEL_STATIC | KERNEL_HRT, 3, SwitchStrategyRoundRobin, PlatformDefault> kernel;
     static PlatformEventHandler overrider;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
     static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
 
-    kernel.Initialize(&platform, &tsstrategy);
+    kernel.Initialize();
 
     // optional: you can override sleep and hard fault default behaviors
-    platform.SetEventOverrider(&overrider);
+    kernel.GetPlatform()->SetEventOverrider(&overrider);
 
 #define TICKS(MS) GetTicksFromMilliseconds(MS, PERIODICITY_DEFAULT)
 

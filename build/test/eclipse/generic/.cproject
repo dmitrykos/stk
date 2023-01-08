@@ -102,7 +102,7 @@
 									<listOptionValue builtIn="false" value="__MINGW_PRINTF_FORMAT=printf"/>
 									<listOptionValue builtIn="false" value="_STK_ASSERT_REDIRECT"/>
 								</option>
-								<option id="gnu.cpp.compiler.option.optimization.flags.470828360" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fstrict-aliasing -fmerge-constants" valueType="string"/>
+								<option id="gnu.cpp.compiler.option.optimization.flags.470828360" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="--pipe -fstrict-aliasing -fmerge-constants" valueType="string"/>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1738118439" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.release.1907319088" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.release">
@@ -118,7 +118,7 @@
 									<listOptionValue builtIn="false" value="__MINGW_PRINTF_FORMAT=printf"/>
 									<listOptionValue builtIn="false" value="_STK_ASSERT_REDIRECT"/>
 								</option>
-								<option id="gnu.c.compiler.option.optimization.flags.1113686209" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fstrict-aliasing -fmerge-constants" valueType="string"/>
+								<option id="gnu.c.compiler.option.optimization.flags.1113686209" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="--pipe -fstrict-aliasing -fmerge-constants" valueType="string"/>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1025552554" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.release.1706702918" name="MinGW C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.mingw.exe.release"/>

@@ -84,6 +84,17 @@
     #define __stk_attr_used
 #endif
 
+/*! \def   __stk_attr_noinline
+    \brief Instruct compiler to not inline the function.
+*/
+#ifdef __GNUC__
+    #define __stk_attr_noinline __attribute__((noinline))
+#elif defined(__ICCARM__)
+    #define __stk_attr_noinline __attribute__((noinline))
+#else
+    #define __stk_attr_noinline
+#endif
+
 /*! \def   __stk_unreachable
     \brief Instruct compiler that code below it is unreachable (in-code statement).
 */

@@ -103,9 +103,8 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, exit_trap, resolution_us);
 
-        m_access_mode = ACCESS_PRIVILEGED;
-        m_started     = false;
-        m_exiting     = false;
+        m_started = false;
+        m_exiting = false;
     }
 
     void OnTick()
@@ -120,10 +119,9 @@ static struct Context : public PlatformContext
         STK_CORTEX_M_ENABLE_INTERRUPTS();
     }
 
-    EAccessMode m_access_mode; //!< hardware access mode
-    bool        m_started;     //!< 'true' when in started state
-    bool        m_exiting;     //!< 'true' when is exiting the scheduling process
-    jmp_buf     m_exit_buf;    //!< saved context of the exit point
+    bool    m_started;  //!< 'true' when in started state
+    bool    m_exiting;  //!< 'true' when is exiting the scheduling process
+    jmp_buf m_exit_buf; //!< saved context of the exit point
 }
 g_Context;
 
@@ -508,15 +506,10 @@ int32_t PlatformArmCortexM::GetTickResolution() const
 
 void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
 {
-    if (g_Context.m_access_mode == mode)
-        return;
-
     if (mode == ACCESS_PRIVILEGED)
         STK_CORTEX_M_PRIVILEGED_MODE_ON();
     else
         STK_CORTEX_M_PRIVILEGED_MODE_OFF();
-
-    g_Context.m_access_mode = mode;
 }
 
 void PlatformArmCortexM::SwitchToNext()
@@ -532,7 +525,9 @@ void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 void PlatformArmCortexM::ProcessHardFault()
 {
     if ((g_Overrider == NULL) || !g_Overrider->OnHardFault())
-        abort();
+    {
+        exit(1);
+    }
 }
 
 void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)

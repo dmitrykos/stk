@@ -10,7 +10,5 @@
 #include "stk.h"
 #include "arch/stk_arch_common.h"
 
-using namespace stk;
-
 // initialize IKernelService instance singleton
-template <> IKernelService *Singleton<IKernelService *>::m_instance = NULL;
+template <> stk::IKernelService *stk::Singleton<stk::IKernelService *>::m_instance = NULL;

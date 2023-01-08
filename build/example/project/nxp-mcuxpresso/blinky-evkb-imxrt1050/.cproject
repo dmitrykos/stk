@@ -419,7 +419,7 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../stk/include/arch&quot;"/>
 								</option>
 								<option id="gnu.cpp.compiler.option.include.files.1295999349" name="Include files (-include)" superClass="gnu.cpp.compiler.option.include.files" useByScannerDiscovery="false"/>
-								<option id="gnu.cpp.compiler.option.optimization.flags.439385152" name="Other optimization flags" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing" valueType="string"/>
+								<option id="gnu.cpp.compiler.option.optimization.flags.439385152" name="Other optimization flags" superClass="gnu.cpp.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing --pipe" valueType="string"/>
 								<option id="gnu.cpp.compiler.option.debugging.other.223586201" name="Other debugging flags" superClass="gnu.cpp.compiler.option.debugging.other" useByScannerDiscovery="false"/>
 								<option id="gnu.cpp.compiler.option.debugging.prof.258917820" name="Generate prof information (-p)" superClass="gnu.cpp.compiler.option.debugging.prof" useByScannerDiscovery="false"/>
 								<option id="gnu.cpp.compiler.option.debugging.gprof.539745534" name="Generate gprof information (-pg)" superClass="gnu.cpp.compiler.option.debugging.gprof" useByScannerDiscovery="false"/>
@@ -514,7 +514,7 @@
 									<listOptionValue builtIn="false" value="&quot;${ProjDirPath}/../../../../../stk/include/arch&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.include.files.1116166712" name="Include files (-include)" superClass="gnu.c.compiler.option.include.files" useByScannerDiscovery="false"/>
-								<option id="gnu.c.compiler.option.optimization.flags.1525338405" name="Other optimization flags" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing" valueType="string"/>
+								<option id="gnu.c.compiler.option.optimization.flags.1525338405" name="Other optimization flags" superClass="gnu.c.compiler.option.optimization.flags" useByScannerDiscovery="false" value="-fno-common -fstrict-aliasing --pipe" valueType="string"/>
 								<option id="gnu.c.compiler.option.debugging.other.514389825" name="Other debugging flags" superClass="gnu.c.compiler.option.debugging.other" useByScannerDiscovery="false"/>
 								<option id="gnu.c.compiler.option.debugging.prof.642054067" name="Generate prof information (-p)" superClass="gnu.c.compiler.option.debugging.prof" useByScannerDiscovery="false"/>
 								<option id="gnu.c.compiler.option.debugging.gprof.1473696145" name="Generate gprof information (-pg)" superClass="gnu.c.compiler.option.debugging.gprof" useByScannerDiscovery="false"/>

@@ -49,11 +49,8 @@ private:
     void RunInner();
 };
 
-static Kernel<KERNEL_DYNAMIC, _STK_CHAIN_TEST_TASKS_MAX> kernel;
-static PlatformDefault platform;
-static SwitchStrategyRoundRobin tsstrategy;
+static Kernel<KERNEL_DYNAMIC, _STK_CHAIN_TEST_TASKS_MAX, SwitchStrategyRoundRobin, PlatformDefault> kernel;
 static TestTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
-
 static int64_t g_Time[_STK_CHAIN_TEST_TASKS_MAX] = {};
 
 template<> void TestTask<ACCESS_PRIVILEGED>::RunInner()
@@ -93,7 +90,7 @@ int main(int argc, char **argv)
     using namespace stk::test;
     using namespace stk::test::chain;
 
-    kernel.Initialize(&platform, &tsstrategy);
+    kernel.Initialize();
     kernel.AddTask(&task1);
     kernel.Start();
 

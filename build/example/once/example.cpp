@@ -106,38 +106,34 @@ static void InitLeds()
     LED_INIT(LED_BLUE, false);
 }
 
+static stk::Kernel<stk::KERNEL_DYNAMIC, 3, stk::SwitchStrategyRoundRobin, stk::PlatformDefault> g_Kernel;
+
+// note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
+static MyTask<stk::ACCESS_PRIVILEGED> g_Task1(0), g_Task2(1), g_Task3(2);
+
+static void RunOnce()
+{
+    g_Kernel.AddTask(&g_Task1);
+    g_Kernel.AddTask(&g_Task2);
+    g_Kernel.AddTask(&g_Task3);
+
+    g_TaskSwitch = 0;
+
+    // note: kernel will exit from Start() once all tasks exit (complete their work)
+    g_Kernel.Start();
+}
+
 void RunExample()
 {
     using namespace stk;
 
     InitLeds();
 
-    static Kernel<KERNEL_DYNAMIC, 3> kernel;
-    static PlatformDefault platform;
-    static SwitchStrategyRoundRobin tsstrategy;
-
-    // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
-    static MyTask<ACCESS_PRIVILEGED> task1(0);
-    static MyTask<ACCESS_PRIVILEGED> task2(1);
-    static MyTask<ACCESS_PRIVILEGED> task3(2);
-
-    kernel.Initialize(&platform, &tsstrategy);
-
-    kernel.AddTask(&task1);
-    kernel.AddTask(&task2);
-    kernel.AddTask(&task3);
-
-    kernel.Start();
+    g_Kernel.Initialize();
 
     for (int i = 0; i < 3; ++i)
     {
-        kernel.AddTask(&task1);
-        kernel.AddTask(&task2);
-        kernel.AddTask(&task3);
-
-        g_TaskSwitch = 0;
-
-        kernel.Start();
+        RunOnce();
     }
 
     LED_SET_STATE(LED_RED, true);
@@ -146,4 +142,3 @@ void RunExample()
 
     while (true) {}
 }
-

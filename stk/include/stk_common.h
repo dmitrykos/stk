@@ -346,9 +346,9 @@ public:
     virtual void SleepTicks(uint32_t ticks) = 0;
 
     /*! \brief     Process one tick.
-        \note      Normally system tick is processed by the platform driver implementation. In case system tick
-                   handler is used by the application and should not be implemented by the driver then disable
-                   driver's handler in stk_config.h like this:
+        \note      Normally system tick is processed by the platform driver implementation.
+                   In case system tick handler is used by the application and should not be implemented
+                   by the driver then disable driver's handler in stk_config.h like this:
                    \code
                    #define _STK_SYSTICK_HANDLER _STK_SYSTICK_HANDLER_DISABLE
                    \endcode
@@ -415,10 +415,8 @@ class IKernel
 {
 public:
     /*! \brief     Initialize kernel.
-        \param[in] driver: Driver implementation.
-        \param[in] strategy: Task switching strategy.
     */
-    virtual void Initialize(IPlatform *driver, ITaskSwitchStrategy *strategy) = 0;
+    virtual void Initialize() = 0;
 
     /*! \brief     Add user task.
         \note      This function is for Soft Real-time modes only, e.g. stk::KERNEL_HRT is not used as parameter.
@@ -452,6 +450,25 @@ public:
         \return    True if started, otherwise false.
     */
     virtual bool IsStarted() const = 0;
+
+#ifdef _STK_UNDER_TEST
+    /*! \brief     Check if kernel was initialized with IKernel::Initialize().
+        \return    True if initialized, otherwise false.
+    */
+    virtual bool IsInitialized() const = 0;
+#endif
+
+    /*! \brief     Get platform driver instance.
+        \return    Pointer to the IPlatform concrete class instance.
+    */
+    virtual IPlatform *GetPlatform() = 0;
+
+#ifdef _STK_UNDER_TEST
+    /*! \brief     Get switch strategy instance.
+        \return    Pointer to the ITaskSwitchStrategy concrete class instance.
+    */
+    virtual ITaskSwitchStrategy *GetSwitchStrategy() = 0;
+#endif
 };
 
 /*! \class IKernelService
