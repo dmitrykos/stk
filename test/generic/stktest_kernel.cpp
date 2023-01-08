@@ -208,7 +208,7 @@ static struct AddTaskWhenStartedRelaxCpuContext
 
     void Process()
     {
-        platform->EventSysTick();
+        platform->ProcessTick();
         ++counter;
     }
 }
@@ -221,6 +221,28 @@ static void AddTaskWhenStartedRelaxCpu()
 
 TEST(Kernel, AddTaskWhenStarted)
 {
+    Kernel<KERNEL_DYNAMIC, 2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin strategy;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize(&platform, &strategy);
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    CHECK_EQUAL_TEXT(1, strategy.GetFirst()->GetHead()->GetSize(), "expecting Task1 be added at this stage");
+
+    g_AddTaskWhenStartedRelaxCpuContext.platform = &platform;
+    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpu;
+
+    kernel.AddTask(&task2);
+
+    CHECK_EQUAL_TEXT(2, strategy.GetFirst()->GetHead()->GetSize(), "task2 must be added");
+    CHECK_EQUAL_TEXT(1, g_AddTaskWhenStartedRelaxCpuContext.counter, "should add new task within 1 cycle");
+}
+
+TEST(Kernel, AddTaskFailStaticStarted)
+{
     Kernel<KERNEL_STATIC, 2> kernel;
     PlatformTestMock platform;
     SwitchStrategyRoundRobin strategy;
@@ -230,12 +252,41 @@ TEST(Kernel, AddTaskWhenStarted)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    g_AddTaskWhenStartedRelaxCpuContext.platform = &platform;
-    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpu;
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.AddTask(&task2);
+        CHECK_TEXT(false, "expecting to AddTask to fail when non KERNEL_DYNAMIC");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
 
-    kernel.AddTask(&task2);
+TEST(Kernel, AddTaskFailHrtStarted)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2> kernel;
+    PlatformTestMock platform;
+    SwitchStrategyRoundRobin strategy;
+    TaskMock<ACCESS_USER> task1, task2;
 
-    CHECK_EQUAL_TEXT(1, g_AddTaskWhenStartedRelaxCpuContext.counter, "Should add new task within 1 cycle");
+    kernel.Initialize(&platform, &strategy);
+    kernel.AddTask(&task1, 1, 1, 0);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.AddTask(&task2, 1, 1, 0);
+        CHECK_TEXT(false, "expecting to AddTask to fail when KERNEL_HRT");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
 
 TEST(Kernel, RemoveTask)
@@ -450,7 +501,7 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
 
     // ISR calls OnSysTick 1-st time
     {
-        platform.EventSysTick();
+        platform.ProcessTick();
 
         CHECK_TRUE(idle != NULL);
         CHECK_TRUE(active != NULL);
@@ -467,7 +518,7 @@ TEST(Kernel, ContextSwitchOnSysTickISR)
 
     // ISR calls OnSysTick 2-nd time
     {
-        platform.EventSysTick();
+        platform.ProcessTick();
 
         CHECK_TRUE(idle != NULL);
         CHECK_TRUE(active != NULL);
@@ -500,7 +551,7 @@ TEST(Kernel, ContextSwitchAccessModeChange)
     CHECK_EQUAL(ACCESS_USER, platform.m_access_mode);
 
     // ISR calls OnSysTick
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // 2-st task
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -540,7 +591,7 @@ TEST(Kernel, SingleTask)
     kernel.Start();
 
     // ISR calls OnSysTick
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // expect that with single task nothing changes
     CHECK_EQUAL((Stack *)NULL, idle);
@@ -561,19 +612,19 @@ TEST(Kernel, OnTaskExit)
     kernel.Start();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // task2 exited (will schedule its removal)
     platform.EventTaskExit(active);
 
     // ISR calls OnSysTick (task2 = idle, task1 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // task1 exited (will schedule its removal)
     platform.EventTaskExit(active);
 
     // ISR calls OnSysTick
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // expecting privileged mode when scheduler is exiting
     CHECK_EQUAL(ACCESS_PRIVILEGED, platform.m_access_mode);
@@ -598,7 +649,7 @@ TEST(Kernel, OnTaskExitUnknownOrNull)
     kernel.Start();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     try
     {
@@ -638,7 +689,7 @@ TEST(Kernel, OnTaskExitUnsupported)
     kernel.Start();
 
     // ISR calls OnSysTick
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     try
     {
@@ -664,7 +715,7 @@ TEST(Kernel, OnTaskNotFoundBySP)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     try
     {
@@ -691,10 +742,10 @@ TEST(Kernel, Hrt)
     kernel.AddTask(&task2, 2, 1, 0);
     kernel.Start();
 
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task2.GetStack());
 
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(platform.m_stack_active->SP, (size_t)task1.GetStack());
 }
 
@@ -780,7 +831,7 @@ TEST(Kernel, HrtTaskCompleted)
     CHECK_TRUE(strategy.GetFirst() != NULL);
 
     platform.EventTaskExit(platform.m_stack_active);
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     CHECK_TRUE(strategy.GetFirst() == NULL);
 }
@@ -798,7 +849,7 @@ static struct HrtTaskDeadlineMissedRelaxCpuContext
 
     void Process()
     {
-        platform->EventSysTick();
+        platform->ProcessTick();
         ++counter;
     }
 }
@@ -821,7 +872,7 @@ TEST(Kernel, HrtTaskDeadlineMissed)
     kernel.Start();
 
     // 2-nd tick goes outside the deadline
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     g_HrtTaskDeadlineMissedRelaxCpuContext.platform = &platform;
     g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
@@ -855,7 +906,7 @@ TEST(Kernel, HrtDeadlineMissedOnTaskExit)
     kernel.Start();
 
     // 2-nd tick goes outside the deadline
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // task returns (exiting) without calling SwitchToNext
     platform.EventTaskExit(platform.m_stack_active);
@@ -864,7 +915,7 @@ TEST(Kernel, HrtDeadlineMissedOnTaskExit)
     {
         g_TestContext.ExpectAssert(true);
         // on next tick kernel will attempt to remove pending task and will check its deadline
-        platform.EventSysTick();
+        platform.ProcessTick();
         CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
     }
     catch (TestAssertPassed &pass)
@@ -892,10 +943,10 @@ TEST(Kernel, HrtTaskExitDuringSleepState)
     // task returns (exiting) without calling SwitchToNext
     platform.EventTaskExit(platform.m_stack_active);
 
-    platform.EventSysTick();
-    platform.EventSysTick();
-    platform.EventSysTick();
-    platform.EventSysTick();
+    platform.ProcessTick();
+    platform.ProcessTick();
+    platform.ProcessTick();
+    platform.ProcessTick();
 }
 
 TEST(Kernel, HrtSleepingAwakeningStateChange)
@@ -912,7 +963,7 @@ TEST(Kernel, HrtSleepingAwakeningStateChange)
     // due to 1 tick delayed start of the task Kernel enters into a SLEEPING state
     CHECK_EQUAL(platform.m_stack_active, platform.m_stack_info[STACK_SLEEP_TRAP].stack);
 
-    platform.EventSysTick();
+    platform.ProcessTick();
 
     // after a tick task become active and Kernel enters into a AWAKENING state
     CHECK_EQUAL(platform.m_stack_idle, platform.m_stack_info[STACK_SLEEP_TRAP].stack);

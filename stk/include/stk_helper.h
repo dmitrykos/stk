@@ -109,7 +109,7 @@ __stk_forceinline int64_t GetMillisecondsFromTicks(int64_t ticks, int32_t resolu
 */
 __stk_forceinline int64_t GetTicksFromMilliseconds(int64_t ms, int32_t resolution)
 {
-    return ms * 1000LL / resolution;
+    return ms * 1000 / resolution;
 }
 
 /*! \brief     Get current time in milliseconds.
@@ -117,8 +117,12 @@ __stk_forceinline int64_t GetTicksFromMilliseconds(int64_t ms, int32_t resolutio
 */
 __stk_forceinline int64_t GetTimeNowMilliseconds()
 {
-    IKernelService *service = Singleton<IKernelService *>::Get();
-    return (service->GetTicks() * service->GetTickResolution()) / 1000LL;
+    int32_t resolution = Singleton<IKernelService *>::Get()->GetTickResolution();
+
+    if (resolution == 1000)
+        return Singleton<IKernelService *>::Get()->GetTicks();
+    else
+        return (Singleton<IKernelService *>::Get()->GetTicks() * resolution) / 1000;
 }
 
 } // namespace stk

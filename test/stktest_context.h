@@ -86,7 +86,7 @@ extern TestContext g_TestContext;
 */
 #define STK_TEST_CHECK_EQUAL(expected, actual)\
     if ((expected) != (actual)) {\
-        printf("STK_TEST_CHECK_EQUAL failed: file[%s] line[%d]\nexpected: %d\n  actual: %d", __FILE__, __LINE__, (int)expected, (int)actual);\
+        printf("STK_TEST_CHECK_EQUAL failed!\n file: %s\n line: %d\n  expected: %d\n  actual: %d\n", __FILE__, __LINE__, (int)expected, (int)actual);\
         exit(1);\
     }
 
@@ -96,7 +96,7 @@ extern TestContext g_TestContext;
 #define STK_TEST_DECL_ASSERT\
     extern void _STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)\
     {\
-        printf("_STK_ASSERT failed: file[%s] line[%d] message: %s", file, (int)line, message);\
+        printf("_STK_ASSERT failed!\n file: %s\n line: %d\n message: %s\n", file, (int)line, message);\
         abort();\
     }
 

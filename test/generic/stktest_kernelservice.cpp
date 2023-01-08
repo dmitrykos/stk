@@ -42,7 +42,7 @@ static struct DelayContext
 
     void Process()
     {
-        platform->EventSysTick();
+        platform->ProcessTick();
     }
 }
 g_DelayContext;
@@ -124,11 +124,11 @@ TEST(KernelService, GetTicks)
     kernel.Start(PERIODICITY_DEFAULT);
 
     // ISR calls OnSysTick 1-st time
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(1, (int32_t)g_KernelService->GetTicks());
 
     // ISR calls OnSysTick 2-nd time
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(2, (int32_t)g_KernelService->GetTicks());
 }
 
@@ -150,7 +150,7 @@ static struct SwitchToNextRelaxCpuContext
     {
         Stack *&active = platform->m_stack_active;
 
-        platform->EventSysTick();
+        platform->ProcessTick();
 
         // ISR calls OnSysTick (task1 = active, task2 = idle)
         if (counter == 0)
@@ -193,7 +193,7 @@ TEST(KernelService, SwitchToNext)
     kernel.Start();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = SwitchToNextRelaxCpu;
@@ -212,7 +212,7 @@ TEST(KernelService, SwitchToNext)
     platform.EventTaskSwitch(active->SP + 1); // add shift to test IsMemoryOfSP
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = NULL;
@@ -236,7 +236,7 @@ static struct SleepRelaxCpuContext
     {
         Stack *&active = platform->m_stack_active;
 
-        platform->EventSysTick();
+        platform->ProcessTick();
 
         // ISR calls OnSysTick (task1 = active, task2 = idle)
         if (counter == 0)
@@ -274,7 +274,7 @@ TEST(KernelService, Sleep)
     kernel.Start();
 
     // ISR calls OnSysTick (task1 = idle, task2 = active)
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = SleepRelaxCpu;
@@ -286,7 +286,7 @@ TEST(KernelService, Sleep)
     g_KernelService->Sleep(2);
 
     // ISR calls OnSysTick (task1 = active, task2 = idle)
-    platform.EventSysTick();
+    platform.ProcessTick();
     CHECK_EQUAL(active->SP, (size_t)task1.GetStack());
 
     g_RelaxCpuHandler = NULL;
@@ -309,7 +309,7 @@ static struct SleepAllAndWakeRelaxCpuContext
     {
         Stack *&idle = platform->m_stack_idle, *&active = platform->m_stack_active;
 
-        platform->EventSysTick();
+        platform->ProcessTick();
 
         // ISR calls OnSysTick (task1 = idle, sleep_trap = active)
         if (counter == 0)

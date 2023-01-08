@@ -78,6 +78,24 @@ using namespace stk;
 // Declarations:
 extern "C" void SVC_Handler_Main(size_t *svc_args) __stk_attr_used; // __stk_attr_used required for Link-Time Optimization (-flto)
 
+/*! \brief Get SP of the calling process.
+*/
+__stk_forceinline size_t GetCallerSP()
+{
+    return __get_PSP();
+}
+
+/*! \brief Switch context by scheduling PendSV interrupt.
+*/
+__stk_forceinline void ScheduleContextSwitch()
+{
+    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // schedule PendSV interrupt
+    __ISB();                             // flush instructions cache
+}
+
+//! Platform events overrider.
+static IPlatform::IEventOverrider *g_Overrider = NULL;
+
 //! Internal context.
 static struct Context : public PlatformContext
 {
@@ -90,6 +108,18 @@ static struct Context : public PlatformContext
         m_exiting     = false;
     }
 
+    void OnTick()
+    {
+        STK_CORTEX_M_DISABLE_INTERRUPTS();
+
+        if (m_handler->OnTick(&m_stack_idle, &m_stack_active))
+        {
+            ScheduleContextSwitch();
+        }
+
+        STK_CORTEX_M_ENABLE_INTERRUPTS();
+    }
+
     EAccessMode m_access_mode; //!< hardware access mode
     bool        m_started;     //!< 'true' when in started state
     bool        m_exiting;     //!< 'true' when is exiting the scheduling process
@@ -97,14 +127,9 @@ static struct Context : public PlatformContext
 }
 g_Context;
 
-//! Platform events overrider.
-static IPlatform::IEventOverrider *g_Overrider = NULL;
-
-/*! \brief Get SP of the calling process.
-*/
-__stk_forceinline size_t GetCallerSP()
+void PlatformArmCortexM::ProcessTick()
 {
-    return __get_PSP();
+    g_Context.OnTick();
 }
 
 extern "C" void _STK_SYSTICK_HANDLER()
@@ -123,12 +148,7 @@ extern "C" void _STK_SYSTICK_HANDLER()
         STK_ASSERT(g_Context.m_started);
         STK_ASSERT(g_Context.m_handler != NULL);
 #endif
-        uint32_t cs;
-        STK_CORTEX_M_CRITICAL_SECTION_START(cs);
-
-        g_Context.m_handler->OnSysTick(&g_Context.m_stack_idle, &g_Context.m_stack_active);
-
-        STK_CORTEX_M_CRITICAL_SECTION_END(cs);
+        g_Context.OnTick();
     }
 }
 
@@ -352,7 +372,7 @@ static void OnTaskExit()
 
     while (true)
     {
-        __asm volatile("NOP");
+        __WFI(); // enter standby mode until process's time slot expires
     }
 }
 
@@ -455,12 +475,6 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
     return true;
 }
 
-void PlatformArmCortexM::SwitchContext()
-{
-    SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // schedule PendSV interrupt
-    __ISB();                             // flush instructions cache
-}
-
 static void SysTick_Stop()
 {
     SysTick->CTRL = 0;
@@ -515,7 +529,7 @@ void PlatformArmCortexM::SleepTicks(uint32_t ticks)
     g_Context.m_handler->OnTaskSleep(GetCallerSP(), ticks);
 }
 
-void PlatformArmCortexM::HardFault()
+void PlatformArmCortexM::ProcessHardFault()
 {
     if ((g_Overrider == NULL) || !g_Overrider->OnHardFault())
         abort();

@@ -120,7 +120,7 @@ static struct Context : public PlatformContext
     void StartActiveTask();
     void CreateTimerThreadAndJoin();
     void Cleanup();
-    void SysTick();
+    void ProcessTick();
     void SwitchContext();
     void SwitchToNext();
     void SleepTicks(uint32_t ticks);
@@ -148,7 +148,7 @@ static DWORD WINAPI TimerThread(LPVOID param)
 
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
-        g_Context.SysTick();
+        g_Context.ProcessTick();
     }
 
     return 0;
@@ -238,11 +238,12 @@ void Context::Cleanup()
     CloseHandle(m_timer_thread);
 }
 
-void Context::SysTick()
+void Context::ProcessTick()
 {
     STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
 
-    m_handler->OnSysTick(&m_stack_idle, &m_stack_active);
+    if (m_handler->OnTick(&m_stack_idle, &m_stack_active))
+        g_Context.SwitchContext();
 
     STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
 }
@@ -353,11 +354,6 @@ bool PlatformX86Win32::InitStack(EStackType stack_type, Stack *stack, IStackMemo
     return g_Context.InitStack(stack_type, stack, stack_memory, user_task);
 }
 
-void PlatformX86Win32::SwitchContext()
-{
-    g_Context.SwitchContext();
-}
-
 int32_t PlatformX86Win32::GetTickResolution() const
 {
     return g_Context.m_tick_resolution;
@@ -378,7 +374,12 @@ void PlatformX86Win32::SleepTicks(uint32_t ticks)
     g_Context.SleepTicks(ticks);
 }
 
-void PlatformX86Win32::HardFault()
+void PlatformX86Win32::ProcessTick()
+{
+    g_Context.ProcessTick();
+}
+
+void PlatformX86Win32::ProcessHardFault()
 {
     if ((g_Overrider == NULL) || !g_Overrider->OnHardFault())
     {

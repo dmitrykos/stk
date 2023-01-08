@@ -24,12 +24,12 @@ public:
     void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap);
     void Stop();
     bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
-    void SwitchContext();
     int32_t GetTickResolution() const;
     void SetAccessMode(EAccessMode mode);
     void SwitchToNext();
     void SleepTicks(uint32_t ticks);
-    void HardFault();
+    void ProcessTick();
+    void ProcessHardFault();
     void SetEventOverrider(IEventOverrider *overrider);
     size_t GetCallerSP();
 };

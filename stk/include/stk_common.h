@@ -265,7 +265,7 @@ public:
             \param[out] idle: Stack of the task which must enter Idle state.
             \param[out] active: Stack of the task which must enter Active state (to which context will switch).
         */
-        virtual void OnSysTick(Stack **idle, Stack **active) = 0;
+        virtual bool OnTick(Stack **idle, Stack **active) = 0;
 
         /*! \brief      Called by Thread process (via IKernelService::SwitchToNext) to switch to a next task.
             \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
@@ -323,10 +323,6 @@ public:
     */
     virtual bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task) = 0;
 
-    /*! \brief     Switches context of the tasks.
-    */
-    virtual void SwitchContext() = 0;
-
     /*! \brief     Get resolution of the system tick timer in microseconds.
                    Resolution means a number of microseconds between system tick timer ISRs.
         \return    Microseconds.
@@ -349,10 +345,21 @@ public:
     */
     virtual void SleepTicks(uint32_t ticks) = 0;
 
+    /*! \brief     Process one tick.
+        \note      Normally system tick is processed by the platform driver implementation. In case system tick
+                   handler is used by the application and should not be implemented by the driver then disable
+                   driver's handler in stk_config.h like this:
+                   \code
+                   #define _STK_SYSTICK_HANDLER _STK_SYSTICK_HANDLER_DISABLE
+                   \endcode
+                   and then call ProcessTick() from your custom tick handler.
+    */
+    virtual void ProcessTick() = 0;
+
     /*! \brief     Cause a hard fault of the system.
         \note      Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT).
     */
-    virtual void HardFault() = 0;
+    virtual void ProcessHardFault() = 0;
 
     /*! \brief     Set platform event overrider.
         \note      Must be set prior call to IKernel::Start.
@@ -440,6 +447,11 @@ public:
                    platform to operate correctly on a sub-millisecond resolution.
     */
     virtual void Start(uint32_t resolution_us = PERIODICITY_DEFAULT) = 0;
+
+    /*! \brief     Check if kernel started processing.
+        \return    True if started, otherwise false.
+    */
+    virtual bool IsStarted() const = 0;
 };
 
 /*! \class IKernelService

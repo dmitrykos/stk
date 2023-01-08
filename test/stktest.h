@@ -114,11 +114,6 @@ public:
         return true;
     }
 
-    void SwitchContext()
-    {
-        ++m_context_switch_nr;
-    }
-
     int32_t GetTickResolution() const
     {
         return m_resolution;
@@ -140,9 +135,15 @@ public:
         m_event_handler->OnTaskSleep(m_stack_active->SP, ticks);
     }
 
-    void HardFault()
+    void ProcessHardFault()
     {
         m_hard_fault = true;
+    }
+
+    void ProcessTick()
+    {
+        if (m_event_handler->OnTick(&m_stack_idle, &m_stack_active))
+            ++m_context_switch_nr;
     }
 
     void SetEventOverrider(IEventOverrider *overrider)
@@ -155,11 +156,6 @@ public:
     void EventStart()
     {
         m_event_handler->OnStart(&m_stack_active);
-    }
-
-    void EventSysTick()
-    {
-        m_event_handler->OnSysTick(&m_stack_idle, &m_stack_active);
     }
 
     void EventTaskExit(Stack *stack)
