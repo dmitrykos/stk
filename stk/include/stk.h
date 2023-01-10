@@ -51,7 +51,7 @@ namespace stk {
     \endcode
 */
 template <int32_t _Mode, uint32_t _Size, class _TyStrategy, class _TyPlatform>
-class  Kernel : public IKernel, private IPlatform::IEventHandler
+class Kernel : public IKernel, private IPlatform::IEventHandler
 {
     /*! \typedef TrapStackStackMemory
         \brief   Stack memory wrapper type of the Exit trap.
@@ -1085,7 +1085,8 @@ protected:
     STK_STATIC_ASSERT_N(KENREL_MODE_MUST_BE_SET, (_Mode != 0));
 
     // If hit here: KERNEL_STATIC and KERNEL_DYNAMIC can not be mixed, either one of these is possible.
-    STK_STATIC_ASSERT_N(KENREL_MODE_MIX_NOT_ALLOWED, (((_Mode & KERNEL_STATIC) & (_Mode & KERNEL_DYNAMIC)) == 0));
+    STK_STATIC_ASSERT_N(KENREL_MODE_MIX_NOT_ALLOWED,
+        (((_Mode & KERNEL_STATIC) & (_Mode & KERNEL_DYNAMIC)) == 0));
 
     // If hit here: KERNEL_HRT must accompany KERNEL_STATIC or KERNEL_DYNAMIC.
     STK_STATIC_ASSERT_N(KENREL_MODE_HRT_ALONE, ((_Mode & KERNEL_HRT) == 0) ||

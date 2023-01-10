@@ -7,25 +7,26 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
+#include "cmsis_device.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "stm32f4xx.h"
 #include "perf.h"
 
 static StackType_t g_TaskStack[_STK_BENCH_TASK_MAX + 1][_STK_BENCH_STACK_SIZE] = {};
 static StaticTask_t g_Task[_STK_BENCH_TASK_MAX + 1] = {};
 static TaskHandle_t g_TaskHandle[_STK_BENCH_TASK_MAX + 1] = {};
 static volatile int64_t g_Ticks = 0;
+static volatile bool g_Enable = false;
 
 extern "C" void SysTick_Handler()
 {
     //HAL_IncTick();
 
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-    {
+    if (g_Enable)
         ++g_Ticks;
+
+    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
         xPortSysTickHandler();
-    }
 }
 
 extern "C" void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
@@ -52,6 +53,8 @@ static void BenchTask(void *pvParameter)
 {
     uint32_t index = (uint32_t)pvParameter;
 
+    g_Enable = true;
+
     while (g_Ticks < _STK_BENCH_WINDOW)
     {
         g_Bench[index].Process();
@@ -68,9 +71,9 @@ static void BenchEnd(void *pvParameter)
 {
     (void)pvParameter;
 
-    while (g_Ticks < _STK_BENCH_WINDOW + 1)
+    while (g_Ticks < _STK_BENCH_WINDOW + 2)
     {
-        vTaskDelay(_STK_BENCH_WINDOW / portTICK_PERIOD_MS);
+        vTaskDelay(_STK_BENCH_WINDOW / portTICK_PERIOD_MS + 2);
     }
 
 wait:

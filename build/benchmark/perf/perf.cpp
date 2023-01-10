@@ -46,9 +46,32 @@ void Crc32Bench::Process()
 
 void Crc32Bench::ShowResults()
 {
+    typedef unsigned int uint;
+
+    uint64_t sum = 0, min = UINT64_MAX, max = 0;
     for (int32_t i = 0; i < _STK_BENCH_TASK_MAX; ++i)
     {
-        printf("task %d = %d\n", (int)i, (int)g_Bench[0].m_round);
+        uint64_t v = g_Bench[i].m_round;
+
+        sum += v;
+
+        if (v > max)
+            max = v;
+        if (v < min)
+            min = v;
+    }
+
+    uint64_t average = sum / _STK_BENCH_TASK_MAX;
+
+    uint32_t jitter_min = average - min;
+    uint32_t jitter_max = max - average;
+    uint32_t jitter = (jitter_max > jitter_min ? jitter_max : jitter_min);
+
+    printf("tasks %d | sum=%u avr=%u min=%u max=%u jitter=%u\n", _STK_BENCH_TASK_MAX, (uint)sum, (uint)average, (uint)min, (uint)max, (uint)jitter);
+
+    for (int32_t i = 0; i < _STK_BENCH_TASK_MAX; ++i)
+    {
+        printf("task %d = %u\n", (int)i, (uint)g_Bench[i].m_round);
     }
 }
 

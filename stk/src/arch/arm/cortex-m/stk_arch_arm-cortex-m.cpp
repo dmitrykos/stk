@@ -184,7 +184,7 @@ __stk_forceinline void SaveStackIdle()
     "SUB        r0, #16         \n");
 #endif
 
-    // save stack memory to the idle stack
+    // save PSP of the idle stack
     __asm volatile(
     "LDR        r1, %[stack]    \n"
     "STR        r0, [r1]        \n"
@@ -194,14 +194,14 @@ __stk_forceinline void SaveStackIdle()
 
 __stk_forceinline void LoadStackActive()
 {
-    // set active stack
+    // load PSP of the active stack
     __asm volatile(
     "LDR        r1, %[stack]    \n"
     "LDR        r0, [r1]        \n" // load
     ::
     [stack] "o" (g_Context.m_stack_active));
 
-    // load general registers from the active stack
+    // load general registers from the stack memory
 #ifdef STK_CORTEX_M_MANAGE_LR
     __asm volatile(
     "LDMIA      r0!, {r4-r11, LR}\n");
@@ -370,7 +370,7 @@ static void OnTaskExit()
 
     while (true)
     {
-        __WFI(); // enter standby mode until process's time slot expires
+        __WFI(); // enter standby mode until time slot expires
     }
 }
 

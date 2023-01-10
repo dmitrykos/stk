@@ -12,16 +12,16 @@
 
 #include "crc32.h"
 
-#define _STK_BENCH_TASK_MAX      65
-#define _STK_BENCH_STACK_SIZE    128
-#define _STK_BENCH_WINDOW        1000
+#define _STK_BENCH_TASK_MAX   3
+#define _STK_BENCH_STACK_SIZE 128
+#define _STK_BENCH_WINDOW     1000
 
 struct Crc32Bench
 {
     Crc32Bench();
 
     void Initialize();
-    void Process();
+    __attribute__((noinline)) void Process();
     static void ShowResults();
 
     crc32_data_t m_crc;

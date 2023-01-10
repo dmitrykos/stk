@@ -15,16 +15,17 @@ using namespace stk;
 
 static Kernel<KERNEL_DYNAMIC, _STK_BENCH_TASK_MAX + 1, SwitchStrategyRoundRobin, PlatformDefault> g_Kernel;
 static volatile int64_t g_Ticks = 0;
+static volatile bool g_Enable = false;
 
 extern "C" void SysTick_Handler()
 {
     //HAL_IncTick();
 
-    if (g_Kernel.IsStarted())
-    {
+    if (g_Enable)
         ++g_Ticks;
+
+    if (g_Kernel.IsStarted())
         g_Kernel.GetPlatform()->ProcessTick();
-    }
 }
 
 class BenchTask : public Task<_STK_BENCH_STACK_SIZE, ACCESS_PRIVILEGED>
@@ -41,6 +42,8 @@ private:
     void RunInner()
     {
         uint32_t index = m_id;
+
+        g_Enable = true;
 
         while (g_Ticks < _STK_BENCH_WINDOW)
         {
@@ -65,9 +68,9 @@ public:
 private:
     void RunInner()
     {
-        while (g_Ticks < _STK_BENCH_WINDOW + 1)
+        while (g_Ticks < _STK_BENCH_WINDOW + 2)
         {
-            g_KernelService->Sleep(_STK_BENCH_WINDOW);
+            g_KernelService->Sleep(_STK_BENCH_WINDOW + 2);
         }
 
     wait:

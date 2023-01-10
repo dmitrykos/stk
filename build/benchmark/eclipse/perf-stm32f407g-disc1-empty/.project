@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/perf</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/stm32fx/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -39,6 +44,26 @@
 			<name>deps/stm32fx/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/perf/crc32.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/perf/crc32.c</locationURI>
+		</link>
+		<link>
+			<name>src/perf/crc32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/perf/crc32.h</locationURI>
+		</link>
+		<link>
+			<name>src/perf/perf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/perf/perf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/perf/perf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/perf/perf.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stm32fx/include/arm</name>
