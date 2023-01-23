@@ -24,8 +24,8 @@ class SwitchStrategyRoundRobin : public ITaskSwitchStrategy
 public:
     void AddTask(IKernelTask *task) { m_tasks.LinkBack(task); }
     void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }
-    IKernelTask *GetNext(IKernelTask *current) { return (* current->GetNext()); }
-    IKernelTask *GetFirst() { return (* m_tasks.GetFirst()); }
+    IKernelTask *GetNext(IKernelTask *current) { return static_cast<IKernelTask *>(current->GetNext()); }
+    IKernelTask *GetFirst() { return static_cast<IKernelTask *>(m_tasks.GetFirst()); }
 
 private:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling

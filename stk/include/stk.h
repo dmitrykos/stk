@@ -360,8 +360,8 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(), m_strategy(), m_task_now(NULL), m_sleep_trap(), m_exit_trap(),
-        m_fsm_state(FSM_STATE_NONE), m_request(~0), m_access_mode(ACCESS_PRIVILEGED)
+    explicit Kernel() : m_platform(), m_strategy(), m_task_now(NULL), m_task_storage(), m_sleep_trap(),
+        m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(~0), m_access_mode(ACCESS_PRIVILEGED)
     {
     #ifdef _DEBUG
         // _TyPlatform must inherit IPlatform
@@ -378,9 +378,10 @@ public:
     {
         STK_ASSERT(!IsInitialized());
 
-        m_task_now  = NULL;
-        m_fsm_state = FSM_STATE_NONE;
-        m_request   = REQUEST_NONE;
+        m_task_now    = NULL;
+        m_fsm_state   = FSM_STATE_NONE;
+        m_request     = REQUEST_NONE;
+        m_access_mode = ACCESS_PRIVILEGED;
     }
 
     __stk_attr_noinline void AddTask(ITask *user_task)

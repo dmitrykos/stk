@@ -27,10 +27,7 @@ template <class _Ty, bool _ClosedLoop> class DListEntry
     friend class DListHead<_Ty, _ClosedLoop>;
 
 public:
-    DListEntry() : m_head(NULL), m_next(NULL), m_prev(NULL)
-    { }
-    virtual ~DListEntry()
-    { }
+    explicit DListEntry() : m_head(NULL), m_next(NULL), m_prev(NULL) {}
 
     typedef DListEntry<_Ty, _ClosedLoop> DLEntryType;
     typedef DListHead<_Ty, _ClosedLoop>  DLHeadType;
@@ -39,9 +36,6 @@ public:
     DLEntryType *GetNext() const { return m_next; }
     DLEntryType *GetPrev() const { return m_prev; }
     bool IsLinked() const        { return (GetHead() != NULL); }
-
-    operator _Ty *()             { return (_Ty *)this; }
-    operator const _Ty *() const { return (_Ty *)this; }
 
 private:
     void Link(DLHeadType *head, DLEntryType *next, DLEntryType *prev)
@@ -85,8 +79,7 @@ template <class _Ty, bool _ClosedLoop> class DListHead
 public:
     typedef DListEntry<_Ty, _ClosedLoop> DLEntryType;
 
-    explicit DListHead(): m_count(0), m_first(NULL), m_last(NULL)
-    { }
+    explicit DListHead(): m_count(0), m_first(NULL), m_last(NULL) {}
 
     size_t GetSize() const             { return m_count; }
     bool IsEmpty() const               { return (m_count == 0); }
@@ -94,13 +87,27 @@ public:
     DLEntryType *GetFirst() const      { return m_first; }
     DLEntryType *GetLast() const       { return m_last; }
 
-    void Clear()                       { while (!IsEmpty()) Unlink(GetFirst()); }
+    void Clear()                       { while (!IsEmpty()) Unlink(GetLast()); }
 
     void LinkBack(DLEntryType *entry)  { Link(entry, NULL, GetLast()); }
-    void LinkFront(DLEntryType *entry) { Link(entry, GetLast(), NULL); }
+    void LinkBack(DLEntryType &entry)  { Link(&entry, NULL, GetLast()); }
 
-    DLEntryType *PopBack()             { DLEntryType *ret = GetLast(); Unlink(ret); return ret; }
-    DLEntryType *PopFront()            { DLEntryType *ret = GetFirst(); Unlink(ret); return ret; }
+    void LinkFront(DLEntryType *entry) { Link(entry, GetLast(), NULL); }
+    void LinkFront(DLEntryType &entry) { Link(&entry, GetLast(), NULL); }
+
+    DLEntryType *PopBack()
+    {
+        DLEntryType *ret = GetLast();
+        Unlink(ret);
+        return ret;
+    }
+
+    DLEntryType *PopFront()
+    {
+        DLEntryType *ret = GetFirst();
+        Unlink(ret);
+        return ret;
+    }
 
     void Unlink(DLEntryType *entry)
     {
