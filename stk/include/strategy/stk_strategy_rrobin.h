@@ -26,6 +26,7 @@ public:
     void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }
     IKernelTask *GetNext(IKernelTask *current) { return static_cast<IKernelTask *>(current->GetNext()); }
     IKernelTask *GetFirst() { return static_cast<IKernelTask *>(m_tasks.GetFirst()); }
+    size_t GetSize() const { return m_tasks.GetSize(); }
 
 private:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling

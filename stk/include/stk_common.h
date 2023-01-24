@@ -405,6 +405,10 @@ public:
         \note      Some implementations may return NULL that denotes the end of the iteration.
     */
     virtual IKernelTask *GetNext(IKernelTask *current) = 0;
+
+    /*! \brief     Get number of tasks.
+    */
+    virtual size_t GetSize() const = 0;
 };
 
 /*! \class IKernel

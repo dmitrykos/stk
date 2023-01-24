@@ -831,7 +831,7 @@ protected:
                             {
                                 // current task will not be switched out in StateSwitch because it is the last one
                                 // therefore make sure deadline is checked for this task
-                                if (itr->GetHead()->GetSize() == 1)
+                                if (m_strategy.GetSize() == 1)
                                     itr->HrtOnSwitchedOut(&m_platform, m_service.GetTicks());
                             }
 
@@ -846,7 +846,7 @@ protected:
                         pending_end = NULL;
 
                         // check if no tasks left
-                        if (m_strategy.GetFirst() == NULL)
+                        if (m_strategy.GetSize() == 0)
                         {
                             itr  = NULL;
                             type = FSM_EVENT_EXIT;
