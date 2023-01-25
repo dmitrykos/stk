@@ -173,7 +173,7 @@ public:
 /*! \class ITask
     \brief Interface of the user task.
 
-    Inherit this interface by your task class to make it schedulable by the Kernel.
+    \note  Inherit this interface by your thread/task class to make it schedulable by the Kernel.
 
     Usage example:
     \code
