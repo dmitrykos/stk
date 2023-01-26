@@ -37,6 +37,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>source/driver</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>stk/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -55,6 +60,16 @@
 			<name>source/blinky/example.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/blinky/example.h</locationURI>
+		</link>
+		<link>
+			<name>source/driver/led.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/driver/led.h</locationURI>
+		</link>
+		<link>
+			<name>source/driver/nxpimxrt1050</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>stk/include/arch</name>
@@ -105,6 +120,11 @@
 			<name>stk/src/stk.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/stk/src/stk.cpp</locationURI>
+		</link>
+		<link>
+			<name>source/driver/nxpimxrt1050/led.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/driver/nxpimxrt1050/led.cpp</locationURI>
 		</link>
 		<link>
 			<name>stk/include/arch/arm</name>

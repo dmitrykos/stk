@@ -43,34 +43,6 @@
 #include "example.h"
 /* TODO: insert other definitions and declarations here. */
 
-void LED_INIT(ELed led, bool init_state)
-{
-    uint8_t logic_state = (init_state ? LOGIC_LED_ON : LOGIC_LED_OFF);
-
-    switch (led)
-    {
-    case LED_RED: break; // unavailabe on board
-    case LED_GREEN: USER_LED_INIT(logic_state); break;
-    case LED_BLUE: break; // unavailabe on board
-    default:
-        assert(false);
-        break;
-    }
-}
-
-void LED_SET_STATE(ELed led, bool state)
-{
-    switch (led)
-    {
-    case LED_RED: break; // unavailabe on board
-    case LED_GREEN: (state ? USER_LED_ON() : USER_LED_OFF()); break;
-    case LED_BLUE: break; // unavailabe on board
-    default:
-        assert(false);
-        break;
-    }
-}
-
 /*
  * @brief   Application entry point.
  */
@@ -89,5 +61,5 @@ int main(void) {
     RunExample();
     
     // should not reach here
-    return 1;
+    return 0;
 }

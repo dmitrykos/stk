@@ -36,6 +36,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/driver</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/once</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -57,6 +62,16 @@
 		</link>
 		<link>
 			<name>deps/stm32fx/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/driver/led.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/led.h</locationURI>
+		</link>
+		<link>
+			<name>src/driver/stm32f4xx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -189,6 +204,11 @@
 			<name>deps/stm32fx/src/write.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/stm32fx/src/write.c</locationURI>
+		</link>
+		<link>
+			<name>src/driver/stm32f4xx/led.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/stm32f4xx/led.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/arm</name>

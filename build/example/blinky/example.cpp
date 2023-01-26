@@ -75,19 +75,19 @@ private:
             switch (task_id)
             {
             case 0:
-                LED_SET_STATE(LED_RED, true);
-                LED_SET_STATE(LED_GREEN, false);
-                LED_SET_STATE(LED_BLUE, false);
+                Led::Set(Led::RED, true);
+                Led::Set(Led::GREEN, false);
+                Led::Set(Led::BLUE, false);
                 break;
             case 1:
-                LED_SET_STATE(LED_RED, false);
-                LED_SET_STATE(LED_GREEN, true);
-                LED_SET_STATE(LED_BLUE, false);
+                Led::Set(Led::RED, false);
+                Led::Set(Led::GREEN, true);
+                Led::Set(Led::BLUE, false);
                 break;
             case 2:
-                LED_SET_STATE(LED_RED, false);
-                LED_SET_STATE(LED_GREEN, false);
-                LED_SET_STATE(LED_BLUE, true);
+                Led::Set(Led::RED, false);
+                Led::Set(Led::GREEN, false);
+                Led::Set(Led::BLUE, true);
                 break;
             }
 
@@ -100,9 +100,9 @@ private:
 
 static void InitLeds()
 {
-    LED_INIT(LED_RED, false);
-    LED_INIT(LED_GREEN, false);
-    LED_INIT(LED_BLUE, false);
+    Led::Init(Led::RED, false);
+    Led::Init(Led::GREEN, false);
+    Led::Init(Led::BLUE, false);
 }
 
 void RunExample()

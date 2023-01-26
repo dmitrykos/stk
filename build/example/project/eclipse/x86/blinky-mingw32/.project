@@ -36,6 +36,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/driver</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -54,6 +59,16 @@
 			<name>src/blinky/example.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/blinky/example.h</locationURI>
+		</link>
+		<link>
+			<name>src/driver/led.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/led.h</locationURI>
+		</link>
+		<link>
+			<name>src/driver/portable</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch</name>
@@ -104,6 +119,11 @@
 			<name>deps/stk/src/stk.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/src/stk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/driver/portable/led.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/portable/led.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/arm</name>
