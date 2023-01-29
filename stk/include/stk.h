@@ -672,6 +672,8 @@ protected:
 
     __stk_attr_noinline void OnStart(Stack **active)
     {
+        STK_ASSERT(m_strategy.GetSize() != 0);
+
         m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
         STK_ASSERT(m_task_now != NULL);
 
@@ -814,8 +816,10 @@ protected:
         {
             if (_Mode & KERNEL_DYNAMIC)
             {
-                while ((itr = static_cast<KernelTask *>(m_strategy.GetNext(prev))) != NULL)
+                for (;;)
                 {
+                    itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
+
                     // process pending task removal
                     if (itr->IsPendingRemoval())
                     {
@@ -855,10 +859,8 @@ protected:
 
                         continue;
                     }
-                    else
-                    {
-                        break;
-                    }
+
+                    break;
                 }
             }
             else

@@ -22,6 +22,49 @@ TEST_GROUP(SwitchStrategyRoundRobin)
     void teardown() {}
 };
 
+TEST(SwitchStrategyRoundRobin, GetFirstEmpty)
+{
+    SwitchStrategyRoundRobin rr;
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        rr.GetFirst();
+        CHECK_TEXT(false, "expecting assertion when empty");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(SwitchStrategyRoundRobin, GetNextEmpty)
+{
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    kernel.AddTask(&task1);
+    IKernelTask *ktask = strategy->GetFirst();
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL(0, strategy->GetSize());
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->GetNext(ktask);
+        CHECK_TEXT(false, "expecting assertion when empty");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
     Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRoundRobin, PlatformTestMock> kernel;

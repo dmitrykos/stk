@@ -37,6 +37,17 @@ public:
     DLEntryType *GetPrev() const { return m_prev; }
     bool IsLinked() const        { return (GetHead() != NULL); }
 
+    operator _Ty *()             { return (_Ty *)this; }
+    operator const _Ty *() const { return (_Ty *)this; }
+
+protected:
+    /*! \brief     Default destructor.
+        \note      Entry can not be deleted directly, only through the host entry.
+                   It is non-virtual to avoid bloating binary with stdc++ dependency
+                   therefore it can not be used for a deletion of the parent object.
+    */
+    ~DListEntry() {}
+
 private:
     void Link(DLHeadType *head, DLEntryType *next, DLEntryType *prev)
     {
@@ -87,24 +98,24 @@ public:
     DLEntryType *GetFirst() const      { return m_first; }
     DLEntryType *GetLast() const       { return m_last; }
 
-    void Clear()                       { while (!IsEmpty()) Unlink(GetLast()); }
+    void Clear()                       { while (!IsEmpty()) Unlink(m_first); }
 
-    void LinkBack(DLEntryType *entry)  { Link(entry, NULL, GetLast()); }
-    void LinkBack(DLEntryType &entry)  { Link(&entry, NULL, GetLast()); }
+    void LinkBack(DLEntryType *entry)  { Link(entry, NULL, m_last); }
+    void LinkBack(DLEntryType &entry)  { Link(&entry, NULL, m_last); }
 
-    void LinkFront(DLEntryType *entry) { Link(entry, GetLast(), NULL); }
-    void LinkFront(DLEntryType &entry) { Link(&entry, GetLast(), NULL); }
+    void LinkFront(DLEntryType *entry) { Link(entry, m_last, NULL); }
+    void LinkFront(DLEntryType &entry) { Link(&entry, m_last, NULL); }
 
     DLEntryType *PopBack()
     {
-        DLEntryType *ret = GetLast();
+        DLEntryType *ret = m_last;
         Unlink(ret);
         return ret;
     }
 
     DLEntryType *PopFront()
     {
-        DLEntryType *ret = GetFirst();
+        DLEntryType *ret = m_first;
         Unlink(ret);
         return ret;
     }

@@ -84,12 +84,13 @@ TEST(Kernel, AddTask)
 
     kernel.Initialize();
 
-    IKernelTask *ktask = strategy->GetFirst();
-    CHECK_TRUE_TEXT(ktask == NULL, "Expecting none kernel tasks");
+    CHECK_EQUAL_TEXT(0, strategy->GetSize(), "Expecting none kernel tasks");
 
     kernel.AddTask(&task);
 
-    ktask = strategy->GetFirst();
+    CHECK_EQUAL_TEXT(1, strategy->GetSize(), "Expecting 1 kernel task");
+
+    IKernelTask *ktask = strategy->GetFirst();
     CHECK_TRUE_TEXT(ktask != NULL, "Expecting one kernel task");
 
     CHECK_TRUE_TEXT(ktask->GetUserTask() == &task, "Expecting just added user task");
@@ -257,7 +258,7 @@ TEST(Kernel, RemoveTask)
     CHECK_EQUAL_TEXT(&task2, strategy->GetFirst()->GetUserTask(), "Expecting task2 as first (duplicate task1 removal attempt)");
 
     kernel.RemoveTask(&task2);
-    CHECK_TRUE_TEXT(strategy->GetFirst() == NULL, "Expecting none tasks");
+    CHECK_EQUAL_TEXT(0, strategy->GetSize(), "Expecting none tasks");
 }
 
 TEST(Kernel, RemoveTaskFailNull)
@@ -752,12 +753,12 @@ TEST(Kernel, HrtTaskCompleted)
     kernel.AddTask(&task, 1, 1, 0);
     kernel.Start();
 
-    CHECK_TRUE(strategy->GetFirst() != NULL);
+    CHECK_TRUE(strategy->GetSize() != 0);
 
     platform->EventTaskExit(platform->m_stack_active);
     platform->ProcessTick();
 
-    CHECK_TRUE(strategy->GetFirst() == NULL);
+    CHECK_EQUAL(0, strategy->GetSize());
 }
 
 static struct HrtTaskDeadlineMissedRelaxCpuContext
