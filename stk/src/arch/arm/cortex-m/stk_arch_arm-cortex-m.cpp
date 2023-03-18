@@ -186,20 +186,20 @@ __stk_forceinline void SaveStackIdle()
 
     // save PSP of the idle stack
     __asm volatile(
-    "LDR        r1, %[stack]    \n"
+    "LDR        r1, %0          \n"
     "STR        r0, [r1]        \n"
-    ::
-    [stack] "o" (g_Context.m_stack_idle));
+    :
+    "=m" (g_Context.m_stack_idle));
 }
 
 __stk_forceinline void LoadStackActive()
 {
     // load PSP of the active stack
     __asm volatile(
-    "LDR        r1, %[stack]    \n"
+    "LDR        r1, %0          \n"
     "LDR        r0, [r1]        \n" // load
     ::
-    [stack] "o" (g_Context.m_stack_active));
+    "m" (g_Context.m_stack_active));
 
     // load general registers from the stack memory
 #ifdef STK_CORTEX_M_MANAGE_LR
@@ -289,7 +289,7 @@ static void StartScheduling()
     g_Context.m_handler->OnStart(&g_Context.m_stack_active);
 
     // schedule ticks
-    uint32_t result = SysTick_Config((uint32_t)((int64_t)SystemCoreClock * g_Context.m_tick_resolution / 1000000));
+    uint32_t result = SysTick_Config((uint32_t)STK_TIME_TO_CPU_TICKS_USEC(SystemCoreClock, g_Context.m_tick_resolution));
     STK_ASSERT(result == 0);
     (void)result;
 
@@ -368,7 +368,7 @@ static void OnTaskExit()
 
     STK_CORTEX_M_CRITICAL_SECTION_END(cs);
 
-    while (true)
+    for (;;)
     {
         __WFI(); // enter standby mode until time slot expires
     }
@@ -514,12 +514,12 @@ void PlatformArmCortexM::SetAccessMode(EAccessMode mode)
 
 void PlatformArmCortexM::SwitchToNext()
 {
-    g_Context.m_handler->OnTaskSwitch(GetCallerSP());
+    g_Context.m_handler->OnTaskSwitch(::GetCallerSP());
 }
 
 void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 {
-    g_Context.m_handler->OnTaskSleep(GetCallerSP(), ticks);
+    g_Context.m_handler->OnTaskSleep(::GetCallerSP(), ticks);
 }
 
 void PlatformArmCortexM::ProcessHardFault()

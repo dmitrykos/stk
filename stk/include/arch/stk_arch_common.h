@@ -66,6 +66,11 @@ public:
     int32_t                   m_tick_resolution; //!< system tick resolution (microseconds)
 };
 
+/*! \def   STK_TIME_TO_CPU_TICKS_USEC
+    \brief Convert time (microseconds) to CPU ticks.
+*/
+#define STK_TIME_TO_CPU_TICKS_USEC(CPU_FREQ, TIME) ((int64_t)(CPU_FREQ) * (TIME) / 1000000)
+
 } // namespace stk
 
 #endif /* STK_ARCH_COMMON_H_ */
