@@ -99,7 +99,7 @@ __attribute__ ((always_inline))
 call_host (int reason, void* arg)
 {
   int value;
-  asm volatile (
+  __asm volatile (
 
       " mov r0, %[rsn]  \n"
       " mov r1, %[arg]  \n"

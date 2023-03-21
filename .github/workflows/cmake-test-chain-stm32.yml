@@ -46,7 +46,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: ${{matrix.name}}
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchain/arm-none-eabi-gcc.cmake ${{matrix.cmake_flags}} -DENABLE_LTO=ON -DENABLE_SMALL=ON -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=OFF -DTEST_CHAIN=ON
+      run: cmake -G "Unix Makefiles" -B ${{github.workspace}}/build -DCMAKE_TOOLCHAIN_FILE=build/cmake/toolchain/arm-none-eabi-gcc.cmake ${{matrix.cmake_flags}} -DENABLE_LTO=ON -DENABLE_SMALL=ON -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=OFF -DTEST_CHAIN=ON
 
     - name: Build
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --parallel 4
@@ -68,4 +68,4 @@ jobs:
       run: chmod +x build/test/qemu/stk-qemu.sh && chmod +x build/test/qemu/test.sh
 
     - name: Test (Chain)
-      run: bash build/test/qemu/test.sh ${{matrix.cpu}} ${{matrix.board}} ${{github.workspace}}/build/test/chain test-chain.elf
+      run: sh build/test/qemu/test.sh ${{matrix.cpu}} ${{matrix.board}} ${{github.workspace}}/build/test/chain test-chain.elf

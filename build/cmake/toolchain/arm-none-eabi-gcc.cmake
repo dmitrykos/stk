@@ -45,8 +45,10 @@ if (NOT TOOLCHAIN_PATH)
         OUTPUT_VARIABLE GCC_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    get_filename_component(TOOLCHAIN_PATH_BIN ${GCC_PATH} DIRECTORY)
-    message(STATUS "Found compiler at path: ${TOOLCHAIN_PATH_BIN}")
+    message(STATUS "Found compiler at path: ${GCC_PATH}")
+    cmake_path(GET GCC_PATH PARENT_PATH TOOLCHAIN_PATH_BIN)
+    #get_filename_component(TOOLCHAIN_PATH_BIN ${GCC_PATH} DIRECTORY)
+    message(STATUS "Using compiler path: ${TOOLCHAIN_PATH_BIN}")
     set(TOOLCHAIN_PATH ${TOOLCHAIN_PATH_BIN}/..)
 endif()
 
@@ -56,11 +58,10 @@ set(TOOLCHAIN_TOOLCHAIN_LIBS           ${TOOLCHAIN_TOOLCHAIN_BASE}/lib)
 set(TOOLCHAIN_TOOLCHAIN_INCLUDES       ${TOOLCHAIN_TOOLCHAIN_BASE}/include)
 
 # Set paths
-set(TOOLCHAIN_TOOLS_PATH               ${TOOLCHAIN_PATH}/bin)
-set(CMAKE_C_COMPILER                   ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-gcc${HOST_COMPILER_EXT})
-set(CMAKE_CXX_COMPILER                 ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-g++${HOST_COMPILER_EXT})
-set(CMAKE_ASM_COMPILER                 ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-as${HOST_COMPILER_EXT})
-set(CMAKE_SIZE                         ${TOOLCHAIN_TOOLS_PATH}/${TOOLCHAIN_COMPILER_ABI}-size${HOST_COMPILER_EXT})
+set(CMAKE_C_COMPILER                   ${TOOLCHAIN_PATH_BIN}/${TOOLCHAIN_COMPILER_ABI}-gcc${HOST_COMPILER_EXT})
+set(CMAKE_CXX_COMPILER                 ${TOOLCHAIN_PATH_BIN}/${TOOLCHAIN_COMPILER_ABI}-g++${HOST_COMPILER_EXT})
+set(CMAKE_ASM_COMPILER                 ${TOOLCHAIN_PATH_BIN}/${TOOLCHAIN_COMPILER_ABI}-as${HOST_COMPILER_EXT})
+set(CMAKE_SIZE                         ${TOOLCHAIN_PATH_BIN}/${TOOLCHAIN_COMPILER_ABI}-size${HOST_COMPILER_EXT})
 set(CMAKE_ROOT_PATH                    ${TOOLCHAIN_TOOLCHAIN_BASE})
 set(CMAKE_COMPILER_IS_GNUCC            TRUE)
 set(CMAKE_COMPILER_IS_GNUCXX           TRUE)
@@ -101,11 +102,11 @@ if (ENABLE_DEBUG_ABILITY)
 else()
     set(TOOLCHAIN_COMMON_FLAGS "-O${OPT_LEVEL_RELEASE} -g -DNDEBUG")
 endif()
-set(TOOLCHAIN_COMMON_FLAGS "${TOOLCHAIN_COMMON_FLAGS} -pipe -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fstrict-aliasing -fmerge-constants -Wall -Wextra")
+set(TOOLCHAIN_COMMON_FLAGS "${TOOLCHAIN_COMMON_FLAGS} -pipe -fmessage-length=0 -fsigned-char -ffunction-sections -fdata-sections -fno-common -fstrict-aliasing -fmerge-constants -Wall -Wextra -Wno-missing-field-initializers")
 
 # Common C and C++ (C++ excludes RTTI always)
-set(TOOLCHAIN_COMMON_C_FLAGS "-std=gnu11")
-set(TOOLCHAIN_COMMON_CXX_FLAGS "-std=gnu++11 -fabi-version=0 -fno-use-cxa-atexit -fno-threadsafe-statics")
+set(TOOLCHAIN_COMMON_C_FLAGS "-std=c11")
+set(TOOLCHAIN_COMMON_CXX_FLAGS "-std=c++11 -fabi-version=0 -fno-use-cxa-atexit -fno-threadsafe-statics")
 
 # Small build excludes exceptions
 if (ENABLE_SMALL)
@@ -135,7 +136,8 @@ else()
     set(TOOLCHAIN_CPU "-mcpu=cortex-m4")
     set(TARGET_CORTEX_M4 TRUE)
 endif()
-set(TOOLCHAIN_CPU_LINKER_FLAGS "${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_CPU} -mthumb")
+set(TOOLCHAIN_CPU "${TOOLCHAIN_CPU} -mthumb")
+set(TOOLCHAIN_CPU_LINKER_FLAGS "${TOOLCHAIN_CPU_LINKER_FLAGS} ${TOOLCHAIN_CPU}")
 
 # FPU
 if (ENABLE_HARD_FP)

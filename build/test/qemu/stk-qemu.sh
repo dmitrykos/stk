@@ -6,7 +6,7 @@ WORK_DIR=$3
 KERNEL=$4
 
 # Run emulator
-docker run -v ${WORK_DIR}:/fw stk-qemu qemu-system-gnuarmeclipse \
+docker run -v ${WORK_DIR}:/fw stk-qemu:latest qemu-system-gnuarmeclipse \
 	-cpu ${CPU} -machine ${BOARD} -nographic \
 	-kernel /fw/${KERNEL} > /dev/null & PID=$!
 
