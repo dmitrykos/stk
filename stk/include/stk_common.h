@@ -59,9 +59,9 @@ enum EStackType
 */
 enum EConsts
 {
-    PERIODICITY_MAX      = 99000, //!< Maximum periodicity (microseconds), 60 seconds (note: this value is the highest working on a real hardware and QEMU).
-    PERIODICITY_DEFAULT  = 1000,  //!< Default periodicity (microseconds), 1 millisecond.
-    STACK_SIZE_MIN       = 32     //!< Stack memory size of the Exit trap (see: StackMemoryDef, StackMemoryWrapper).
+    PERIODICITY_MAX      = 99000,             //!< Maximum periodicity (microseconds), 99 milliseconds (note: this value is the highest working on a real hardware and QEMU).
+    PERIODICITY_DEFAULT  = 1000,              //!< Default periodicity (microseconds), 1 millisecond.
+    STACK_SIZE_MIN       = STK_STACK_SIZE_MIN //!< Stack memory size of the Exit trap (see: StackMemoryDef, StackMemoryWrapper).
 };
 
 /*! \class StackMemoryDef
@@ -76,6 +76,8 @@ enum EConsts
 */
 template <uint32_t _StackSize> struct StackMemoryDef
 {
+    enum { SIZE = _StackSize };
+
     /*! \typedef Type
         \brief   Stack memory type.
     */
@@ -297,7 +299,7 @@ public:
         virtual bool OnSleep() = 0;
 
         /*! \brief      Called by Kernel when hard fault happens.
-            \note       Normally called by the Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
+            \note       Normally called by Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
             \return     True if event is handled otherwise False to let driver handle it.
         */
         virtual bool OnHardFault() = 0;

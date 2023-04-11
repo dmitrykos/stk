@@ -107,7 +107,7 @@ static struct Context : public PlatformContext
         m_exiting = false;
     }
 
-    void OnTick()
+    __stk_forceinline void OnTick()
     {
         STK_CORTEX_M_DISABLE_INTERRUPTS();
 
@@ -188,8 +188,9 @@ __stk_forceinline void SaveStackIdle()
     __asm volatile(
     "LDR        r1, %0          \n"
     "STR        r0, [r1]        \n"
-    :
-    "=m" (g_Context.m_stack_idle));
+    : /* output: none */
+    : "m" (g_Context.m_stack_idle)
+    : /* clobbers: none */);
 }
 
 __stk_forceinline void LoadStackActive()
@@ -198,8 +199,9 @@ __stk_forceinline void LoadStackActive()
     __asm volatile(
     "LDR        r1, %0          \n"
     "LDR        r0, [r1]        \n" // load
-    ::
-    "m" (g_Context.m_stack_active));
+    : /* output: none */
+    : "m" (g_Context.m_stack_active)
+    : /* clobbers: none */);
 
     // load general registers from the stack memory
 #ifdef STK_CORTEX_M_MANAGE_LR
@@ -253,8 +255,9 @@ __stk_forceinline void OnTaskRun()
     __asm volatile(
     "LDR    r0, =%0         \n"
     "MOV    LR, r0          \n"
-    ::
-    "i" (STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE));
+    : /* output: none */
+    : "i" (STK_CORTEX_M_EXCEPTION_EXIT_THREAD_PSP_MODE)
+    : /* clobbers: none */);
 #endif
 
     STK_CORTEX_M_ENABLE_INTERRUPTS();
@@ -343,7 +346,7 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
     "ITE    EQ                  \n"
     "MRSEQ  r0, MSP             \n" // r0 = MSP
     "MRSNE  r0, PSP             \n" // else r0 = PSP
-    "B      SVC_Handler_Main    \n");
+    "BL     SVC_Handler_Main    \n");
 #else
     __asm volatile(
     ".syntax unified            \n"
@@ -352,10 +355,10 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
     "LSLS   r0, r0, #29         \n" // if (r0 & 4)
     "BMI    .ELSE               \n"
     "MRS    r0, MSP             \n" // r0 = MSP
-    "B      SVC_Handler_Main    \n"
+    "BL     SVC_Handler_Main    \n"
     ".ELSE:                     \n"
     "MRS    r0, PSP             \n" // else r0 = PSP
-    "B      SVC_Handler_Main    \n");
+    "BL     SVC_Handler_Main    \n");
 #endif
 }
 
@@ -422,8 +425,8 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
 {
     STK_ASSERT(stack_memory->GetStackSize() > STK_CORTEX_M_REGISTER_COUNT);
 
-    // initialize stack memory (up to depth -3 as we fill xPSR, PC and LR explicitly)
-    size_t *stack_top = g_Context.InitStackMemory(stack_memory, 3);
+    // initialize stack memory
+    size_t *stack_top = g_Context.InitStackMemory(stack_memory);
 
     // initialize Stack Pointer (SP)
     stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
@@ -487,12 +490,12 @@ void PlatformArmCortexM::Stop()
     // clear pending PendSV exception
     SCB->ICSR |= SCB_ICSR_PENDSVCLR_Msk;
 
+    g_Context.m_started = false;
+    g_Context.m_exiting = true;
+
     // make sure all assignments are set and executed
     __DSB();
     __ISB();
-
-    g_Context.m_started = false;
-    g_Context.m_exiting = true;
 
     // load context of the Exit trap
     STK_CORTEX_M_DISABLE_INTERRUPTS();

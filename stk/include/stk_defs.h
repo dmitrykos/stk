@@ -130,11 +130,12 @@
 #endif
 
 /*! \def   STK_ASSERT
-    \brief A shortcut to the assert() function. Can be overridden by the alternative _STK_ASSERT_FUNC if _STK_ASSERT_REDIRECT is defined.
+    \brief A shortcut to the assert() function. Can be overridden by the alternative _STK_ASSERT_FUNC
+           if _STK_ASSERT_REDIRECT is defined.
 */
 #ifdef _STK_ASSERT_REDIRECT
-    extern void _STK_ASSERT_IMPL(const char *, const char *, int32_t);
-    #define STK_ASSERT(e) ((e) ? (void)0 : _STK_ASSERT_IMPL(#e, __FILE__, __LINE__))
+    extern void STK_ASSERT_IMPL(const char *, const char *, int32_t);
+    #define STK_ASSERT(e) ((e) ? (void)0 : STK_ASSERT_IMPL(#e, __FILE__, __LINE__))
 #else
     #include <assert.h>
     #define STK_ASSERT(e) assert(e)
@@ -151,9 +152,24 @@
 #define STK_STATIC_ASSERT(X) STK_STATIC_ASSERT_N(_, X)
 
 /*! \def   STK_STACK_MEMORY_FILLER
-    \brief Stack memory filler (stack memory is filled with this value when intialized).
+    \brief Stack memory filler (stack memory is filled with this value when initialized).
 */
-#define STK_STACK_MEMORY_FILLER ((size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef))
+#ifndef STK_STACK_MEMORY_FILLER
+    #define STK_STACK_MEMORY_FILLER ((size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef))
+#endif
+
+/*! \def   STK_STACK_SIZE_MIN
+    \brief Minimal stack size (number of size_t).
+    \see   TrapStackStackMemory
+    \note  This size forms a minimal possible stack for the service traps of the scheduler. Depending
+           on the CPU architecture and the number of supported CPU registers default minimal size may
+           not be enough, for example: RISC-V, RV32I requires it to be at least 64, while RV32I + RVF
+           doubles this to 128. STK_STACK_SIZE_MIN can be redefined to the desired value in
+           stk_config.h file.
+*/
+#ifndef STK_STACK_SIZE_MIN
+    #define STK_STACK_SIZE_MIN 32
+#endif
 
 /*! \namespace stk
     \brief     Namespace of STK package.
