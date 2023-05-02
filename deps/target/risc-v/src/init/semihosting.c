@@ -12,11 +12,29 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <sys/time.h>
+#include <errno.h>
 
 /*! \def   __SEMIHOSTING_PRINTF_BUFFER
     \brief printf() buffer size (bytes).
 */
 #define SEMIHOSTING_PRINTF_BUFFER (128)
+
+extern int _open(const char *path, int oflag, ...);
+extern int _close(int fildes);
+extern ssize_t _read(int fildes, void* buf, size_t nbyte);
+extern ssize_t _write(int fildes, const void* buf, size_t nbyte);
+extern off_t _lseek(int fildes, off_t offset, int whence);
+extern off_t _lseek(int fildes, off_t offset, int whence);
+extern int _fstat(int fildes, struct stat *buf);
+extern int _isatty(int fildes);
+extern pid_t _getpid(void);
+extern int _kill(pid_t pid, int sig);
+extern int _gettimeofday(struct timeval *tv, void *tz);
+extern int printf(const char *fmt, ...);
+extern int putchar(int c);
+extern int getchar(void);
+extern time_t time(time_t *_timer);
 
 // Details: https://wiki.segger.com/Semihosting
 #define SEMIHOSTING_SYS_OPEN            (0x01)
@@ -44,7 +62,7 @@
 #define SEMIHOSTING_SYS_ELAPSED         (0x30)
 #define SEMIHOSTING_SYS_TICKFREQ        (0x31)
 
-#define SEMIHOSTING_BREAKPOINT() __asm volatile("ebreak")
+#define SEMIHOSTING_UNIMPLEMENTED() do { __asm volatile("wfi"); } while(1)
 
 /*! \brief     Call host.
     \note      https://github.com/riscv-software-src/riscv-semihosting/blob/main/riscv-semihosting-spec.adoc
@@ -90,70 +108,70 @@ static inline int32_t smh_readc(void)
 int _open(const char *path, int oflag, ...)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 int _close(int fildes)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 ssize_t _read(int fildes, void* buf, size_t nbyte)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 ssize_t _write(int fildes, const void* buf, size_t nbyte)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    errno = ENOSYS;
     return -1;
 }
 
 off_t _lseek(int fildes, off_t offset, int whence)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 int _fstat(int fildes, struct stat *buf)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    errno = ENOSYS;
     return -1;
 }
 
 int _isatty(int fildes)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 pid_t _getpid(void)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 int _kill(pid_t pid, int sig)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
 int _gettimeofday(struct timeval *tv, void *tz)
 {
     // TO-DO
-    SEMIHOSTING_BREAKPOINT();
+    SEMIHOSTING_UNIMPLEMENTED();
     return -1;
 }
 
@@ -184,22 +202,4 @@ int getchar(void)
 time_t time(time_t *_timer)
 {
     return smh_call_host(SEMIHOSTING_SYS_TIME, _timer);
-}
-
-__attribute__((noreturn)) void abort(void)
-{
-    //printf("abort\n");
-
-    for (;;)
-    {
-        __asm__ volatile(
-        "wfi                \n"
-        "nop                \n");
-    }
-}
-
-__attribute__((noreturn)) void __assert_func(const char *file, int line, const char *func, const char *expr)
-{
-    printf("assert failed:\n - file: %s\n - line: %d\n - function: %s\n - what: %s\n", file, line, func, expr);
-    abort();
 }

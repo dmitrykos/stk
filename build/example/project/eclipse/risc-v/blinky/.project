@@ -171,6 +171,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/startup.c</locationURI>
 		</link>
 		<link>
+			<name>deps/risc-v/src/init/system.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/system.c</locationURI>
+		</link>
+		<link>
 			<name>deps/risc-v/src/init/vector_table.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/vector_table.c</locationURI>

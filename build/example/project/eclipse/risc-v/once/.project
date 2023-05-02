@@ -36,12 +36,12 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/once</name>
+			<name>src/driver</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/driver</name>
+			<name>src/once</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -66,16 +66,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/once/example.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/once/example.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/once/example.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/once/example.h</locationURI>
-		</link>
-		<link>
 			<name>src/driver/led.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/driver/led.h</locationURI>
@@ -84,6 +74,16 @@
 			<name>src/driver/portable</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/once/example.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/once/example.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/once/example.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/once/example.h</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/include/risc-v</name>
@@ -169,6 +169,11 @@
 			<name>deps/risc-v/src/init/startup.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/startup.c</locationURI>
+		</link>
+		<link>
+			<name>deps/risc-v/src/init/system.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/system.c</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/vector_table.c</name>

@@ -31,10 +31,12 @@ extern const uint8_t metal_segment_itim_source_start;
 extern uint8_t metal_segment_itim_target_start;
 extern uint8_t metal_segment_itim_target_end;
 
-extern function_t __init_array_start;
-extern function_t __init_array_end;
-extern function_t __fini_array_start;
-extern function_t __fini_array_end;
+extern function_t __preinit_array_start[];
+extern function_t __preinit_array_end[];
+extern function_t __init_array_start[];
+extern function_t __init_array_end[];
+extern function_t __fini_array_start[];
+extern function_t __fini_array_end[];
 
 // This function will be placed by the linker script according to the section
 // Raw function 'called' by the CPU with no runtime.
@@ -43,9 +45,52 @@ extern void _enter(void)  __attribute__ ((naked, section(".text.metal.init.enter
 // Entry and exit points as C functions.
 extern void _start(void) __attribute__ ((noreturn));
 void _Exit(int exit_code) __attribute__ ((noreturn,noinline));
+extern void _init_args(int *argc, char ***argv) __attribute__ ((weak));
+extern int main(int argc, char *argv[]);
+extern void __libc_init_array(void);
 
-// Standard entry point, no arguments.
-extern int main(void);
+// Initialize args.
+void _init_args(int *argc, char ***argv)
+{
+    static char _name[] = "";
+    static char *_argv[2] = { _name, NULL };
+
+    (*argv) = &_argv[0];
+    (*argc) = 1;
+}
+
+inline void __attribute__((always_inline)) __run_init_array (void) {
+  int count;
+  int i;
+
+  count = __preinit_array_end - __preinit_array_start;
+  for (i = 0; i < count; i++)
+    __preinit_array_start[i] ();
+
+  // If you need to run the code in the .init section, please use
+  // the startup files, since this requires the code in crti.o and crtn.o
+  // to add the function prologue/epilogue.
+  //_init(); // DO NOT ENABE THIS!
+
+  count = __init_array_end - __init_array_start;
+  for (i = 0; i < count; i++)
+    __init_array_start[i] ();
+}
+
+// Run all the cleanup routines (mainly static destructors).
+inline void __attribute__((always_inline)) __run_fini_array (void) {
+  int count;
+  int i;
+
+  count = __fini_array_end - __fini_array_start;
+  for (i = count; i > 0; i--)
+    __fini_array_start[i - 1] ();
+
+  // If you need to run the code in the .fini section, please use
+  // the startup files, since this requires the code in crti.o and crtn.o
+  // to add the function prologue/epilogue.
+  //_fini(); // DO NOT ENABE THIS!
+}
 
 // The linker script will place this in the reset entry point.
 // It will be 'called' with no stack or C runtime configuration.
@@ -89,12 +134,9 @@ void _start(void) {
            (const void*)&metal_segment_itim_source_start,
            (&metal_segment_itim_target_end - &metal_segment_itim_target_start));
 
-    // Call constructors
-    for (const function_t* entry=&__init_array_start; 
-         entry < &__init_array_end;
-         ++entry) {
-        (*entry)();
-    }
+    // Call C++ constructors of static instances
+    __run_init_array();
+    __libc_init_array();
 
     // Set table with ISR handlers
     write_csr(mtvec, (size_t)riscv_mtvec_table | RISCV_MTVEC_MODE_VECTORED);
@@ -108,17 +150,22 @@ void _start(void) {
     "i" (MSTATUS_FS | MSTATUS_XS));
 #endif
 
-    int rc = main();
+    // Executable
+    {
+        int rc, argc;
+        char **argv;
 
-    // Call destructors
-    for (const function_t* entry=&__fini_array_start; 
-         entry < &__fini_array_end;
-         ++entry) {
-        (*entry)();
+        // Init args
+        _init_args(&argc, &argv);
+
+        // Execute
+        rc = main(argc, argv);
+
+        // Call C++ destructors
+        __run_fini_array();
+
+        _Exit(rc);
     }
-
-
-    _Exit(rc);
 }
 
 // This should never be called. Busy loop with the CPU in idle state.

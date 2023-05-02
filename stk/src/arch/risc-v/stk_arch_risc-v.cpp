@@ -270,6 +270,12 @@ typedef StackMemoryDef<128> TIsrStackMemory;
 static TIsrStackMemory::Type g_IsrStackMem = {};
 #endif
 
+//! Define _STK_SYSTEM_CLOCK_VAR privately by the driver if _STK_SYSTEM_CLOCK_EXTERNAL
+//! is 0 or undefined.
+#if !_STK_SYSTEM_CLOCK_EXTERNAL
+volatile uint32_t _STK_SYSTEM_CLOCK_VAR = _STK_SYSTEM_CLOCK_FREQUENCY;
+#endif
+
 //! Internal context.
 static struct Context : public PlatformContext
 {
@@ -694,6 +700,7 @@ extern "C" __attribute__ ((interrupt ("machine"))) void _STK_SVC_HANDLER()
             // trap further execution
             for (;;)
             {
+                //assert(false);
                 STK_RISCV_WFI();
             }
         }

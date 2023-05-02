@@ -13,11 +13,6 @@
 // Risc-V
 #define _STK_ARCH_RISC_V
 
-/* QEMU
-   Machine name: virt
-   CPU name: RV32
-*/
-
 // Minimal stack size depending on the configured architecture (STK default is 32).
 #if (__riscv_32e != 1)
     #if (__riscv_flen == 0)

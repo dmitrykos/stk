@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>hrt-risc-v</name>
+	<name>test-sleep-risc-v</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,16 +36,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/driver</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/hrt</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>deps/risc-v/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -64,26 +54,6 @@
 			<name>deps/stk/src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/driver/led.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/driver/led.h</locationURI>
-		</link>
-		<link>
-			<name>src/driver/portable</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/hrt/example.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/hrt/example.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/hrt/example.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/hrt/example.h</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/include/risc-v</name>
@@ -108,32 +78,32 @@
 		<link>
 			<name>deps/stk/include/stk.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_arch.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk_arch.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk_arch.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_common.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk_common.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk_common.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_defs.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk_defs.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk_defs.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_helper.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk_helper.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk_helper.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/stk_linked_list.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/stk_linked_list.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/stk_linked_list.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/strategy</name>
@@ -148,47 +118,47 @@
 		<link>
 			<name>deps/stk/src/stk.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/stk.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/driver/portable/led.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/driver/portable/led.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/src/stk.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/include/risc-v/encoding.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/include/risc-v/encoding.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/include/risc-v/encoding.h</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/semihosting.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/semihosting.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/init/semihosting.c</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/startup.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/startup.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/init/startup.c</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/system.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/system.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/init/system.c</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/vector_table.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/vector_table.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/init/vector_table.c</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/init/vector_table.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/init/vector_table.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/init/vector_table.h</locationURI>
 		</link>
 		<link>
 			<name>deps/risc-v/src/ld/metal.ld</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/src/ld/metal.ld</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/deps/target/risc-v/src/ld/metal.ld</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/arch/arm</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch/risc-v</name>
@@ -198,12 +168,17 @@
 		<link>
 			<name>deps/stk/include/arch/stk_arch_common.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/stk_arch_common.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/arch/stk_arch_common.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/arch/x86</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/strategy/stk_strategy_rrobin.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/strategy/stk_strategy_rrobin.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/strategy/stk_strategy_rrobin.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm</name>
@@ -221,9 +196,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/arch/arm/cortex-m</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include/arch/risc-v/stk_arch_risc-v.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/risc-v/stk_arch_risc-v.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/arch/risc-v/stk_arch_risc-v.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/arch/x86/win32</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm/cortex-m</name>
@@ -233,7 +218,7 @@
 		<link>
 			<name>deps/stk/src/arch/risc-v/stk_arch_risc-v.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/risc-v/stk_arch_risc-v.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/src/arch/risc-v/stk_arch_risc-v.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/x86/win32</name>
@@ -241,14 +226,24 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/arch/x86/win32/stk_arch_x86-win32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/x86/win32/stk_arch_x86-win32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/x86/win32/stk_arch_x86-win32.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/stk/src/arch/x86/win32/stk_arch_x86-win32.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

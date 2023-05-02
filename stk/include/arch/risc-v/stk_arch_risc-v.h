@@ -61,9 +61,16 @@ typedef PlatformRiscV PlatformDefault;
     #define _STK_SYSTEM_CLOCK_VAR SystemCoreClock
 #endif
 
-/*! \var   SystemCoreClock
-    \brief System clock frequency (Hertz).
+/*! \def   _STK_SYSTEM_CLOCK_FREQUENCY
+    \brief System clock frequency (Hz). Default: 1 MHz.
 */
-extern volatile uint32_t _STK_SYSTEM_CLOCK_VAR;
+#ifndef _STK_SYSTEM_CLOCK_FREQUENCY
+    #define _STK_SYSTEM_CLOCK_FREQUENCY 1000000
+#endif
+
+/*! \var   SystemCoreClock
+    \brief System clock frequency (Hz).
+*/
+extern "C" volatile uint32_t _STK_SYSTEM_CLOCK_VAR;
 
 #endif /* STK_ARCH_RISC_V_H_ */
