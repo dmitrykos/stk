@@ -8,10 +8,10 @@
 #
 
 # Identity
-set(CMAKE_CROSSCOMPILING               TRUE)
-set(CMAKE_SYSTEM_NAME                  Linux)
-set(CMAKE_SYSTEM_VERSION               0)
-set(CMAKE_SYSTEM_PROCESSOR             arm)
+set(CMAKE_CROSSCOMPILING   TRUE)
+set(CMAKE_SYSTEM_NAME      Linux)
+set(CMAKE_SYSTEM_VERSION   0)
+set(CMAKE_SYSTEM_PROCESSOR arm)
 
 # Options
 option(ENABLE_LTO       "enable LTO"               OFF)
@@ -46,8 +46,9 @@ if (NOT TOOLCHAIN_PATH)
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
     message(STATUS "Found compiler at path: ${GCC_PATH}")
-    cmake_path(GET GCC_PATH PARENT_PATH TOOLCHAIN_PATH_BIN)
-    #get_filename_component(TOOLCHAIN_PATH_BIN ${GCC_PATH} DIRECTORY)
+    cmake_path(GET GCC_PATH PARENT_PATH TOOLCHAIN_PATH_BIN_RAW)
+    #get_filename_component(TOOLCHAIN_PATH_BIN_RAW ${GCC_PATH} DIRECTORY)
+    string(REPLACE "\\" "/" TOOLCHAIN_PATH_BIN ${TOOLCHAIN_PATH_BIN_RAW})
     message(STATUS "Using compiler path: ${TOOLCHAIN_PATH_BIN}")
     set(TOOLCHAIN_PATH ${TOOLCHAIN_PATH_BIN}/..)
 endif()
