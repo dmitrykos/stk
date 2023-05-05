@@ -16,8 +16,6 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
-#include "risc-v/encoding.h"
-
 #include "arch/stk_arch_common.h"
 #include "arch/risc-v/stk_arch_risc-v.h"
 

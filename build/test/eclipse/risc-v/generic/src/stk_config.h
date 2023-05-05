@@ -10,6 +10,8 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
+#include "risc-v/encoding.h"
+
 // Risc-V
 #define _STK_ARCH_RISC_V
 

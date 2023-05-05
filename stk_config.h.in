@@ -24,7 +24,23 @@
 // Define for Arm Cortex-M4 MCU
 #cmakedefine _STK_ARCH_ARM_CORTEX_M
 
-#ifdef _STK_ARCH_ARM_CORTEX_M
+// Define for RISC-V
+#cmakedefine _STK_ARCH_RISC_V
+
+// Minimal stack size depending on the configured architecture (STK default is 32).
+#if defined(_STK_ARCH_RISC_V) && (__riscv_32e != 1)
+    #if (__riscv_flen == 0)
+        #define STK_STACK_SIZE_MIN 64
+    #else
+        #define STK_STACK_SIZE_MIN 128
+    #endif
+#endif
+
+// Define for x86, Windows
+#cmakedefine _STK_ARCH_X86_WIN32
+
+//  ISR handlers
+#if defined(_STK_ARCH_ARM_CORTEX_M) || defined(_STK_ARCH_RISC_V)
     // Redefine if SysTick handler name is different from SysTick_Handler
     #cmakedefine _STK_SYSTICK_HANDLER @_STK_SYSTICK_HANDLER@
 
@@ -34,8 +50,5 @@
     // Redefine if SVC handler name is different from SVC_Handler
     #cmakedefine _STK_SVC_HANDLER @_STK_SVC_HANDLER@
 #endif
-
-// Define for x86, Windows
-#cmakedefine _STK_ARCH_X86_WIN32
 
 #endif /* STK_CONFIG_H_ */
