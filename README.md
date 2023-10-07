@@ -2,8 +2,7 @@
 Minimalistic thread scheduling kernel for the Embedded systems.
 
 
-## About:
-
+## About
 STK tends to me as **minimal** as possible to be able to provide a multi-threading 
 capability for your Embedded system without any attempt to abstract operations
 with peripherals. It does not pretent to be a Real-Time OS (**RTOS**) but instead
@@ -14,7 +13,7 @@ STK is developed in C++ and follows an Object-Oriented Design principles while
 at the same time does not pollute namespace with exceeding declarations, nor 
 using fancy new C++ features. It just tries to be very friendly to C developers ;)
 
-## Features:
+## Features
 STK supports soft real-time (default) and hard-real time (HRT) modes of operation. 
 It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) 
 and periodic (HRT mode - ```KERNEL_HRT```) tasks.
@@ -28,19 +27,23 @@ HRT mode allows to run periodic tasks which can be finite or infinite depending 
 HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees 
 a ***fully deterministic behavior*** of the application.
 
-## Hardware support:
+STK's run-time performance is comparable to other well known C-based thread scedulers but its code base is much slimmer and therefore easier to test, maintain and advance.
+
+## Hardware support
+
+### MCU
 * Arm Cortex-M0
 * Arm Cortex-M3
 * Arm Cortex-M4
 * Arm Cortex-M7
-* Hard or Soft floating-point support
+### Floating point
+* Soft, Hard
 
-## Requires:
+## Requires
 * CMSIS
 * Vendor BSP (NXP, STM, ...)
 
-## Example:
-
+## Example
 Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or 
 STM STM32F4DISCOVERY development boards hosting Arm Cortex-M4F CPU where thread is 
 handling its own LED, e.g. there are 3 threads in total which are switching LEDs 
@@ -141,7 +144,7 @@ void RunExample()
 }
 ```
 
-## Test boards:
+## Test boards
 * Arm Cortex-M0
   - [STM STM32F0DISCOVERY](https://www.st.com/en/evaluation-tools/stm32f0discovery.html)
 * Arm Cortex-M3
@@ -152,7 +155,44 @@ void RunExample()
 * Arm Cortex-M7
   - [NXP MIMXRT1050 EVKB](http://www.google.com/search?q=MIMXRT1050-EVKB)
 
-## Porting:
+## Build
+It is fairly easy to build and run examples without even having embedded hardware on your hands. You will need these tools to run examples on your PC:
 
+* [Eclipse Embedded CDT (C/C++ Development Tools)](https://projects.eclipse.org/projects/iot.embed-cdt)
+
+**Arm platform:**
+* Compiler: [The xPack GNU Arm Embedded GCC](https://xpack.github.io/dev-tools/arm-none-eabi-gcc)
+* Emulator: [The xPack QEMU Arm](https://xpack.github.io/dev-tools/qemu-arm)
+
+In case of NXP MCU you will only need [MCUXpresso IDE](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools-/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE) which is comes with bundled GCC compler.
+  
+**RISC-V platform:**
+* Compiler: [The xPack GNU RISC-V Embedded GCC](https://xpack.github.io/dev-tools/riscv-none-elf-gcc)
+* Emulator: [The xPack QEMU RISC-V](https://xpack.github.io/dev-tools/qemu-riscv)
+
+If you are working with only Arm platform then you only need Arm-related tools.
+
+Generic eclipse examples are located in the ```build/example/project/eclipse``` folder and sorted by platform:
+
+* **stm** - Arm platform, examples based on STM32 microcontrollers and can be executed on QEMU virtual machine or directly on hardware if you have corresponding board.
+* **risc-v** - RISC-V platform, examples based on QEMU virtual machine.
+* **x86** - x86 platform, examples are executed on x86 CPU.
+
+Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/project/nxp-mcuxpresso``` folder. These examples are compatible with NXP Kinetis® K66, Kinetis® K26 and NXP i.MX RT1050 MCUs and can be executed directly on corresponding evaluation boards.
+
+## Porting
 You are welcome to port STK to a new platform and offer a patch. The platform
-dependent files are located in: ```/stk/src/arch``` and ```/stk/include/arch``` folders.
+dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders.
+
+## Origin
+STK proved to be a very competitive C++ thread scheduler implementation for the embedded platform compared to the well-known thread scheduler implemented purely in C.
+
+[Here](http://neutroncode.com/download/public/Dissertation-STK.pdf) you can learn more details about how it was designed, developed, tested and benchmarked. You will also get a useful insight about C++ usage in Embedded software development - what impacts are on a source code development, binary size and run-time performance.
+
+If you found useful pieces of information for your own work, please cite it as follows:
+
+```
+Dmitrijs Kostjučenko, "Using C++ versus legacy C in the Embedded software 
+development", MSc Dissertation, Software Engineering, Kellogg College,
+University of Oxford, 2023
+```
