@@ -183,16 +183,3 @@ Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/p
 ## Porting
 You are welcome to port STK to a new platform and offer a patch. The platform
 dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders.
-
-## Origin
-STK proved to be a very competitive C++ thread scheduler implementation for the embedded platform compared to the well-known thread scheduler implemented purely in C.
-
-[Here](http://neutroncode.com/download/public/Dissertation-STK.pdf) you can learn more details about how it was designed, developed, tested and benchmarked. You will also get a useful insight about C++ usage in Embedded software development - what impacts are on a source code development, binary size and run-time performance.
-
-If you found useful pieces of information for your own work, please cite it as follows:
-
-```
-Dmitrijs Kostjučenko, "Using C++ versus legacy C in the Embedded software 
-development", MSc Dissertation, Software Engineering, Kellogg College,
-University of Oxford, 2023
-```

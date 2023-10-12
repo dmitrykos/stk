@@ -124,6 +124,7 @@ void RunExample()
 
     kernel.Start();
 
+    // shall not reach here
     STK_ASSERT(false);
 }
 
