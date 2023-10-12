@@ -118,6 +118,7 @@ void RunExample()
 
     kernel.Start();
 
-    while (true) {}
+    // shall not reach here
+    STK_ASSERT(false);
 }
 

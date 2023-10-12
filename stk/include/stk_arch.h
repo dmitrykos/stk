@@ -17,6 +17,9 @@
 #ifdef _STK_ARCH_ARM_CORTEX_M
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 #endif
+#ifdef _STK_ARCH_RISC_V
+#include "arch/risc-v/stk_arch_risc-v.h"
+#endif
 #ifdef _STK_ARCH_X86_WIN32
 #include "arch/x86/win32/stk_arch_x86-win32.h"
 #endif
