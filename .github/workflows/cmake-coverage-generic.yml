@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:   
     - name: Install LCOV
@@ -24,7 +24,7 @@ jobs:
       run: ./coverage.sh -s . -b ${{github.workspace}}/cov-build -o ${{github.workspace}}/cov-report -f ${{github.workspace}}/cov-build/coverage.info
       
     - name: Report Code Coverage with Pass Threshold - ${{env.PASS_THRESHOLD}}%
-      uses: zgosalvez/github-actions-report-lcov@v2
+      uses: zgosalvez/github-actions-report-lcov@v4
       with:
         coverage-files: ${{github.workspace}}/cov-build/coverage.info
         minimum-coverage: ${{env.PASS_THRESHOLD}}
