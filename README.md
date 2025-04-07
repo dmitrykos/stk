@@ -1,6 +1,5 @@
 # SuperTinyKernel (STK)
-Minimalistic thread scheduling kernel for the Embedded systems.
-
+Minimalistic C++ thread scheduling kernel for embedded systems.
 
 ## About
 STK tends to me as **minimal** as possible to be able to provide a multi-threading 
@@ -182,4 +181,4 @@ Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/p
 
 ## Porting
 You are welcome to port STK to a new platform and offer a patch. The platform
-dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders.
+dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
