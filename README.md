@@ -1,32 +1,19 @@
 # SuperTinyKernel (STK)
-Minimalistic C++ thread scheduling kernel for embedded systems.
+Minimalistic C++ thread scheduling kernel for Embedded systems.
 
 ## About
-STK tends to me as **minimal** as possible to be able to provide a multi-threading 
-capability for your Embedded system without any attempt to abstract operations
-with peripherals. It does not pretent to be a Real-Time OS (**RTOS**) but instead
-it gives possibility to add multi-threading into a bare-metal project with
-a very little effort.
+STK tends to me as **minimal** as possible to be able to provide a multi-threading capability for your Embedded system without any attempt to abstract operations with peripherals. It does not pretent to be a fully-fledged Real-Time OS (**RTOS**) but instead it adds multi-threading into a bare-metal project with a very little effort.
 
-STK is developed in C++ and follows an Object-Oriented Design principles while 
-at the same time does not pollute namespace with exceeding declarations, nor 
-using fancy new C++ features. It just tries to be very friendly to C developers ;)
+STK is developed in C++ and follows an Object-Oriented Design principles while at the same time does not pollute namespace with exceeding declarations, nor using fancy new C++ features. It tries to be very friendly to C developers ;)
 
 ## Features
-STK supports soft real-time (default) and hard-real time (HRT) modes of operation. 
-It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) 
-and periodic (HRT mode - ```KERNEL_HRT```) tasks.
+STK supports soft real-time (default) and hard-real time (HRT) modes of operation. It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) and periodic (HRT mode - ```KERNEL_HRT```) tasks.
 
-STK intercepts main process program flow if it is in ```KERNEL_STATIC``` mode but it can
-also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` 
-mode.
+STK intercepts main process program flow if it is in ```KERNEL_STATIC``` mode but it can also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` mode.
 
-HRT mode allows to run periodic tasks which can be finite or infinite depending on whether
-```KERNEL_STATIC``` or ```KERNEL_DYNAMIC``` mode is used in addition to the ```KERNEL_HRT```.
-HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees 
-a ***fully deterministic behavior*** of the application.
+HRT mode allows to run periodic tasks which can be finite or infinite depending on whether ```KERNEL_STATIC``` or ```KERNEL_DYNAMIC``` mode is used in addition to the ```KERNEL_HRT```. HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees a ***fully deterministic behavior*** of the application.
 
-STK's run-time performance is comparable to other well known C-based thread scedulers but its code base is much slimmer and therefore easier to test, maintain and advance.
+STK's run-time performance is comparable to other well known C-based thread schedulers but its code base is much smaller (slimmer) and therefore easier to test, maintain and advance.
 
 ## Hardware support
 
@@ -35,6 +22,8 @@ STK's run-time performance is comparable to other well known C-based thread sced
 * Arm Cortex-M3
 * Arm Cortex-M4
 * Arm Cortex-M7
+* RISC-V RV32I (RV32IMA_ZICSR)
+* RISC-V RV32E (RV32EMA_ZICSR), including RISC-V MCUs with small RAM
 ### Floating point
 * Soft, Hard
 
@@ -43,10 +32,7 @@ STK's run-time performance is comparable to other well known C-based thread sced
 * Vendor BSP (NXP, STM, ...)
 
 ## Example
-Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or 
-STM STM32F4DISCOVERY development boards hosting Arm Cortex-M4F CPU where thread is 
-handling its own LED, e.g. there are 3 threads in total which are switching LEDs 
-with 1 second periodicity.
+Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development boards hosting Arm Cortex-M4F CPU where each thread is handling its own LED, e.g. there are 3 threads in total which are switching LEDs with 1 second periodicity.
 
 ```cpp
 #include <stk_config.h>
@@ -180,5 +166,4 @@ Generic eclipse examples are located in the ```build/example/project/eclipse``` 
 Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/project/nxp-mcuxpresso``` folder. These examples are compatible with NXP Kinetis® K66, Kinetis® K26 and NXP i.MX RT1050 MCUs and can be executed directly on corresponding evaluation boards.
 
 ## Porting
-You are welcome to port STK to a new platform and offer a patch. The platform
-dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
+You are welcome to port STK to a new platform and offer a patch. The platform dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
