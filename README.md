@@ -18,21 +18,24 @@ STK's run-time performance is comparable to other well known C-based thread sche
 ## Hardware support
 
 ### MCU
-* Arm Cortex-M0
-* Arm Cortex-M3
-* Arm Cortex-M4
-* Arm Cortex-M7
+* ARM Cortex-M0
+* ARM Cortex-M3
+* ARM Cortex-M4
+* ARM Cortex-M7
 * RISC-V RV32I (RV32IMA_ZICSR)
 * RISC-V RV32E (RV32EMA_ZICSR), including RISC-V MCUs with small RAM
 ### Floating point
 * Soft, Hard
 
 ## Requires
-* CMSIS
+* CMSIS (for ARM platforma only)
 * Vendor BSP (NXP, STM, ...)
 
+## Development Mode
+STK facilitates a productive development workflow through its special Development Mode on x86 Windows. In this mode STK's thread scheduling is emulated on the Windows operating system. You can compile and run your embedded application code on a standard x86 platform, effectively simulating the concurrent execution of threads. This enables early-stage development, debugging, and unit testing in a convenient Windows environment (requiring the simulation or mocking of target-specific peripherals) before the final deployment and hardware-level testing on the target embedded system.
+
 ## Example
-Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development boards hosting Arm Cortex-M4F CPU where each thread is handling its own LED, e.g. there are 3 threads in total which are switching LEDs with 1 second periodicity.
+Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development boards hosting ARM Cortex-M4F CPU where each thread is handling its own LED, e.g. there are 3 threads in total which are switching LEDs with 1 second periodicity.
 
 ```cpp
 #include <stk_config.h>
@@ -130,14 +133,14 @@ void RunExample()
 ```
 
 ## Test boards
-* Arm Cortex-M0
+* ARM Cortex-M0
   - [STM STM32F0DISCOVERY](https://www.st.com/en/evaluation-tools/stm32f0discovery.html)
-* Arm Cortex-M3
+* ARM Cortex-M3
   - [STM NUCLEO-F103RB](https://www.st.com/en/evaluation-tools/nucleo-f103rb.html)
-* Arm Cortex-M4 (Cortex-M4F)
+* ARM Cortex-M4 (Cortex-M4F)
   - [NXP FRDM-K66F](http://www.google.com/search?q=FRDM-K66F)
   - [STM STM32F4DISCOVERY](http://www.google.com/search?q=STM32F4DISCOVERY)
-* Arm Cortex-M7
+* ARM Cortex-M7
   - [NXP MIMXRT1050 EVKB](http://www.google.com/search?q=MIMXRT1050-EVKB)
 
 ## Build
@@ -145,9 +148,9 @@ It is fairly easy to build and run examples without even having embedded hardwar
 
 * [Eclipse Embedded CDT (C/C++ Development Tools)](https://projects.eclipse.org/projects/iot.embed-cdt)
 
-**Arm platform:**
-* Compiler: [The xPack GNU Arm Embedded GCC](https://xpack.github.io/dev-tools/arm-none-eabi-gcc)
-* Emulator: [The xPack QEMU Arm](https://xpack.github.io/dev-tools/qemu-arm)
+**ARM platform:**
+* Compiler: [The xPack GNU ARM Embedded GCC](https://xpack.github.io/dev-tools/arm-none-eabi-gcc)
+* Emulator: [The xPack QEMU ARM](https://xpack.github.io/dev-tools/qemu-arm)
 
 In case of NXP MCU you will only need [MCUXpresso IDE](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools-/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE) which is comes with bundled GCC compler.
   
@@ -155,15 +158,27 @@ In case of NXP MCU you will only need [MCUXpresso IDE](https://www.nxp.com/desig
 * Compiler: [The xPack GNU RISC-V Embedded GCC](https://xpack.github.io/dev-tools/riscv-none-elf-gcc)
 * Emulator: [The xPack QEMU RISC-V](https://xpack.github.io/dev-tools/qemu-riscv)
 
-If you are working with only Arm platform then you only need Arm-related tools.
+If you are working with only ARM platform then you only need ARM-related tools.
 
 Generic eclipse examples are located in the ```build/example/project/eclipse``` folder and sorted by platform:
 
-* **stm** - Arm platform, examples based on STM32 microcontrollers and can be executed on QEMU virtual machine or directly on hardware if you have corresponding board.
-* **risc-v** - RISC-V platform, examples based on QEMU virtual machine.
-* **x86** - x86 platform, examples are executed on x86 CPU.
+* ```stm``` - ARM platform, examples based on STM32 microcontrollers and can be executed on QEMU virtual machine or directly on hardware if you have corresponding board.
+* ```risc-v``` - RISC-V platform, examples based on QEMU virtual machine.
+* ```x86``` - x86 platform, examples are executed on x86 CPU.
 
 Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/project/nxp-mcuxpresso``` folder. These examples are compatible with NXP Kinetis® K66, Kinetis® K26 and NXP i.MX RT1050 MCUs and can be executed directly on corresponding evaluation boards.
 
 ## Porting
 You are welcome to port STK to a new platform and offer a patch. The platform dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
+
+## License
+STK is licensed under [MIT license](https://github.com/dmitrykos/stk?tab=MIT-1-ov-file) therefore you can use it freely in your personal, commercial, closed- or open- source projects.
+
+## Service
+Additional development paid services can be provided for your project:
+
+* **Dedicated license**: warranty of title and perpetual right-to-use for STK's source-code.
+
+* **Technical support**: integration of STK into your project, development assistance in relation to STK usage, and etc.
+
+For all these questions please [contact us](mailto:stk@neutroncode.com).
