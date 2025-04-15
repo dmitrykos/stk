@@ -51,6 +51,13 @@ if (GCC)
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 if (MSVC)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /std:c20")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++20")
+    
+    # Definitions
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+
+    # Dependencies
 	link_libraries("Winmm") # for CppUTest
 endif()
 

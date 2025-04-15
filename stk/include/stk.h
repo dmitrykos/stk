@@ -260,8 +260,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         uint32_t    m_state;      //!< state flags
         EAccessMode m_access_mode;//!< hw access mode
         int32_t     m_time_sleep; //!< time to sleep (ticks)
-        SrtInfo     m_srt[_Mode & KERNEL_HRT ? 0 : 1]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
-        HrtInfo     m_hrt[_Mode & KERNEL_HRT ? 1 : 0]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        SrtInfo     m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
+        HrtInfo     m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
     /*! \class KernelService
@@ -1134,7 +1134,7 @@ protected:
     KernelTask     *m_task_now;        //!< current task task
     TaskStorageType m_task_storage;    //!< task storage
     TrapStack       m_sleep_trap[1];   //!< sleep trap
-    TrapStack       m_exit_trap[_Mode & KERNEL_DYNAMIC ? 1 : 0]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    TrapStack       m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
     EFsmState       m_fsm_state;       //!< FSM state
     uint32_t        m_request;         //!< pending requests from the tasks
     EAccessMode     m_access_mode;     //!< current access mode

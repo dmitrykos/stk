@@ -22,7 +22,7 @@
 */
 #ifdef __GNUC__
     #define __stk_forceinline __attribute__((always_inline)) inline
-#elif defined(__ICCARM__)
+#elif defined(__ICCARM__) || defined(_MSC_VER)
     #define __stk_forceinline __forceinline
 #else
     #define __stk_forceinline
@@ -169,6 +169,16 @@
 */
 #ifndef STK_STACK_SIZE_MIN
     #define STK_STACK_SIZE_MIN 32
+#endif
+
+/*! \def   STK_ALLOCATE_COUNT
+    \brief Get count of objects to be allocated statically within the array.
+    \note  Microsoft compiler does not support zero sized arrays unlike GCC or Clang, thus always allocate.
+*/
+#ifdef _MSC_VER
+    #define STK_ALLOCATE_COUNT(MODE, FLAG, ONTRUE, ONFALSE) ((ONTRUE) > (ONFALSE) ? (ONTRUE) : (ONFALSE))
+#else
+    #define STK_ALLOCATE_COUNT(MODE, FLAG, ONTRUE, ONFALSE) ((MODE) & (FLAG) ? (ONTRUE) : (ONFALSE))
 #endif
 
 /*! \namespace stk
