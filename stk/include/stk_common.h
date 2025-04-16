@@ -437,7 +437,7 @@ public:
         \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
         \param[in] start_delay_tc: Initial start delay for the task (ticks).
     */
-    virtual void AddTask(ITask *user_task, uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc) = 0;
+    virtual void AddTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc) = 0;
 
     /*! \brief     Remove user task.
         \param[in] user_task: Pointer to the user task to remove.

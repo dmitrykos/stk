@@ -24,8 +24,12 @@
 #include <list>
 #include <vector>
 
+#ifndef WINAPI
+#define WINAPI __stdcall
+#endif
+
 typedef UINT MMRESULT;
-typedef MMRESULT (* timeBeginPeriodF)(UINT uPeriod);
+typedef MMRESULT (WINAPI * timeBeginPeriodF)(UINT uPeriod);
 static timeBeginPeriodF timeBeginPeriod = NULL;
 
 #define STK_X86_WIN32_CRITICAL_SECTION CRITICAL_SECTION
@@ -66,6 +70,8 @@ static struct Context : public PlatformContext
 
         timeBeginPeriod = (timeBeginPeriodF)GetProcAddress(winmm, "timeBeginPeriod");
         assert(timeBeginPeriod != NULL);
+
+        timeBeginPeriod(1);
     }
 
     void UnloadWindowsAPI()

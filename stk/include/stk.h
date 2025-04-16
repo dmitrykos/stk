@@ -209,7 +209,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
             \param[in] start_delay_tc: Initial start delay for the task (ticks).
         */
-        void HrtInit(uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc)
+        void HrtInit(uint32_t periodicity_tc, uint32_t deadline_tc, int32_t start_delay_tc)
         {
             m_hrt[0].periodicity = periodicity_tc;
             m_hrt[0].deadline    = deadline_tc;
@@ -229,7 +229,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void HrtOnSwitchedOut(IPlatform *platform, int64_t ticks)
         {
-            int32_t duration = m_hrt[0].duration + (ticks - m_hrt[0].last_ticks);
+            int32_t duration = m_hrt[0].duration + (int32_t)(ticks - m_hrt[0].last_ticks);
             m_hrt[0].duration = 0;
 
             STK_ASSERT(duration >= 0);
@@ -415,12 +415,13 @@ public:
         }
     }
 
-    __stk_attr_noinline void AddTask(ITask *user_task, uint32_t periodicity_tc, uint32_t deadline_tc, uint32_t start_delay_tc)
+    __stk_attr_noinline void AddTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc)
     {
         if (_Mode & KERNEL_HRT)
         {
-            STK_ASSERT(periodicity_tc != 0);
-            STK_ASSERT(deadline_tc != 0);
+            STK_ASSERT(periodicity_tc > 0);
+            STK_ASSERT(deadline_tc > 0);
+            STK_ASSERT(start_delay_tc >= 0);
             STK_ASSERT(periodicity_tc < INT32_MAX);
             STK_ASSERT(deadline_tc < INT32_MAX);
             STK_ASSERT(user_task != NULL);
