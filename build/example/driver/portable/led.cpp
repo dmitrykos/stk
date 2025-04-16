@@ -39,7 +39,7 @@ void Led::Init(Id led, bool init_state)
     Log("LED_INIT", led, init_state);
 
     // required to show log in Eclipse IDE Console for 64-bit binary
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(_MSC_VER)
     setbuf(stdout, NULL);
 #endif
 }
