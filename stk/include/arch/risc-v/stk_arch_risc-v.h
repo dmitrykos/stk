@@ -52,6 +52,26 @@ public:
 */
 typedef PlatformRiscV PlatformDefault;
 
+/*! \brief  Get thread-local storage (TLS).
+    \return TLS pointer.
+    \note   tp register is an alias for x4
+*/
+__stk_forceinline uintptr_t GetTls()
+{
+    uintptr_t tp;
+    __asm volatile("mv %0, tp" : "=r"(tp) : /* input: none */ : /* clobbers: none */);
+    return tp;
+}
+
+/*! \brief     Get thread-local storage (TLS).
+    \param[in] tp: TLS pointer.
+    \note   tp register is an alias for x4
+*/
+__stk_forceinline void SetTls(uintptr_t tp)
+{
+    __asm volatile("mv tp, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
+}
+
 } // namespace stk
 
 /*! \def   _STK_SYSTEM_CLOCK_VAR
