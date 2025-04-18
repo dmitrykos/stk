@@ -53,7 +53,7 @@ public:
 typedef PlatformRiscV PlatformDefault;
 
 /*! \brief  Get thread-local storage (TLS).
-    \return TLS pointer.
+    \return TLS value.
     \note   tp register is an alias for x4
 */
 __stk_forceinline uintptr_t GetTls()
@@ -63,8 +63,8 @@ __stk_forceinline uintptr_t GetTls()
     return tp;
 }
 
-/*! \brief     Get thread-local storage (TLS).
-    \param[in] tp: TLS pointer.
+/*! \brief     Set thread-local storage (TLS).
+    \param[in] tp: TLS value.
     \note   tp register is an alias for x4
 */
 __stk_forceinline void SetTls(uintptr_t tp)
