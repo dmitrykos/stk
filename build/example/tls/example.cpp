@@ -13,35 +13,23 @@
 
 static volatile uint8_t g_TaskSwitch = 0;
 
-#if 0
-static void Delay(uint32_t delay_ms)
-{
-    // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
-
-    // ldr     r3, [sp, #4]
-    // subs    r3, #1
-    // cmp     r3, #0
-    // str     r3, [sp, #4]
-
-    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 1 + 2) * 4));
-    while (--i > 0);
-}
-#else
-static __stk_forceinline void Delay(uint32_t delay_ms)
-{
-    g_KernelService->Delay(delay_ms);
-}
-#endif
-
 // It is a simple TLS, you can host a high-level implementation instead with access by index
 struct MyTls
 {
     uint8_t task_id;
 };
 
-// Task function switching the LED, TLS provides the ID of the task for the logic of this function
-static void ProcessTask()
+static void InitLEDs()
 {
+    Led::Init(Led::RED, false);
+    Led::Init(Led::GREEN, false);
+    Led::Init(Led::BLUE, false);
+}
+
+// Task function switching the LED, TLS provides the ID of the task for the logic of this function
+static void SwitchOnLED()
+{
+    // for demonstration purpose we get task_id from our TLS and switch on corresponding LED
     uint8_t task_id = stk::GetTlsPtr<MyTls>()->task_id;
 
     switch (task_id)
@@ -82,8 +70,9 @@ public:
     }
 
 private:
-    MyTls m_tls; //!< Task-local TLS
+    MyTls m_tls; // task-local TLS, you can provide your own implementation
 
+    // thread function provided to scheduler by GetFunc()
     static void Run(void *user_data)
     {
         ((MyTask *)user_data)->RunInner();
@@ -94,6 +83,8 @@ private:
         // set your TLS (it can host any complex implementation of your choice)
         stk::SetTlsPtr(&m_tls);
 
+        // just fake counters to demonstrate that scheduler is saving/restoring context correctly
+        // preserving values of floating-point and 64 bit variables
         volatile float count = 0;
         volatile uint64_t count_skip = 0;
 
@@ -101,33 +92,33 @@ private:
         {
             if (g_TaskSwitch != _TaskId)
             {
+                // to avoid hot loop and excessive CPU usage sleep 10ms while waiting for the own turn,
+                // if scheduler does not have active threads then it will fall into a sleep mode which
+                // saving the consumed power
+                g_KernelService->Sleep(10);
+
                 ++count_skip;
                 continue;
             }
 
             ++count;
 
-            ProcessTask();
+            SwitchOnLED();
 
-            Delay(1000);
+            // sleep 1s and delegae work to another task switching another LED
+            g_KernelService->Sleep(1000);
             g_TaskSwitch = (_TaskId + 1) % 3;
         }
     }
 };
 
-static void InitLeds()
-{
-    Led::Init(Led::RED, false);
-    Led::Init(Led::GREEN, false);
-    Led::Init(Led::BLUE, false);
-}
-
 void RunExample()
 {
     using namespace stk;
 
-    InitLeds();
+    InitLEDs();
 
+    // allocate scheduling kernel for 3 threads (tasks) with Round-robin scheduling strategy
     static Kernel<KERNEL_STATIC, 3, SwitchStrategyRoundRobin, PlatformDefault> kernel;
 
     // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
@@ -135,12 +126,15 @@ void RunExample()
     static MyTask<1, ACCESS_PRIVILEGED> task2;
     static MyTask<2, ACCESS_PRIVILEGED> task3;
 
+    // init scheduling kernel
     kernel.Initialize();
 
+    // register threads (tasks)
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
+    // start scheduler (it will start threads added by AddTask), execution in main() will be blocked on this line
     kernel.Start();
 
     // shall not reach here
