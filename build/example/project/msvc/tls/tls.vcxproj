@@ -22,7 +22,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{3a0b0988-f343-4ddf-9b56-6a86a688ad25}</ProjectGuid>
-    <RootNamespace>blinky</RootNamespace>
+    <RootNamespace>tls</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -88,7 +88,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>..\..\..\..\..\stk\include;..\blinky;..\..\..\blinky;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\..\..\stk\include;..\tls;..\..\..\tls;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -118,7 +118,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>..\..\..\..\..\stk\include;..\blinky;..\..\..\blinky;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\..\..\stk\include;..\tls;..\..\..\tls;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -145,7 +145,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\..\..\stk\src\arch\x86\win32\stk_arch_x86-win32.cpp" />
     <ClCompile Include="..\..\..\..\..\stk\src\stk.cpp" />
-    <ClCompile Include="..\..\..\blinky\example.cpp" />
+    <ClCompile Include="..\..\..\tls\example.cpp" />
     <ClCompile Include="..\..\..\driver\portable\led.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -159,7 +159,7 @@
     <ClInclude Include="..\..\..\..\..\stk\include\stk_helper.h" />
     <ClInclude Include="..\..\..\..\..\stk\include\stk_linked_list.h" />
     <ClInclude Include="..\..\..\..\..\stk\include\strategy\stk_strategy_rrobin.h" />
-    <ClInclude Include="..\..\..\blinky\example.h" />
+    <ClInclude Include="..\..\..\tls\example.h" />
     <ClInclude Include="stk_config.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

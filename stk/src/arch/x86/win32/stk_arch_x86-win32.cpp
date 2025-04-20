@@ -52,12 +52,21 @@ static struct Context : public PlatformContext
         m_timer_thread = NULL;
         m_started      = false;
 
+        if ((m_tls = TlsAlloc()) == TLS_OUT_OF_INDEXES)
+        {
+            assert(false);
+            return;
+        }
+
         STK_X86_WIN32_CRITICAL_SECTION_INIT(&m_cs);
 
         LoadWindowsAPI();
     }
     ~Context()
     {
+        if (m_tls != TLS_OUT_OF_INDEXES)
+            TlsFree(m_tls);
+
         UnloadWindowsAPI();
     }
 
@@ -132,9 +141,12 @@ static struct Context : public PlatformContext
     void SleepTicks(uint32_t ticks);
     void Stop();
     size_t GetCallerSP();
+    uintptr_t GetTls() { return reinterpret_cast<uintptr_t>(TlsGetValue(m_tls)); }
+    void SetTls(uintptr_t tp) { TlsSetValue(m_tls, reinterpret_cast<void *>(tp)); }
 
     HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                         m_timer_thread;  //!< timer thread handle
+    DWORD                          m_tls;           //!< TLS
     std::list<TaskContext *>       m_tasks;         //!< list of task internal contexts
     std::vector<HANDLE>            m_task_threads;  //!< task threads
     STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
@@ -193,7 +205,7 @@ void Context::CreateTimerThreadAndJoin()
 
     while (!m_task_threads.empty())
     {
-        DWORD result = WaitForMultipleObjects(m_task_threads.size(), m_task_threads.data(), FALSE, INFINITE);
+        DWORD result = WaitForMultipleObjects((DWORD)m_task_threads.size(), m_task_threads.data(), FALSE, INFINITE);
         STK_ASSERT(result != WAIT_TIMEOUT);
         STK_ASSERT(result != WAIT_ABANDONED);
         STK_ASSERT(result != WAIT_FAILED);
@@ -403,6 +415,16 @@ void PlatformX86Win32::SetEventOverrider(IEventOverrider *overrider)
 size_t PlatformX86Win32::GetCallerSP()
 {
     return g_Context.GetCallerSP();
+}
+
+uintptr_t stk::GetTls()
+{
+    return g_Context.GetTls();
+}
+
+void stk::SetTls(uintptr_t tp)
+{
+    return g_Context.SetTls(tp);
 }
 
 #endif // _STK_ARCH_X86_WIN32

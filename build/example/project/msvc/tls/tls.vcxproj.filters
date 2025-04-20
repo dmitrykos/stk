@@ -1,0 +1,90 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="stk">
+      <UniqueIdentifier>{9b7693f9-c64d-4235-8718-740cf94dd577}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="stk\arch">
+      <UniqueIdentifier>{8d97a27a-aad5-47af-946d-8cec1946a28c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="stk\arch\x86">
+      <UniqueIdentifier>{03874cc2-631f-47b1-a0b8-11bf3c592346}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="stk\arch\x86\win32">
+      <UniqueIdentifier>{766e4382-500b-489c-a0bb-11702e5c7161}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="stk\strategy">
+      <UniqueIdentifier>{0bd0514e-a52f-4aeb-a6cc-4f72fa484287}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\driver">
+      <UniqueIdentifier>{64ac34be-3aa1-4a99-9118-abfe3ea78934}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\example">
+      <UniqueIdentifier>{803d46da-e1c9-48b9-9a9b-37cca572dc12}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\stk\src\stk.cpp">
+      <Filter>stk</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\stk\src\arch\x86\win32\stk_arch_x86-win32.cpp">
+      <Filter>stk\arch\x86\win32</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\driver\portable\led.cpp">
+      <Filter>Source Files\driver</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\tls\example.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stk_config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk_defs.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk_arch.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk_helper.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk_linked_list.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\arch\stk_arch_common.h">
+      <Filter>stk</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\stk_common.h">
+      <Filter>stk\arch</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\arch\x86\win32\stk_arch_x86-win32.h">
+      <Filter>stk\arch\x86\win32</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\stk\include\strategy\stk_strategy_rrobin.h">
+      <Filter>stk\strategy</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\tls\example.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
