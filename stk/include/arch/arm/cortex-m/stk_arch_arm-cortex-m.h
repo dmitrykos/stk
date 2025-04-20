@@ -38,6 +38,26 @@ public:
 */
 typedef PlatformArmCortexM PlatformDefault;
 
+/*! \brief  Get thread-local storage (TLS).
+    \return TLS value.
+    \note   Using r9 register.
+*/
+__stk_forceinline uintptr_t GetTls()
+{
+    uintptr_t tp;
+    __asm volatile("MOV %0, r9" : "=r"(tp) : /* input: none */ : /* clobbers: none */);
+    return tp;
+}
+
+/*! \brief     Set thread-local storage (TLS).
+    \param[in] tp: TLS value.
+    \note      Using r9 register.
+*/
+__stk_forceinline void SetTls(uintptr_t tp)
+{
+    __asm volatile("MOV r9, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
+}
+
 } // namespace stk
 
 #endif /* STK_ARCH_ARM_CORTEX_M_H_ */

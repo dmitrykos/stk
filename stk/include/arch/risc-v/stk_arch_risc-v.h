@@ -65,7 +65,7 @@ __stk_forceinline uintptr_t GetTls()
 
 /*! \brief     Set thread-local storage (TLS).
     \param[in] tp: TLS value.
-    \note   tp register is an alias for x4
+    \note      tp register is an alias for x4
 */
 __stk_forceinline void SetTls(uintptr_t tp)
 {
