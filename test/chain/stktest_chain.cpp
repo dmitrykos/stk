@@ -61,7 +61,7 @@ template<> void TestTask<ACCESS_PRIVILEGED>::RunInner()
 
     printf("id=%d time=%d\n", task_id, (int)g_Time[task_id]);
 
-    g_KernelService->Delay(_STK_CHAIN_TEST_DELAY_TIME);
+    Delay(_STK_CHAIN_TEST_DELAY_TIME);
 
     // activate next task and exit
     g_TaskSwitch = (task_id + 1) % 3;

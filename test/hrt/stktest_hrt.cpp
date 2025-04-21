@@ -64,7 +64,7 @@ private:
             int64_t start = GetTimeNowMilliseconds();
 
             // add varying workload (10, 20, 30 ms) with deadline max 50 ms
-            g_KernelService->Delay(_STK_HRT_TEST_SLEEP * (m_task_id + 1));
+            Delay(_STK_HRT_TEST_SLEEP * (m_task_id + 1));
 
             int64_t diff = GetTimeNowMilliseconds() - start;
 
@@ -74,7 +74,7 @@ private:
             g_Time[m_task_id][i].start = start;
             g_Time[m_task_id][i].diff  = diff;
 
-            g_KernelService->SwitchToNext();
+            Yield();
         }
     }
 };

@@ -86,7 +86,7 @@ private:
                 break;
             }
 
-            g_KernelService->Delay(100);
+            stk::Delay(100);
 
             g_TaskSwitch = (task_id + 1) % 3;
         }

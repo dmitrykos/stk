@@ -52,7 +52,7 @@ static void SwitchOnLED()
     }
 }
 
-// Task's core
+// Task's core (thread)
 template <uint8_t _TaskId, stk::EAccessMode _AccessMode>
 class MyTask : public stk::Task<256, _AccessMode>
 {
@@ -95,7 +95,7 @@ private:
                 // to avoid hot loop and excessive CPU usage sleep 10ms while waiting for the own turn,
                 // if scheduler does not have active threads then it will fall into a sleep mode which
                 // saving the consumed power
-                g_KernelService->Sleep(10);
+                stk::Sleep(10);
 
                 ++count_skip;
                 continue;
@@ -105,8 +105,8 @@ private:
 
             SwitchOnLED();
 
-            // sleep 1s and delegae work to another task switching another LED
-            g_KernelService->Sleep(1000);
+            // sleep 1s and delegate work to another task switching another LED
+            stk::Sleep(1000);
             g_TaskSwitch = (_TaskId + 1) % 3;
         }
     }
@@ -137,6 +137,6 @@ void RunExample()
     // start scheduler (it will start threads added by AddTask), execution in main() will be blocked on this line
     kernel.Start();
 
-    // shall not reach here
+    // shall not reach here after Start() was called
     STK_ASSERT(false);
 }

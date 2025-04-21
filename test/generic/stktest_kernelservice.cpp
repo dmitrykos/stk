@@ -64,7 +64,7 @@ TEST(KernelService, Delay)
     g_RelaxCpuHandler = DelayRelaxCpu;
     g_DelayContext.platform = kernel.GetPlatform();
 
-    g_KernelService->Delay(10);
+    Delay(10);
 
     g_RelaxCpuHandler = NULL;
 
@@ -194,7 +194,7 @@ TEST(KernelService, SwitchToNext)
     g_SwitchToNextRelaxCpuContext.task2    = &task2;
 
     // task1 calls SwitchToNext (to test path: IKernelService::SwitchToNext -> IPlatform::SwitchToNext -> Kernel::SwitchToNext)
-    g_KernelService->SwitchToNext();
+    Yield();
     CHECK_EQUAL(1, platform->m_switch_to_next_nr);
 
     // task2 calls SwitchToNext (due to context switch it became idle task)
@@ -274,7 +274,7 @@ TEST(KernelService, Sleep)
     g_SleepRelaxCpuContext.task2    = &task2;
 
     // task1 calls Sleep (task1 = active, task2 = idle)
-    g_KernelService->Sleep(2);
+    Sleep(2);
 
     // ISR calls OnSysTick (task1 = active, task2 = idle)
     platform->ProcessTick();
@@ -345,7 +345,7 @@ TEST(KernelService, SleepAllAndWake)
     g_SleepAllAndWakeRelaxCpuContext.task1    = &task;
 
     // task1 calls Sleep
-    g_KernelService->Sleep(3);
+    Sleep(3);
 
     g_RelaxCpuHandler = NULL;
 }

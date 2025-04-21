@@ -54,7 +54,7 @@ private:
 
         int64_t start = GetTimeNowMilliseconds();
 
-        g_KernelService->Sleep(_STK_SLEEP_TEST_SLEEP_TIME * (m_task_id + 1));
+        stk::Sleep(_STK_SLEEP_TEST_SLEEP_TIME * (m_task_id + 1));
 
         int64_t diff = GetTimeNowMilliseconds() - start;
 

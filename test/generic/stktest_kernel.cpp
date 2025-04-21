@@ -732,7 +732,7 @@ TEST(Kernel, HrtSleepNotAllowed)
     try
     {
         g_TestContext.ExpectAssert(true);
-        g_KernelService->Sleep(1);
+        Sleep(1);
         CHECK_TEXT(false, "IKernelService::Sleep not allowed in HRT mode");
     }
     catch (TestAssertPassed &pass)
@@ -805,7 +805,7 @@ TEST(Kernel, HrtTaskDeadlineMissed)
     {
         g_TestContext.ExpectAssert(true);
         // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
-        g_KernelService->SwitchToNext();
+        Yield();
         CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
     }
     catch (TestAssertPassed &pass)

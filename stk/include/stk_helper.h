@@ -125,6 +125,33 @@ __stk_forceinline int64_t GetTimeNowMilliseconds()
         return (Singleton<IKernelService *>::Get()->GetTicks() * resolution) / 1000;
 }
 
+/*! \brief     Delay calling process.
+    \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
+    \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
+    \param[in] delay_ms: Delay time (milliseconds).
+*/
+__stk_forceinline void Delay(uint32_t delay_ms)
+{
+    Singleton<IKernelService *>::Get()->Delay(delay_ms);
+}
+
+/*! \brief     Put calling process into a sleep state.
+    \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
+    \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
+    \param[in] sleep_ms: Sleep time (milliseconds).
+*/
+__stk_forceinline void Sleep(uint32_t sleep_ms)
+{
+    Singleton<IKernelService *>::Get()->Sleep(sleep_ms);
+}
+
+/*! \brief     Notify scheduler that it can switch to a next task.
+*/
+__stk_forceinline void Yield()
+{
+    Singleton<IKernelService *>::Get()->SwitchToNext();
+}
+
 } // namespace stk
 
 #endif /* STK_HELPER_H_ */
