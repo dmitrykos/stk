@@ -305,7 +305,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             }
             else
             {
-                // sleeping is not supported in HRT mode, task will sleep according its periodicity and workload
+                // sleeping is not supported in HRT mode, task will sleep according to its periodicity and workload
                 STK_ASSERT(false);
             }
         }
@@ -635,6 +635,11 @@ protected:
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
+
+            // skip finished tasks (applicable only for KERNEL_DYNAMIC mode)
+            if ((_Mode & KERNEL_DYNAMIC) && !task->IsBusy())
+                continue;
+
             if (task->IsMemoryOfSP(SP))
                 return task;
         }

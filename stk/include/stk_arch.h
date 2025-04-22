@@ -49,6 +49,24 @@ __stk_forceinline void SetTlsPtr(const _TyTls *tp)
     SetTls(reinterpret_cast<uintptr_t>(tp));
 }
 
+/*! \class ScopedCriticalSection
+    \brief Enters critical section and exits from it autmatically within the scope of execution.
+
+    Usage example:
+    \code
+    {
+        ScopedCriticalSection __my_cs;
+        
+        // code below is free from race condition
+    }
+    \endcode
+*/
+struct ScopedCriticalSection
+{
+    ScopedCriticalSection() { stk::EnterCriticalSection(); }
+    ~ScopedCriticalSection() { stk::ExitCriticalSection(); }
+};
+
 } // namespace stk
 
 #endif // _STK_ARCH_UNDEFINED
