@@ -142,16 +142,26 @@ static struct Context : public PlatformContext
     void SleepTicks(uint32_t ticks);
     void Stop();
     size_t GetCallerSP();
-    uintptr_t GetTls() { return reinterpret_cast<uintptr_t>(TlsGetValue(m_tls)); }
-    void SetTls(uintptr_t tp) { TlsSetValue(m_tls, reinterpret_cast<void *>(tp)); }
-    void EnterCriticalSection()
+    
+    __stk_forceinline uintptr_t GetTls() 
+    { 
+        return reinterpret_cast<uintptr_t>(TlsGetValue(m_tls)); 
+    }
+
+    __stk_forceinline void SetTls(uintptr_t tp) 
+    { 
+        TlsSetValue(m_tls, reinterpret_cast<void *>(tp));
+    }
+    
+    __stk_forceinline void EnterCriticalSection()
     {
         if (m_csu_nesting == 0)
             SuspendThread(m_timer_thread);
 
         ++m_csu_nesting;
     }
-    void ExitCriticalSection()
+    
+    __stk_forceinline void ExitCriticalSection()
     {
         STK_ASSERT(m_csu_nesting != 0);
 
