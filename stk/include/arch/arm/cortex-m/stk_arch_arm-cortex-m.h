@@ -58,6 +58,16 @@ __stk_forceinline void SetTls(uintptr_t tp)
     __asm volatile("MOV r9, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
 }
 
+/*! \brief     Enter to critical section.
+    \note      Use with care, critical section changes timing of tasks. Supports nesting.
+*/
+void EnterCriticalSection();
+
+/*! \brief     Exit from critical section.
+    \note      Must follow EnterCriticalSection().
+*/
+void ExitCriticalSection();
+
 } // namespace stk
 
 #endif /* STK_ARCH_ARM_CORTEX_M_H_ */

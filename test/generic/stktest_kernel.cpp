@@ -662,6 +662,42 @@ TEST(Kernel, OnTaskNotFoundBySP)
     }
 }
 
+TEST(Kernel, OnTaskSkipFreedTask)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 exited (will schedule its removal)
+    platform->EventTaskExit(active);
+
+    // 2 ticks to remove exited task1 from scheduling (1st switched to task2, 2nd cleans up task1 exit)
+    platform->ProcessTick();
+    platform->ProcessTick();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+
+        // we loop through all tasks in attempt to find non existent SP (0xdeadbeef)
+        // by this FindTaskBySP() is invoked and will loop thorugh the exited task1's
+        // slot
+        platform->EventTaskSwitch(0xdeadbeef);
+        CHECK_TEXT(false, "exited task must be successfully skipped by FindTaskBySP()");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 TEST(Kernel, Hrt)
 {
     Kernel<KERNEL_STATIC | KERNEL_HRT, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;

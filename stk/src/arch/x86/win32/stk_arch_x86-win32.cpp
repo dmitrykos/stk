@@ -33,9 +33,9 @@ typedef MMRESULT (WINAPI * timeBeginPeriodF)(UINT uPeriod);
 static timeBeginPeriodF timeBeginPeriod = NULL;
 
 #define STK_X86_WIN32_CRITICAL_SECTION CRITICAL_SECTION
-#define STK_X86_WIN32_CRITICAL_SECTION_INIT(SES) InitializeCriticalSection(SES)
-#define STK_X86_WIN32_CRITICAL_SECTION_START(SES) EnterCriticalSection(SES)
-#define STK_X86_WIN32_CRITICAL_SECTION_END(SES) LeaveCriticalSection(SES)
+#define STK_X86_WIN32_CRITICAL_SECTION_INIT(SES) ::InitializeCriticalSection(SES)
+#define STK_X86_WIN32_CRITICAL_SECTION_START(SES) ::EnterCriticalSection(SES)
+#define STK_X86_WIN32_CRITICAL_SECTION_END(SES) ::LeaveCriticalSection(SES)
 #define STK_X86_WIN32_MIN_RESOLUTION (1000)
 #define STK_X86_WIN32_GET_SP(STACK) (STACK + 2) // +2 to overcome stack filler check inside Kernel (adjusting to +2 preserves 8-byte alignment)
 
@@ -51,6 +51,7 @@ static struct Context : public PlatformContext
         m_winmm_dll    = NULL;
         m_timer_thread = NULL;
         m_started      = false;
+        m_csu_nesting  = 0;
 
         if ((m_tls = TlsAlloc()) == TLS_OUT_OF_INDEXES)
         {
@@ -141,8 +142,34 @@ static struct Context : public PlatformContext
     void SleepTicks(uint32_t ticks);
     void Stop();
     size_t GetCallerSP();
-    uintptr_t GetTls() { return reinterpret_cast<uintptr_t>(TlsGetValue(m_tls)); }
-    void SetTls(uintptr_t tp) { TlsSetValue(m_tls, reinterpret_cast<void *>(tp)); }
+    
+    __stk_forceinline uintptr_t GetTls() 
+    { 
+        return reinterpret_cast<uintptr_t>(TlsGetValue(m_tls)); 
+    }
+
+    __stk_forceinline void SetTls(uintptr_t tp) 
+    { 
+        TlsSetValue(m_tls, reinterpret_cast<void *>(tp));
+    }
+    
+    __stk_forceinline void EnterCriticalSection()
+    {
+        if (m_csu_nesting == 0)
+            SuspendThread(m_timer_thread);
+
+        ++m_csu_nesting;
+    }
+    
+    __stk_forceinline void ExitCriticalSection()
+    {
+        STK_ASSERT(m_csu_nesting != 0);
+
+        --m_csu_nesting;
+
+        if (m_csu_nesting == 0)
+            ResumeThread(m_timer_thread);
+    }
 
     HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                         m_timer_thread;  //!< timer thread handle
@@ -150,6 +177,7 @@ static struct Context : public PlatformContext
     std::list<TaskContext *>       m_tasks;         //!< list of task internal contexts
     std::vector<HANDLE>            m_task_threads;  //!< task threads
     STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
+    DWORD                          m_csu_nesting;   //!< depth of user critical session nesting
     bool                           m_started;       //!< started state's flag
 }
 g_Context;
@@ -250,10 +278,12 @@ void Context::Cleanup()
     for (std::list<TaskContext *>::iterator itr = m_tasks.begin(); itr != m_tasks.end(); ++itr)
     {
         CloseHandle((*itr)->m_thread);
+        (*itr)->m_thread = NULL;
     }
 
     // close timer thread
     CloseHandle(m_timer_thread);
+    m_timer_thread = NULL;
 }
 
 void Context::ProcessTick()
@@ -425,6 +455,16 @@ uintptr_t stk::GetTls()
 void stk::SetTls(uintptr_t tp)
 {
     return g_Context.SetTls(tp);
+}
+
+void stk::EnterCriticalSection()
+{
+    g_Context.EnterCriticalSection();
+}
+
+void stk::ExitCriticalSection()
+{
+    g_Context.ExitCriticalSection();
 }
 
 #endif // _STK_ARCH_X86_WIN32

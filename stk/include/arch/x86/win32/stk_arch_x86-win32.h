@@ -49,6 +49,16 @@ uintptr_t GetTls();
 */
 void SetTls(uintptr_t tp);
 
+/*! \brief     Enter to critical section.
+    \note      Use with care, critical section changes timing of tasks. Supports nesting.
+*/
+void EnterCriticalSection();
+
+/*! \brief     Exit from critical section.
+    \note      Must follow EnterCriticalSection().
+*/
+void ExitCriticalSection();
+
 } // namespace stk
 
 #endif /* STK_ARCH_X86_WIN32_H_ */

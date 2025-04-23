@@ -21,7 +21,7 @@
 
 using namespace stk;
 
-#define STK_CORTEX_M_CRITICAL_SECTION_START(SES) SES = __get_PRIMASK(); __disable_irq()
+#define STK_CORTEX_M_CRITICAL_SECTION_START(SES) do { SES = __get_PRIMASK(); __disable_irq(); } while (0)
 #define STK_CORTEX_M_CRITICAL_SECTION_END(SES) __set_PRIMASK(SES)
 #define STK_CORTEX_M_DISABLE_INTERRUPTS() __disable_irq()
 #define STK_CORTEX_M_ENABLE_INTERRUPTS() __enable_irq()
@@ -103,8 +103,10 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, exit_trap, resolution_us);
 
-        m_started = false;
-        m_exiting = false;
+        m_started     = false;
+        m_exiting     = false;
+        m_csu         = 0;
+        m_csu_nesting = 0;
     }
 
     __stk_forceinline void OnTick()
@@ -119,9 +121,29 @@ static struct Context : public PlatformContext
         STK_CORTEX_M_ENABLE_INTERRUPTS();
     }
 
-    bool    m_started;  //!< 'true' when in started state
-    bool    m_exiting;  //!< 'true' when is exiting the scheduling process
-    jmp_buf m_exit_buf; //!< saved context of the exit point
+    __stk_forceinline void EnterCriticalSection()
+    {
+        if (m_csu_nesting == 0)
+            STK_CORTEX_M_CRITICAL_SECTION_START(m_csu);
+
+        ++m_csu_nesting;
+    }
+
+    __stk_forceinline void ExitCriticalSection()
+    {
+        STK_ASSERT(m_csu_nesting != 0);
+
+        --m_csu_nesting;
+
+        if (m_csu_nesting == 0)
+            STK_CORTEX_M_CRITICAL_SECTION_END(m_csu);
+    }
+
+    bool     m_started;     //!< 'true' when in started state
+    bool     m_exiting;     //!< 'true' when is exiting the scheduling process
+    uint32_t m_csu;         //!< user critical session
+    uint32_t m_csu_nesting; //!< depth of user critical session nesting
+    jmp_buf  m_exit_buf;    //!< saved context of the exit point
 }
 g_Context;
 
@@ -542,6 +564,16 @@ void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)
 size_t PlatformArmCortexM::GetCallerSP()
 {
     return ::GetCallerSP();
+}
+
+void stk::EnterCriticalSection()
+{
+    g_Context.EnterCriticalSection();
+}
+
+void stk::ExitCriticalSection()
+{
+    g_Context.ExitCriticalSection();
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

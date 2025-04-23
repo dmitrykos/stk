@@ -37,11 +37,11 @@ using namespace stk;
 #define STK_RISCV_CLINT_MTIMECMP_ADDR (_STK_RISCV_CLINT_BASE_ADDR + 0x4000) // 8-byte value, 1 per hart
 #define STK_RISCV_CLINT_MTIME_ADDR    (_STK_RISCV_CLINT_BASE_ADDR + 0xBFF8) // 8-byte value, global
 
-#define STK_RISCV_CRITICAL_SECTION_START(SES) SES = EnterCriticalSection()
-#define STK_RISCV_CRITICAL_SECTION_END(SES) ExitCriticalSection(SES)
+#define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); } while (0)
+#define STK_RISCV_CRITICAL_SECTION_END(SES) ::HW_ExitCriticalSection(SES)
 
-#define STK_RISCV_DISABLE_INTERRUPTS() DisableIrq()
-#define STK_RISCV_ENABLE_INTERRUPTS() EnableIrq()
+#define STK_RISCV_DISABLE_INTERRUPTS() ::HW_DisableIrq()
+#define STK_RISCV_ENABLE_INTERRUPTS() ::HW_EnableIrq()
 
 #define STK_RISCV_WFI() __asm volatile("wfi")
 
@@ -144,7 +144,7 @@ using namespace stk;
 #define STK_RISCV_REG_INDEX(REG) (-((STK_RISCV_REGISTER_COUNT + 1) - REG))
 #define STK_RISCV_SRV_INDEX(REG) (STK_RISCV_REG_INDEX(REG) - STK_SERVICE_SLOTS)
 
-static __stk_forceinline void DisableIrq()
+static __stk_forceinline void HW_DisableIrq()
 {
     __asm volatile("csrrci zero, mstatus, %0"
     : /* output: none */
@@ -152,7 +152,7 @@ static __stk_forceinline void DisableIrq()
     : /* clobbers: none */);
 }
 
-static __stk_forceinline void EnableIrq()
+static __stk_forceinline void HW_EnableIrq()
 {
     __asm volatile("csrrsi zero, mstatus, %0"
     : /* output: none */
@@ -161,9 +161,9 @@ static __stk_forceinline void EnableIrq()
 }
 
 /*! \brief  Enter critical section.
-    \return Session value which has to be supplied to ExitCriticalSection().
+    \return Session value which has to be supplied to HW_ExitCriticalSection().
 */
-static __stk_forceinline size_t EnterCriticalSection()
+static __stk_forceinline size_t HW_EnterCriticalSection()
 {
     size_t ses;
 
@@ -176,9 +176,9 @@ static __stk_forceinline size_t EnterCriticalSection()
 }
 
 /*! \brief     Exit critical section.
-    \param[in] ses: Session value obtained by EnterCriticalSection().
+    \param[in] ses: Session value obtained by HW_EnterCriticalSection().
 */
-static __stk_forceinline void ExitCriticalSection(size_t ses)
+static __stk_forceinline void HW_ExitCriticalSection(size_t ses)
 {
     __asm volatile("csrrs zero, mstatus, %0"
     : /* output: none */
@@ -186,9 +186,10 @@ static __stk_forceinline void ExitCriticalSection(size_t ses)
     : /* clobbers: none */);
 }
 
-/*! \brief Get mtime (ticks).
+/*! \brief  Get mtime.
+    \return Ticks.
 */
-static __stk_forceinline uint64_t GetMtime()
+static __stk_forceinline uint64_t HW_GetMtime()
 {
 #if ( __riscv_xlen > 32)
     return *((volatile uint64_t *)STK_RISCV_CLINT_MTIME_ADDR);
@@ -211,11 +212,11 @@ static __stk_forceinline uint64_t GetMtime()
 /*! \brief     Set mtimecmp register.
     \param[in] advance: Time delay (ticks) till the next interrupt.
 */
-static __stk_forceinline void SetMtimecmp(uint64_t advance)
+static __stk_forceinline void HW_SetMtimecmp(uint64_t advance)
 {
     uint32_t hart = read_csr(mhartid);
 
-    uint64_t next = GetMtime() + advance;
+    uint64_t next = HW_GetMtime() + advance;
 #if (__riscv_xlen == 64)
     ((volatile uint64_t *)STK_RISCV_CLINT_MTIMECMP_ADDR)[hart] = next;
 #else
@@ -233,7 +234,7 @@ static __stk_forceinline void SetMtimecmp(uint64_t advance)
 
 /*! \brief Get SP of the calling process.
 */
-static __stk_forceinline size_t GetCallerSP()
+static __stk_forceinline size_t HW_GetCallerSP()
 {
     size_t sp;
 
@@ -284,6 +285,8 @@ static struct Context : public PlatformContext
         m_starting      = false;
         m_started       = false;
         m_exiting       = false;
+        m_csu           = 0;
+        m_csu_nesting   = 0;
     #ifndef STK_RISCV_USE_MAIN_STACK_FOR_ISR
         m_stack_main.SP = (size_t)&g_IsrStackMem[TIsrStackMemory::SIZE];
     #else
@@ -299,11 +302,31 @@ static struct Context : public PlatformContext
         }
     }
 
-    Stack   m_stack_main;
-    jmp_buf m_exit_buf;   //!< saved context of the exit point
-    bool    m_starting;   //!< 'true' when in is being started
-    bool    m_started;    //!< 'true' when in started state
-    bool    m_exiting;    //!< 'true' when is exiting the scheduling process
+    __stk_forceinline void EnterCriticalSection()
+    {
+        if (m_csu_nesting == 0)
+            STK_RISCV_CRITICAL_SECTION_START(m_csu);
+
+        ++m_csu_nesting;
+    }
+
+    __stk_forceinline void ExitCriticalSection()
+    {
+        STK_ASSERT(m_csu_nesting != 0);
+
+        --m_csu_nesting;
+
+        if (m_csu_nesting == 0)
+            STK_RISCV_CRITICAL_SECTION_END(m_csu);
+    }
+
+    Stack    m_stack_main;
+    jmp_buf  m_exit_buf;    //!< saved context of the exit point
+    size_t   m_csu;         //!< user critical session
+    uint32_t m_csu_nesting; //!< depth of user critical session nesting
+    bool     m_starting;    //!< 'true' when in is being started
+    bool     m_started;     //!< 'true' when in started state
+    bool     m_exiting;     //!< 'true' when is exiting the scheduling process
 }
 g_Context;
 
@@ -577,7 +600,7 @@ extern "C" __stk_attr_used void TrySwitchContext() // __stk_attr_used for LTO
     STK_ASSERT(g_Context.m_handler != NULL);
 
     // reschedule timer (note: before OnTick because timer can be stopped in Stop)
-    SetMtimecmp(STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, g_Context.m_tick_resolution));
+    HW_SetMtimecmp(STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, g_Context.m_tick_resolution));
 
     // process tick
     g_Context.OnTick();
@@ -587,7 +610,7 @@ extern "C" __stk_attr_used void TrySwitchContext() // __stk_attr_used for LTO
 extern "C" __attribute__ ((interrupt ("machine"))) void _STK_SYSTICK_HANDLER()
 {
     // save SP before switching to the main
-    size_t sp = GetCallerSP();
+    size_t sp = HW_GetCallerSP();
 
     // load SP of the main stack to handle ISR
     LoadMainSP();
@@ -649,7 +672,7 @@ static __stk_forceinline void StartScheduling()
     g_Context.m_handler->OnStart(&g_Context.m_stack_active);
 
     // configure timer
-    SetMtimecmp(STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, g_Context.m_tick_resolution));
+    HW_SetMtimecmp(STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, g_Context.m_tick_resolution));
 
     // change state before enabling interrupt
     g_Context.m_started  = true;
@@ -849,12 +872,12 @@ void PlatformRiscV::SetAccessMode(EAccessMode mode)
 
 void PlatformRiscV::SwitchToNext()
 {
-    g_Context.m_handler->OnTaskSwitch(::GetCallerSP());
+    g_Context.m_handler->OnTaskSwitch(::HW_GetCallerSP());
 }
 
 void PlatformRiscV::SleepTicks(uint32_t ticks)
 {
-    g_Context.m_handler->OnTaskSleep(::GetCallerSP(), ticks);
+    g_Context.m_handler->OnTaskSleep(::HW_GetCallerSP(), ticks);
 }
 
 void PlatformRiscV::ProcessHardFault()
@@ -873,13 +896,23 @@ void PlatformRiscV::SetEventOverrider(IEventOverrider *overrider)
 
 size_t PlatformRiscV::GetCallerSP()
 {
-    return ::GetCallerSP();
+    return ::HW_GetCallerSP();
 }
 
 void PlatformRiscV::SetSpecificEventHandler(ISpecificEventHandler *handler)
 {
     STK_ASSERT(!g_Context.m_started);
     g_Specific = handler;
+}
+
+void stk::EnterCriticalSection()
+{
+    g_Context.EnterCriticalSection();
+}
+
+void stk::ExitCriticalSection()
+{
+    g_Context.ExitCriticalSection();
 }
 
 #endif // _STK_ARCH_RISC_V
