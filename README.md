@@ -9,13 +9,27 @@ STK is developed in C++ and follows an Object-Oriented Design principles while a
 ## Features
 STK supports soft real-time (default) and hard-real time (HRT) modes of operation. It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) and periodic (HRT mode - ```KERNEL_HRT```) tasks.
 
-STK intercepts main process program flow if it is in ```KERNEL_STATIC``` mode but it can also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` mode.
+STK intercepts main process program flow if it is in a ```KERNEL_STATIC``` mode but it can also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` mode.
 
 HRT mode allows to run periodic tasks which can be finite or infinite depending on whether ```KERNEL_STATIC``` or ```KERNEL_DYNAMIC``` mode is used in addition to the ```KERNEL_HRT```. HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees a ***fully deterministic behavior*** of the application.
 
 STK's run-time performance is comparable to other well known C-based thread schedulers but its code base is much smaller (slimmer) and therefore easier to test, maintain and advance.
 
+### Summary:
+
+* **Soft real-time mode**: Tasks do not have hard-limited time slots 
+* **Hard real-time mode `KERNEL_HRT`**: Tasks have hard-limited time slots, violation of the slot will fail whole application (want to launch satellite? most likely you need this mode)
+* **Static operation `KERNEL_STATIC`**: Tasks (threads) are allocated on start
+* **Dynamic operation `KERNEL_DYNAMIC`**: Tasks (threads) can start and exit during scheduling
+* **Low-power mode aware**: Puts MCU into a low-power mode when there no active tasks, e.g. all are calling `Sleep()`
+* **Critical Section**: Low-level thread synchronizing primitive
+* **Development mode**: Full-featured emulation/development mode on x86 with Eclipse or Microsoft Visual Studio
+* **Tiny**: Not polluted with code unrelated to scheduling task
+* **Easy to port**: Does not require excessive porting efforts, depends on minimal CPU-related BSP
+
 ## Hardware support
+
+STK supports single-core MCUs yet, multi-core support is in to-do.
 
 ### MCU
 * ARM Cortex-M0
