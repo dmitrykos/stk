@@ -182,17 +182,20 @@ Generic eclipse examples are located in the ```build/example/project/eclipse``` 
 
 Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/project/nxp-mcuxpresso``` folder. These examples are compatible with NXP Kinetis® K66, Kinetis® K26 and NXP i.MX RT1050 MCUs and can be executed directly on corresponding evaluation boards.
 
+## Test coverage
+Platform independent (generic) code is 100% covered by tests. Platform dependent code is covered by tests executed on QEMU virtual machines of corresponding CPU architectures.
+
 ## Porting
-You are welcome to port STK to a new platform and offer a patch. The platform dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
+You are welcome to port STK to a new platform and suggest a patch. The platform dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
 
 ## License
 STK is licensed under [MIT license](https://github.com/dmitrykos/stk?tab=MIT-1-ov-file) therefore you can use it freely in your personal, commercial, closed- or open- source projects.
 
 ## Service
-Additional development paid services can be provided for your project:
+Additional services for your project:
 
 * **Dedicated license**: warranty of title and perpetual right-to-use for STK's source-code.
 
-* **Technical support**: integration of STK into your project, development assistance in relation to STK usage, and etc.
+* **Technical support**: integration of STK into your project, development assistance in relation to STK, and etc.
 
 For all these questions please [contact us](mailto:stk@neutroncode.com).
