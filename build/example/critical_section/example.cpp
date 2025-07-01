@@ -46,9 +46,6 @@ static void IncrementWithoutCS(void *)
 {
     for (int32_t i = 0; i < ITERATIONS_MAX; ++i)
     {
-        stk::ScopedCriticalSection __cs1;
-        stk::ScopedCriticalSection __cs2; // STK supports nesting of critical sections
-
         UnsafeIncrement();
     }
 }
@@ -58,6 +55,9 @@ static void IncrementWithCS(void *)
 {
     for (int32_t i = 0; i < ITERATIONS_MAX; ++i)
     {
+        stk::ScopedCriticalSection __cs1;
+        stk::ScopedCriticalSection __cs2; // STK supports nesting of critical sections
+
         UnsafeIncrement();
     }
 }
@@ -114,7 +114,10 @@ void RunExample()
         // will be blocked on this line until all tasks exit (complete)
         kernel.Start();
 
-        // signal result
+        // signal result: red - thread function was executed without critical section, thus
+        // g_Counter will not match COUNTER_EXPECT, green - thread function's execution
+        // was protected by the critical section and g_Counter matched COUNTER_EXPECT,
+        // as this loop is endless green and red LEDs will clink one by one
         Led::Set(Led::GREEN, g_Counter == COUNTER_EXPECT);
         Led::Set(Led::RED, g_Counter != COUNTER_EXPECT);
 
