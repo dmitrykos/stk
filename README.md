@@ -1,55 +1,210 @@
 # SuperTinyKernel (STK)
-Minimalistic C++ thread scheduling kernel for Embedded systems.
+A minimalistic C++ thread scheduling kernel for embedded systems.
 
-## About
-STK tends to me as **minimal** as possible to be able to provide a multi-threading capability for your Embedded system without any attempt to abstract operations with peripherals. It does not pretent to be a fully-fledged Real-Time OS (**RTOS**) but instead it adds multi-threading into a bare-metal project with a very little effort.
+---
 
-STK is developed in C++ and follows an Object-Oriented Design principles while at the same time does not pollute namespace with exceeding declarations, nor using fancy new C++ features. It tries to be very friendly to C developers ;)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/dmitrykos/stk/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/dmitrykos/stk/cmake-test-generic-stm32.yml)](https://github.com/dmitrykos/stk/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/dmitrykos/stk)
 
-## Features
-STK supports soft real-time (default) and hard-real time (HRT) modes of operation. It supports infinite looping (```KERNEL_STATIC```), finite (```KERNEL_DYNAMIC```) and periodic (HRT mode - ```KERNEL_HRT```) tasks.
+---
 
-STK intercepts main process program flow if it is in a ```KERNEL_STATIC``` mode but it can also return into the main process when all tasks exited in case of ```KERNEL_DYNAMIC``` mode.
+## Overview
 
-HRT mode allows to run periodic tasks which can be finite or infinite depending on whether ```KERNEL_STATIC``` or ```KERNEL_DYNAMIC``` mode is used in addition to the ```KERNEL_HRT```. HRT tasks are checked for a deadline miss by STK automatically therefore it guarantees a ***fully deterministic behavior*** of the application.
+**SuperTinyKernel (STK)** provides a lightweight, deterministic thread scheduling layer for bare-metal embedded applications.
+It does *not* attempt to be a full Real-Time Operating System (RTOS). Instead, STK focuses on:
 
-STK's run-time performance is comparable to other well known C-based thread schedulers but its code base is much smaller (slimmer) and therefore easier to test, maintain and advance.
+* Adding multi-threading into existing bare-metal projects with minimal integration effort
+* Maintaining very small code size
+* Predictable and deterministic execution
+* Portability across multiple MCU families
 
-### Summary:
+STK is implemented in C++ with a clean **object-oriented design**, while remaining friendly to C developers:
 
-* **Soft real-time mode**: Tasks do not have hard-limited time slots 
-* **Hard real-time mode `KERNEL_HRT`**: Tasks have hard-limited time slots, violation of the slot will fail whole application (want to launch satellite? most likely you need this mode)
-* **Static operation `KERNEL_STATIC`**: Tasks (threads) are allocated on start
-* **Dynamic operation `KERNEL_DYNAMIC`**: Tasks (threads) can start and exit during scheduling
-* **Low-power mode aware**: Puts MCU into a low-power mode when there no active tasks, e.g. all are calling `Sleep()`
-* **Critical Section**: Low-level thread synchronizing primitive
-* **Development mode**: Full-featured emulation/development mode on x86 with Eclipse or Microsoft Visual Studio
-* **Tiny**: Not polluted with code unrelated to scheduling task
-* **Easy to port**: Does not require excessive porting efforts, depends on minimal CPU-related BSP
+* No aggressive namespace usage
+* No dependency on modern C++ features or STL
+* Transparent and readable implementation
 
-## Hardware support
+If you need RTOS-like concurrency without the overhead of a full RTOS, STK is a strong fit.
 
-STK supports single-core MCUs yet, multi-core support is in to-do.
+It is an [open-source project](https://github.com/dmitrykos/stk), naviage its code for more details.
 
-### MCU
-* ARM Cortex-M0
-* ARM Cortex-M3
-* ARM Cortex-M4
-* ARM Cortex-M7
+---
+
+## Quick Start (1 minute)
+
+### 1. Clone repository
+```bash
+git clone https://github.com/dmitrykos/stk.git
+cd stk
+```
+
+### 2. Build example for x86 development mode
+```bash
+cd build/example/project/eclipse/x86
+mkdir build && cd build
+cmake ..
+make
+./stk_example_x86
+```
+
+### 3. Run on hardware
+* Import the STM32, RPI (Raspberry Pico) or NXP example in Eclipse CDT IDE or MCUXpresso IDE
+* Build and flash your target MCU
+
+---
+
+## Key Features
+
+| Feature | Description |
+|--------|-------------|
+| Soft real-time | No strict time slots, cooperative scheduling |
+| Hard real-time (`KERNEL_HRT`) | Guaranteed execution window, deadline monitoring |
+| Static task model (`KERNEL_STATIC`) | Tasks created once at startup |
+| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime |
+| Low-power aware | MCU enters sleep when no task is runnable |
+| Critical section API | Basic synchronization primitive |
+| Development mode (x86) | Run the same threaded application on Windows |
+| Tiny footprint | Minimal code unrelated to scheduling |
+| Easy porting | Requires very small BSP surface |
+
+---
+
+## Modes of Operation
+
+### Soft Real-Time (default)
+Tasks cooperate using `Sleep()`. Timing is best-effort.
+
+### Hard Real-Time (`KERNEL_HRT`)
+* Periodic tasks with strict execution windows
+* Kernel enforces deadlines
+* Any violation fails the application deterministically
+
+> Use cases: motor control, power electronics, aerospace systems.
+
+### Static vs Dynamic
+
+* `KERNEL_STATIC` – tasks created once at startup, infinite loop
+* `KERNEL_DYNAMIC` – tasks may exit, kernel returns to `main()` when done
+
+---
+
+## Hardware Support
+
+### CPU Architectures
+* ARM Cortex-M0/M3/M4/M7/M33
 * RISC-V RV32I (RV32IMA_ZICSR)
-* RISC-V RV32E (RV32EMA_ZICSR), including RISC-V MCUs with small RAM
-### Floating point
-* Soft, Hard
+* RISC-V RV32E (RV32EMA_ZICSR) — including very small RAM devices
 
-## Requires
-* CMSIS (for ARM platforma only)
-* Vendor BSP (NXP, STM, ...)
+### Floating-point
+* Soft
+* Hardware (where available)
 
-## Development Mode
-STK facilitates a productive development workflow through its special Development Mode on x86 Windows. In this mode STK's thread scheduling is emulated on the Windows operating system. You can compile and run your embedded application code on a standard x86 platform, effectively simulating the concurrent execution of threads. This enables early-stage development, debugging, and unit testing in a convenient Windows environment (requiring the simulation or mocking of target-specific peripherals) before the final deployment and hardware-level testing on the target embedded system.
+---
 
-## Example
-Here is an example to toggle Red, Green, Blue LEDs of the NXP FRM-K66F or STM STM32F4DISCOVERY development boards hosting ARM Cortex-M4F CPU where each thread is handling its own LED, e.g. there are 3 threads in total which are switching LEDs with 1 second periodicity.
+## Dependencies
+
+* CMSIS (ARM platforms only)
+* MCU vendor BSP (NXP, STM, RPI, etc.)
+
+No other libraries required.
+
+---
+
+## Development Mode (x86)
+
+STK includes a **full scheduling emulator** for Windows:
+
+* Run the same embedded application on x86
+* Debug threads using Visual Studio or Eclipse
+* Perform unit testing without hardware
+* Mock or simulate peripherals
+
+---
+
+## Tested Boards
+
+* STM STM32F0DISCOVERY (Cortex-M0)
+* STM NUCLEO-F103RB (Cortex-M3)
+* NXP FRDM-K66F (Cortex-M4F)
+* STM STM32F4DISCOVERY (Cortex-M4F)
+* NXP MIMXRT1050 EVKB (Cortex-M7)
+* Raspberry Pico 2 W (Cortex-M33 / RISC-V variant)
+
+---
+
+## Building and Running Examples
+
+You can build and run examples **without any hardware** on Windows.
+
+### Required tools (PC development)
+
+For STM32, RPI platforms:
+
+* Eclipse Embedded CDT
+* xPack GNU ARM Embedded GCC
+* xPack QEMU ARM emulator
+
+For NXP platforms:
+
+* MCUXpresso IDE (includes GCC)
+
+### RISC-V Toolchain
+
+* xPack GNU RISC-V Embedded GCC
+* xPack QEMU RISC-V
+
+> If you are targeting only ARM, RISC-V tools are not required.
+
+---
+
+## Examples
+
+Example projects are located in:
+
+```
+build/example/project/eclipse
+```
+
+Grouped by platform:
+
+* `stm` – STM32, runs on QEMU or hardware
+* `rpi` – Raspberry Pico
+* `x86` – Windows emulator
+
+### Import into Eclipse CDT
+
+```
+File → Import... → Existing Projects into Workspace
+Select root directory → build/example/project/eclipse
+```
+
+STM32 and Raspberry Pico examples include SDK files in:
+
+```
+deps/target
+```
+
+### NXP Examples
+
+Located in:
+
+```
+build/example/project/nxp-mcuxpresso
+```
+
+Compatible with:
+
+* Kinetis® K66
+* Kinetis® K26
+* i.MX RT1050
+* other compatible ARM Cortex-M0/M3/M4/M7/M33/... NXP MCUs
+
+---
+
+## Example Code
+
+Below example toggles RGB LEDs on a development board with LED. Each LED is controlled by its own thread, switching at 1s intervals:
 
 ```cpp
 #include <stk_config.h>
@@ -78,18 +233,13 @@ private:
     {
         uint8_t task_id = m_taskId;
 
-        float count = 0;
-        uint64_t count_skip = 0;
-
         while (true)
         {
             if (g_TaskSwitch != task_id)
             {
-                ++count_skip;
+                stk::Sleep(10);
                 continue;
             }
-
-            ++count;
 
             switch (task_id)
             {
@@ -110,8 +260,7 @@ private:
                 break;
             }
 
-            g_KernelService->Sleep(delay_ms);
-
+            stk::Sleep(1000);
             g_TaskSwitch = (task_id + 1) % 3;
         }
     }
@@ -146,56 +295,49 @@ void RunExample()
 }
 ```
 
-## Test boards
-* ARM Cortex-M0
-  - [STM STM32F0DISCOVERY](https://www.st.com/en/evaluation-tools/stm32f0discovery.html)
-* ARM Cortex-M3
-  - [STM NUCLEO-F103RB](https://www.st.com/en/evaluation-tools/nucleo-f103rb.html)
-* ARM Cortex-M4 (Cortex-M4F)
-  - [NXP FRDM-K66F](http://www.google.com/search?q=FRDM-K66F)
-  - [STM STM32F4DISCOVERY](http://www.google.com/search?q=STM32F4DISCOVERY)
-* ARM Cortex-M7
-  - [NXP MIMXRT1050 EVKB](http://www.google.com/search?q=MIMXRT1050-EVKB)
+---
 
-## Build
-It is fairly easy to build and run examples without even having embedded hardware on your hands. You will need these tools to run examples on your PC:
+## Test Coverage
 
-* [Eclipse Embedded CDT (C/C++ Development Tools)](https://projects.eclipse.org/projects/iot.embed-cdt)
+* Platform-independent code: **100% unit test coverage**
+* Platform-dependent code: tested under QEMU for each architecture
 
-**ARM platform:**
-* Compiler: [The xPack GNU ARM Embedded GCC](https://xpack.github.io/dev-tools/arm-none-eabi-gcc)
-* Emulator: [The xPack QEMU ARM](https://xpack.github.io/dev-tools/qemu-arm)
-
-In case of NXP MCU you will only need [MCUXpresso IDE](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools-/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE) which is comes with bundled GCC compler.
-  
-**RISC-V platform:**
-* Compiler: [The xPack GNU RISC-V Embedded GCC](https://xpack.github.io/dev-tools/riscv-none-elf-gcc)
-* Emulator: [The xPack QEMU RISC-V](https://xpack.github.io/dev-tools/qemu-riscv)
-
-If you are working with only ARM platform then you only need ARM-related tools.
-
-Generic eclipse examples are located in the ```build/example/project/eclipse``` folder and sorted by platform:
-
-* ```stm``` - ARM platform, examples based on STM32 microcontrollers and can be executed on QEMU virtual machine or directly on hardware if you have corresponding board.
-* ```risc-v``` - RISC-V platform, examples based on QEMU virtual machine.
-* ```x86``` - x86 platform, examples are executed on x86 CPU.
-
-Additionally, examples for NXP MCUXpresso IDE are provided in ```build/example/project/nxp-mcuxpresso``` folder. These examples are compatible with NXP Kinetis® K66, Kinetis® K26 and NXP i.MX RT1050 MCUs and can be executed directly on corresponding evaluation boards.
-
-## Test coverage
-Platform independent (generic) code is 100% covered by tests. Platform dependent code is covered by tests executed on QEMU virtual machines of corresponding CPU architectures.
+---
 
 ## Porting
-You are welcome to port STK to a new platform and suggest a patch. The platform dependent files are located in: ```stk/src/arch``` and ```stk/include/arch``` folders of [STK GitHub repository](https://github.com/dmitrykos/stk).
+
+Porting STK to a new platform is straightforward.
+
+Platform-dependent files are located in:
+
+```
+stk/src/arch
+stk/include/arch
+```
+
+[Contributions and patches](https://github.com/dmitrykos/stk) are welcome.
+
+---
 
 ## License
-STK is licensed under [MIT license](https://github.com/dmitrykos/stk?tab=MIT-1-ov-file) therefore you can use it freely in your personal, commercial, closed- or open- source projects.
 
-## Service
-Additional services for your project:
+STK is released under the **MIT License**.
+You may freely use it in:
 
-* **Dedicated license**: warranty of title and perpetual right-to-use for STK's source-code.
+* commercial
+* closed-source
+* open-source
+* academic
 
-* **Technical support**: integration of STK into your project, development assistance in relation to STK, and etc.
+projects.
 
-For all these questions please [contact us](mailto:stk@neutroncode.com).
+---
+
+## Commercial Services
+
+Contact: `stk@neutroncode.com`
+
+* Dedicated license (warranty of title, perpetual usage rights)
+* Integration and consulting
+* Technical support
+

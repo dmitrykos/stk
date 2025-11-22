@@ -14,7 +14,7 @@
 
 #define LED_PORT GPIOC
 
-static void Led_InitGpio(int32_t pin)
+static void Led_InitGpio(uint16_t pin)
 {
     __HAL_RCC_GPIOC_CLK_ENABLE();
 

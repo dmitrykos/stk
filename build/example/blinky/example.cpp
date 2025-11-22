@@ -81,7 +81,7 @@ private:
             if (g_TaskSwitch != task_id)
             {
                 // to avoid hot loop and excessive CPU usage sleep 10ms while waiting for the own turn,
-                // if scheduler does not have active threads then it will fall into a sleep mode which
+                // if scheduler does not have active threads then it will fall into a sleep mode which is
                 // saving the consumed power
                 stk::Sleep(10);
 
