@@ -31,29 +31,6 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 
 ---
 
-## Quick Start (1 minute)
-
-### 1. Clone repository
-```bash
-git clone https://github.com/dmitrykos/stk.git
-cd stk
-```
-
-### 2. Build example for x86 development mode
-```bash
-cd build/example/project/eclipse/x86
-mkdir build && cd build
-cmake ..
-make
-./stk_example_x86
-```
-
-### 3. Run on hardware
-* Import the STM32, RPI (Raspberry Pico) or NXP example in Eclipse CDT IDE or MCUXpresso IDE
-* Build and flash your target MCU
-
----
-
 ## Key Features
 
 | Feature | Description |
@@ -133,6 +110,44 @@ STK includes a **full scheduling emulator** for Windows:
 
 ---
 
+## Quick Start (1 minute)
+
+### 1. Clone repository
+```bash
+git clone https://github.com/dmitrykos/stk.git
+cd stk
+```
+
+### 2. Build example for x86 development mode
+
+with Visual Studio 2019:
+
+```bash
+cd build/example/project/msvc
+```
+* `blinky` – emulates toggling of Red, Green, Blue LEDs
+* `critical_section` – demonstrates support for Critical Section synchronization primitive
+* `tls` - demonstrates the use of Thread-local storage (TLS)
+
+with Eclipse CDT:
+```bash
+cd build/example/project/eclipse
+```
+* `blinky-mingw32` – emulates toggling of Red, Green, Blue LEDs
+
+To import project into Eclipse workspace:
+
+```
+File → Import... → Existing Projects into Workspace →
+Select root directory → Browse... → build/example/project/eclipse/blinky-mingw32
+```
+
+### 3. Run on hardware
+* Import the STM32, RPI (Raspberry Pico) or NXP example in Eclipse CDT IDE or MCUXpresso IDE
+* Build and flash your target MCU
+
+---
+
 ## Building and Running Examples
 
 You can build and run examples **without any hardware** on Windows.
@@ -175,7 +190,7 @@ Grouped by platform:
 ### Import into Eclipse CDT
 
 ```
-File → Import... → Existing Projects into Workspace
+File → Import... → Existing Projects into Workspace →
 Select root directory → build/example/project/eclipse
 ```
 
@@ -204,7 +219,7 @@ Compatible with:
 
 ## Example Code
 
-Below example toggles RGB LEDs on a development board with LED. Each LED is controlled by its own thread, switching at 1s intervals:
+Below example toggles RGB LEDs on a development board. Each LED is controlled by its own thread, switching at 1s intervals:
 
 ```cpp
 #include <stk_config.h>
@@ -294,6 +309,166 @@ void RunExample()
     while (true);
 }
 ```
+
+---
+
+## Adding STK to your project
+
+
+### Add using Git & CMake:
+
+
+#### 1. Add STK to your project using Git & CMake
+You can include STK in your project using `git submodule` or by copying the source into a `libs/` or `third_party/` folder.
+
+```bash
+# Example: using git submodule
+cd your-project
+git submodule add https://github.com/dmitrykos/stk.git libs/stk_scheduler
+git submodule update --init
+```
+
+#### 2. Modify your `CMakeLists.txt`
+Add the STK directory and link against STK:
+
+```cmake
+# In your project CMakeLists.txt
+
+# 1. Add STK as a subdirectory
+add_subdirectory(libs/stk_scheduler/stk)
+
+# 2. Link STK into your executable or firmware target
+target_link_libraries(your_firmware_target PUBLIC stk)
+
+# 3. Include STK headers
+target_include_directories(your_firmware_target
+    PUBLIC
+    ${CMAKE_SOURCE_DIR}/libs/stk_scheduler/stk/include
+)
+```
+
+#### 3. Build
+Run your normal build procedure. STK will now be compiled and linked with your project.
+
+#### 4. Initialize STK in your code
+
+```cpp
+#include "stk.h"
+// ...
+static Kernel<KERNEL_STATIC, 3, SwitchStrategyRoundRobin, PlatformDefault> kernel;
+// add tasks, start scheduling …
+```
+
+#### 5. Testing & Simulation
+- Use STK’s x86 development mode for rapid development
+- Deploy to MCU when ready
+
+
+### Alternative Method: Copy STK directly into project files:
+
+
+If you prefer not to use `git submodule` or external dependencies, you can integrate STK by simply copying its source files.
+
+This method is suitable for:
+- vendor-delivered projects (MCUXpresso, STM32CubeIDE, Keil, IAR)
+- closed-source or isolated environments
+- projects without CMake or external dependency management
+
+#### 1. Copy STK folders
+From the root of the STK repository, copy:
+
+```
+stk/
+```
+
+into your project's source tree, for example:
+
+```
+your_project/
+  src/
+  drivers/
+  libs/
+    stk/   ← copied here
+```
+
+#### 2. Add STK include paths
+Add the following include path to your project configuration:
+
+```
+your_project/libs/stk/include
+```
+
+In CMake:
+```cmake
+target_include_directories(your_firmware_target
+    PUBLIC
+    ${CMAKE_SOURCE_DIR}/libs/stk/include
+)
+```
+
+In GCC/Makefile:
+```make
+-Ilibs/stk/include
+```
+
+#### 4. Create stk_config.h and add it to includes
+
+For ARM Cortex-M4 project:
+
+```cpp
+#ifndef STK_CONFIG_H_
+#define STK_CONFIG_H_
+
+#include "cmsis_device.h"
+#include "core_cm4.h"
+
+// Undefine if MCU is Arm Cortex-M4
+#define _STK_ARCH_ARM_CORTEX_M
+
+#ifdef _STK_ARCH_ARM_CORTEX_M
+    // Redefine if SysTick handler name is different from SysTick_Handler
+    //#define _STK_SYSTICK_HANDLER SysTick_Handler
+
+    // Redefine if PendSv handler name is different from PendSV_Handler
+    //#define _STK_PENDSV_HANDLER PendSV_Handler
+
+    // Redefine if SVC handler name is different from SVC_Handler
+    //#define _STK_SVC_HANDLER SVC_Handler
+#endif
+
+#endif /* STK_CONFIG_H_ */
+```
+
+#### 5. Add STK source files to build
+You must compile STK core sources from:
+```
+stk/src
+```
+
+Minimum required sources:
+```
+stk/src/stk.cpp
+stk/src/arch/<your-platform>/...
+```
+
+Example (GCC, ARM Cortex-M MCU):
+```make
+SRCS += \
+  libs/stk/src/stk.cpp \
+  libs/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp
+```
+
+#### 4. Build
+Build your project normally — STK will now be compiled together with it.
+
+#### Pros
+✅ Simplest integration
+✅ No dependency management required
+✅ Works offline
+
+#### Cons
+⚠ Manual updates required when STK changes
+⚠ Easy to accidentally exclude platform files
 
 ---
 
