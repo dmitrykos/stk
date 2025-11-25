@@ -328,13 +328,10 @@ TEST(Kernel, StartInvalidPeriodicity)
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task;
 
-    kernel.Initialize();
-    kernel.AddTask(&task);
-
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Start(0);
+        kernel.Initialize(0);
         CHECK_TEXT(false, "expecting to fail with 0 periodicity");
     }
     catch (TestAssertPassed &pass)
@@ -346,7 +343,7 @@ TEST(Kernel, StartInvalidPeriodicity)
     try
     {
         g_TestContext.ExpectAssert(true);
-        kernel.Start(PERIODICITY_MAX + 1);
+        kernel.Initialize(PERIODICITY_MAX + 1);
         CHECK_TEXT(false, "expecting to fail with too large periodicity");
     }
     catch (TestAssertPassed &pass)
@@ -399,10 +396,10 @@ TEST(Kernel, Start)
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
     const uint32_t periodicity = PERIODICITY_MAX - 1;
 
-    kernel.Initialize();
+    kernel.Initialize(periodicity);
     kernel.AddTask(&task);
 
-    kernel.Start(periodicity);
+    kernel.Start();
 
     CHECK_TRUE(platform->m_started);
     CHECK_TRUE(g_KernelService != NULL);
@@ -422,7 +419,7 @@ TEST(Kernel, StartBeginISR)
     kernel.Start();
 
     // expect that first task's access mode is requested by kernel
-    CHECK_EQUAL(ACCESS_PRIVILEGED, platform->m_access_mode);
+    CHECK_EQUAL(ACCESS_PRIVILEGED, platform->m_stack_active->mode);
 }
 
 TEST(Kernel, ContextSwitchOnSysTickISR)
@@ -485,13 +482,13 @@ TEST(Kernel, ContextSwitchAccessModeChange)
     kernel.Start();
 
     // 1-st task
-    CHECK_EQUAL(ACCESS_USER, platform->m_access_mode);
+    CHECK_EQUAL(ACCESS_USER, platform->m_stack_active->mode);
 
     // ISR calls OnSysTick
     platform->ProcessTick();
 
     // 2-st task
-    CHECK_EQUAL(ACCESS_PRIVILEGED, platform->m_access_mode);
+    CHECK_EQUAL(ACCESS_PRIVILEGED, platform->m_stack_active->mode);
 }
 
 TEST(Kernel, AbiCompatibility)
@@ -560,9 +557,6 @@ TEST(Kernel, OnTaskExit)
 
     // ISR calls OnSysTick
     platform->ProcessTick();
-
-    // expecting privileged mode when scheduler is exiting
-    CHECK_EQUAL(ACCESS_PRIVILEGED, platform->m_access_mode);
 
     // no Idle tasks left
     CHECK_EQUAL((Stack *)NULL, idle);

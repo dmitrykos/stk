@@ -89,7 +89,8 @@ template <uint32_t _StackSize> struct StackMemoryDef
 */
 struct Stack
 {
-    size_t SP; //!< Stack Pointer (SP) register
+    size_t      SP;   //!< Stack Pointer (SP) register
+    EAccessMode mode; //!< access mode
 };
 
 /*! \class Singleton
@@ -158,22 +159,42 @@ private:
 };
 
 /*! \class IStackMemory
-    \brief Interface of the stack memory region.
+    \brief Interface for a stack memory region.
 */
 class IStackMemory
 {
 public:
     /*! \brief Get pointer to the stack memory.
     */
-    virtual size_t *GetStack() = 0;
+    virtual size_t *GetStack() const = 0;
 
     /*! \brief Get size of the stack memory array (number of size_t elements in the array).
     */
     virtual uint32_t GetStackSize() const = 0;
 };
 
+
+/*! \class IMemory
+    \brief Interface for a memory region.
+*/
+class IMemory
+{
+public:
+    /*! \brief Get pointer to the memory.
+    */
+    virtual size_t *GetPtr() const = 0;
+
+    /*! \brief Get size of the memory array (number of size_t elements in the array).
+    */
+    virtual uint32_t GetSize() const = 0;
+
+    /*! \brief Get size of the memory array in bytes.
+    */
+    virtual uint32_t GetSizeBytes() const = 0;
+};
+
 /*! \class ITask
-    \brief Interface of the user task.
+    \brief Interface for a user task.
 
     \note  Inherit this interface by your thread/task class to make it schedulable by the Kernel.
 
@@ -208,7 +229,7 @@ public:
 };
 
 /*! \class IKernelTask
-    \brief Interface of the kernel task.
+    \brief Interface for a kernel task.
 
     Kernel task hosts user task.
 */
@@ -235,7 +256,7 @@ public:
 };
 
 /*! \class IPlatform
-    \brief Interface of the platform driver.
+    \brief Interface for a platform driver.
     \note  Bridge design pattern. Do not put implementation details in the header of the
            concrete class to avoid breaking this pattern.
 
@@ -305,13 +326,19 @@ public:
         virtual bool OnHardFault() = 0;
     };
 
-    /*! \brief     Start scheduling.
+    /*! \brief     Initialize scheduler's context.
+        \param[in] ctx_memory: Memory for the context.
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
         \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */
-    virtual void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
+    virtual void Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
+
+    /*! \brief     Start scheduling.
+        \note      This function never returns!
+    */
+    virtual void Start() = 0;
 
     /*! \brief     Stop scheduling.
     */
@@ -330,12 +357,6 @@ public:
         \return    Microseconds.
     */
     virtual int32_t GetTickResolution() const = 0;
-
-    /*! \brief     Set hardware access mode for the Thread mode.
-        \note      In case of Arm processor see its manual (Processor mode and privilege levels for software execution).
-        \param[in] mode: Access mode.
-    */
-    virtual void SetAccessMode(EAccessMode mode) = 0;
 
     /*! \brief     Switch to a next task.
     */
@@ -422,7 +443,7 @@ class IKernel
 public:
     /*! \brief     Initialize kernel.
     */
-    virtual void Initialize() = 0;
+    virtual void Initialize(uint32_t resolution_us = PERIODICITY_DEFAULT) = 0;
 
     /*! \brief     Add user task.
         \note      This function is for Soft Real-time modes only, e.g. stk::KERNEL_HRT is not used as parameter.
@@ -450,7 +471,7 @@ public:
                    STM32's HAL expects 1 millisecond resolution and QEMU does not have enough resolution on Windows
                    platform to operate correctly on a sub-millisecond resolution.
     */
-    virtual void Start(uint32_t resolution_us = PERIODICITY_DEFAULT) = 0;
+    virtual void Start() = 0;
 
     /*! \brief     Check if kernel started processing.
         \return    True if started, otherwise false.

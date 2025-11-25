@@ -55,7 +55,7 @@ class Task : public ITask
 {
 public:
     enum { STACK_SIZE = _StackSize };
-    size_t *GetStack() { return m_stack; }
+    size_t *GetStack() const { return const_cast<size_t *>(m_stack); }
     uint32_t GetStackSize() const { return _StackSize; }
     EAccessMode GetAccessMode() const { return _AccessMode; }
     virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
@@ -85,11 +85,32 @@ public:
         STK_STATIC_ASSERT(_StackSize >= STACK_SIZE_MIN);
     }
 
-    size_t *GetStack() { return (*m_stack); }
+    size_t *GetStack() const { return (*m_stack); }
     uint32_t GetStackSize() const { return _StackSize; }
 
 private:
     MemoryType *m_stack; //!< pointer to the wrapped memory region
+};
+
+/*! \class Memory
+    \brief Memory wrapper into IMemory interface.
+    \note  Wrapper design pattern.
+*/
+template <uint32_t _StackSize>
+class Memory : public IMemory
+{
+public:
+    /*! \typedef MemoryType
+        \brief   Memory type which can be wrapped.
+    */
+    typedef typename StackMemoryDef<_StackSize>::Type MemoryType;
+
+    size_t *GetPtr() const { return const_cast<size_t *>(m_memory); }
+    uint32_t GetSize() const { return _StackSize; }
+    uint32_t GetSizeBytes() const { return _StackSize * sizeof(size_t); }
+
+private:
+    MemoryType m_memory; //!< stack memory region
 };
 
 /*! \brief     Get milliseconds from ticks.
