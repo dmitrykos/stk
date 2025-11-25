@@ -34,10 +34,16 @@ TEST(Kernel, MaxTasks)
 TEST(Kernel, Init)
 {
     Kernel<KERNEL_STATIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
     kernel.Initialize();
 
     CHECK_TRUE(((IKernel *)&kernel)->IsInitialized());
+
+    CHECK_TRUE(platform->m_ctx_memory != NULL);
+    CHECK_TRUE(platform->m_ctx_memory->GetPtr() != NULL);
+    CHECK_TRUE(platform->m_ctx_memory->GetSizeBytes() != 0);
+    CHECK_TRUE(platform->m_ctx_memory->GetSize() * sizeof(size_t) == platform->m_ctx_memory->GetSizeBytes());
 }
 
 TEST(Kernel, InitDoubleFail)

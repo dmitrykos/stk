@@ -65,6 +65,7 @@ public:
 
     explicit PlatformTestMock()
     {
+        m_ctx_memory        = NULL;
         m_event_handler     = NULL;
         m_started           = false;
         m_hard_fault        = false;
@@ -82,6 +83,7 @@ public:
 
     void Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
     {
+        m_ctx_memory    = &ctx_memory;
         m_event_handler = event_handler;
         m_started       = false;
         m_resolution    = resolution_us;
@@ -176,6 +178,7 @@ public:
         return m_stack_active->SP;
     }
 
+    const IMemory   *m_ctx_memory;
     Stack           *m_exit_trap;
     bool             m_fail_InitStack;
     int32_t          m_resolution;

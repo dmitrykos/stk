@@ -107,7 +107,7 @@ public:
 
     size_t *GetPtr() const { return const_cast<size_t *>(m_memory); }
     uint32_t GetSize() const { return _StackSize; }
-    uint32_t GetSizeBytes() const { return _StackSize * sizeof(size_t); }
+    uint32_t GetSizeBytes() const { return GetSize() * sizeof(size_t); }
 
 private:
     MemoryType m_memory; //!< stack memory region
