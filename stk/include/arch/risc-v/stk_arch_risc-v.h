@@ -32,11 +32,11 @@ public:
         virtual bool OnException(size_t cause) = 0;
     };
 
-    void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap);
+    void Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap);
+    void Start();
     void Stop();
     bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
     int32_t GetTickResolution() const;
-    void SetAccessMode(EAccessMode mode);
     void SwitchToNext();
     void SleepTicks(uint32_t ticks);
     void ProcessTick();

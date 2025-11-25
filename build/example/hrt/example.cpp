@@ -56,7 +56,7 @@ private:
                 break;
             }
 
-            g_KernelService->SwitchToNext();
+            stk::Yield();
         }
     }
 
@@ -86,6 +86,11 @@ private:
 
     bool OnHardFault()
     {
+        // switch on Red LED as indication of the error
+        Led::Set(Led::RED, true);
+        Led::Set(Led::GREEN, false);
+        Led::Set(Led::BLUE, false);
+
         // if handled return true, otherwise event will be handler by the driver
         // note: prior a call to this function a task which had deadline missed had a call to OnDeadlineMissed
         return false;

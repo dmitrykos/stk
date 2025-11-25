@@ -95,8 +95,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL), m_stack(), m_state(STATE_NONE), m_access_mode(ACCESS_PRIVILEGED),
-            m_time_sleep(0), m_srt(), m_hrt() {}
+        explicit KernelTask() : m_user(NULL), m_stack(), m_state(STATE_NONE), m_time_sleep(0),
+            m_srt(), m_hrt() {}
 
         ITask *GetUserTask() { return m_user; }
 
@@ -163,20 +163,21 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 STK_ASSERT(false);
             }
 
-            // bind
-            m_access_mode = user_task->GetAccessMode();
-            m_user        = user_task;
+            // bind user task
+            m_user = user_task;
+
+            // set access mode for this stack
+            m_stack.mode = user_task->GetAccessMode();
         }
 
         /*! \brief     Release variables from info about previous task.
         */
         void Unbind()
         {
-            m_user        = NULL;
-            m_stack       = {};
-            m_state       = STATE_NONE;
-            m_access_mode = ACCESS_PRIVILEGED;
-            m_time_sleep  = 0;
+            m_user       = NULL;
+            m_stack      = {};
+            m_state      = STATE_NONE;
+            m_time_sleep = 0;
 
             if (_Mode & KERNEL_HRT)
                 m_hrt[0].Clear();
@@ -258,7 +259,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         ITask      *m_user;       //!< user task
         Stack       m_stack;      //!< stack descriptor
         uint32_t    m_state;      //!< state flags
-        EAccessMode m_access_mode;//!< hw access mode
         int32_t     m_time_sleep; //!< time to sleep (ticks)
         SrtInfo     m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
         HrtInfo     m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
@@ -361,7 +361,7 @@ public:
     /*! \brief Default initializer.
     */
     explicit Kernel() : m_platform(), m_strategy(), m_task_now(NULL), m_task_storage(), m_sleep_trap(),
-        m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(~0), m_access_mode(ACCESS_PRIVILEGED)
+        m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(~0)
     {
     #ifdef _DEBUG
         // _TyPlatform must inherit IPlatform
@@ -374,14 +374,19 @@ public:
     #endif
     }
 
-    __stk_attr_noinline void Initialize()
+    __stk_attr_noinline void Initialize(uint32_t resolution_us = PERIODICITY_DEFAULT)
     {
+        STK_ASSERT(resolution_us != 0);
+        STK_ASSERT(resolution_us <= PERIODICITY_MAX);
         STK_ASSERT(!IsInitialized());
 
-        m_task_now    = NULL;
-        m_fsm_state   = FSM_STATE_NONE;
-        m_request     = REQUEST_NONE;
-        m_access_mode = ACCESS_PRIVILEGED;
+        m_task_now  = NULL;
+        m_fsm_state = FSM_STATE_NONE;
+        m_request   = REQUEST_NONE;
+
+        m_platform.Initialize(m_ctx_memory, this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
+
+        m_service.Initialize(&m_platform);
     }
 
     __stk_attr_noinline void AddTask(ITask *user_task)
@@ -454,20 +459,16 @@ public:
         }
     }
 
-    __stk_attr_noinline void Start(uint32_t resolution_us = PERIODICITY_DEFAULT)
+    __stk_attr_noinline void Start()
     {
-        STK_ASSERT(resolution_us != 0);
-        STK_ASSERT(resolution_us <= PERIODICITY_MAX);
         STK_ASSERT(IsInitialized());
 
         m_task_now = NULL;
 
-        // stacks of the traps must be re-initilized on every subsequent Start
+         // stacks of the traps must be re-initilized on every subsequent Start
         InitTraps();
 
-        m_service.Initialize(&m_platform);
-
-        m_platform.Start(this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
+        m_platform.Start();
     }
 
     bool IsStarted() const { return (m_task_now != NULL); }
@@ -506,15 +507,23 @@ protected:
     {
         // init stack for a Sleep trap
         {
-            TrapStackStackMemory wrapper(&m_sleep_trap[0].memory);
-            m_platform.InitStack(STACK_SLEEP_TRAP, &m_sleep_trap[0].stack, &wrapper, NULL);
+            TrapStack &sleep = m_sleep_trap[0];
+
+            TrapStackStackMemory wrapper(&sleep.memory);
+            sleep.stack.mode = ACCESS_PRIVILEGED;
+
+            m_platform.InitStack(STACK_SLEEP_TRAP, &sleep.stack, &wrapper, NULL);
         }
 
         // init stack for an Exit trap
         if (_Mode & KERNEL_DYNAMIC)
         {
-            TrapStackStackMemory wrapper(&m_exit_trap[0].memory);
-            m_platform.InitStack(STACK_EXIT_TRAP, &m_exit_trap[0].stack, &wrapper, NULL);
+            TrapStack &exit = m_exit_trap[0];
+
+            TrapStackStackMemory wrapper(&exit.memory);
+            exit.stack.mode = ACCESS_PRIVILEGED;
+
+            m_platform.InitStack(STACK_EXIT_TRAP, &exit.stack, &wrapper, NULL);
         }
     }
 
@@ -659,23 +668,6 @@ protected:
         task->Unbind();
     }
 
-    /*! \brief     Update access mode of the Thread process.
-        \param[in] task: Kernel task.
-    */
-    void UpdateAccessMode(const KernelTask *task)
-    {
-        if (task->m_access_mode != m_access_mode)
-            m_platform.SetAccessMode(task->m_access_mode);
-    }
-
-    /*! \brief     Set access mode of the Thread process.
-        \param[in] mode: Access mode.
-    */
-    void SetAccessMode(EAccessMode mode)
-    {
-        m_platform.SetAccessMode(m_access_mode = mode);
-    }
-
     __stk_attr_noinline void OnStart(Stack **active)
     {
         STK_ASSERT(m_strategy.GetSize() != 0);
@@ -704,15 +696,11 @@ protected:
             {
                 m_task_now->HrtOnSwitchedIn(m_service.GetTicks());
             }
-
-            SetAccessMode(m_task_now->m_access_mode);
         }
         else
         if (m_fsm_state == FSM_STATE_SLEEPING)
         {
             (*active) = &m_sleep_trap[0].stack;
-
-            SetAccessMode(ACCESS_PRIVILEGED);
         }
     }
 
@@ -984,7 +972,6 @@ protected:
             next->HrtOnSwitchedIn(ticks);
         }
 
-        UpdateAccessMode(next);
         return true; // switch context
     }
 
@@ -1015,7 +1002,6 @@ protected:
             next->HrtOnSwitchedIn(m_service.GetTicks());
         }
 
-        UpdateAccessMode(next);
         return true; // switch context
     }
 
@@ -1043,7 +1029,6 @@ protected:
             now->HrtOnSwitchedOut(&m_platform, m_service.GetTicks());
         }
 
-        SetAccessMode(ACCESS_PRIVILEGED);
         return true; // switch context
     }
 
@@ -1070,7 +1055,6 @@ protected:
 
             m_task_now = NULL;
 
-            SetAccessMode(ACCESS_PRIVILEGED);
             m_platform.Stop();
         }
         else
@@ -1134,6 +1118,14 @@ protected:
         Memory memory; //!< stack memory
     };
 
+    /*! \typedef ContextMem
+        \brief   Memory for the context.
+        \note    Adjust size (66) based on platform implementation if fails on assert inside IPlatform::Initialize().
+                 All platforms are using jmp_buf which may have different size depending on compiler version, therefore
+                 take its size + approximate size of the platform implementation.
+    */
+    typedef Memory<(sizeof(jmp_buf) + 64) / sizeof(size_t)> ContextMem;
+
     KernelService   m_service;         //!< run-time kernel service
     _TyPlatform     m_platform;        //!< platform driver
     _TyStrategy     m_strategy;        //!< task switching strategy
@@ -1141,9 +1133,9 @@ protected:
     TaskStorageType m_task_storage;    //!< task storage
     TrapStack       m_sleep_trap[1];   //!< sleep trap
     TrapStack       m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    ContextMem      m_ctx_memory;      //!< context's memory
     EFsmState       m_fsm_state;       //!< FSM state
     uint32_t        m_request;         //!< pending requests from the tasks
-    EAccessMode     m_access_mode;     //!< current access mode
 
     const EFsmState m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
     //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE    FSM_EVENT_EXIT

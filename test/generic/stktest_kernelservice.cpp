@@ -98,9 +98,9 @@ TEST(KernelService, GetTickResolution)
     TaskMock<ACCESS_USER> task;
     const uint32_t periodicity = PERIODICITY_DEFAULT + 1;
 
-    kernel.Initialize();
+    kernel.Initialize(periodicity);
     kernel.AddTask(&task);
-    kernel.Start(periodicity);
+    kernel.Start();
 
     CHECK_EQUAL(periodicity, g_KernelService->GetTickResolution());
 }
@@ -111,10 +111,10 @@ TEST(KernelService, GetTicks)
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
-    kernel.Initialize();
+    kernel.Initialize(PERIODICITY_DEFAULT);
     kernel.AddTask(&task1);
     kernel.AddTask(&task2);
-    kernel.Start(PERIODICITY_DEFAULT);
+    kernel.Start();
 
     // ISR calls OnSysTick 1-st time
     platform->ProcessTick();

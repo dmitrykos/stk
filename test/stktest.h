@@ -65,6 +65,7 @@ public:
 
     explicit PlatformTestMock()
     {
+        m_ctx_memory        = NULL;
         m_event_handler     = NULL;
         m_started           = false;
         m_hard_fault        = false;
@@ -72,22 +73,26 @@ public:
         m_exit_trap         = NULL;
         m_fail_InitStack    = false;
         m_resolution        = 0;
-        m_access_mode       = ACCESS_USER;
         m_context_switch_nr = 0;
         m_stack_idle        = NULL;
         m_stack_active      = NULL;
         m_overrider         = NULL;
     }
 
-    virtual ~PlatformTestMock()
-    { }
+    virtual ~PlatformTestMock() {}
 
-    void Start(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
+    void Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
     {
+        m_ctx_memory    = &ctx_memory;
         m_event_handler = event_handler;
-        m_started       = true;
+        m_started       = false;
         m_resolution    = resolution_us;
         m_exit_trap     = exit_trap;
+    }
+
+    void Start()
+    {
+        m_started = true;
 
         EventStart();
     }
@@ -117,11 +122,6 @@ public:
     int32_t GetTickResolution() const
     {
         return m_resolution;
-    }
-
-    void SetAccessMode(EAccessMode mode)
-    {
-        m_access_mode = mode;
     }
 
     void SwitchToNext()
@@ -178,10 +178,10 @@ public:
         return m_stack_active->SP;
     }
 
+    const IMemory   *m_ctx_memory;
     Stack           *m_exit_trap;
     bool             m_fail_InitStack;
     int32_t          m_resolution;
-    EAccessMode      m_access_mode;
     uint32_t         m_context_switch_nr;
     bool             m_started;
     bool             m_hard_fault;
