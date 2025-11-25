@@ -13,26 +13,6 @@
 
 static volatile uint8_t g_TaskSwitch = 0;
 
-#if 0
-static void Delay(uint32_t delay_ms)
-{
-    // Cortex-M4 instructions: https://developer.arm.com/documentation/ddi0439/b/CHDDIGAC
-
-    // ldr     r3, [sp, #4]
-    // subs    r3, #1
-    // cmp     r3, #0
-    // str     r3, [sp, #4]
-
-    volatile int32_t i = delay_ms * ((SystemCoreClock / 1000) / ((2 + 1 + 1 + 2) * 4));
-    while (--i > 0);
-}
-#else
-static __stk_forceinline void Delay(uint32_t delay_ms)
-{
-    g_KernelService->Delay(delay_ms);
-}
-#endif
-
 template <stk::EAccessMode _AccessMode>
 class MyTask : public stk::Task<256, _AccessMode>
 {
@@ -91,7 +71,7 @@ private:
                 break;
             }
 
-            Delay(1000);
+            stk::Sleep(1000);
 
             g_TaskSwitch = (task_id + 1) % 3;
             return;
@@ -131,11 +111,13 @@ void RunExample()
 
     g_Kernel.Initialize();
 
+    // repeat 3 times
     for (int i = 0; i < 3; ++i)
     {
         RunOnce();
     }
 
+    // switched on all LEDs when execution ends
     Led::Set(Led::RED, true);
     Led::Set(Led::GREEN, true);
     Led::Set(Led::BLUE, true);

@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <setjmp.h>
 
 /*! \file  stk_defs.h
     \brief Contains compiler low-level definitions.

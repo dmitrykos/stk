@@ -1120,13 +1120,11 @@ protected:
 
     /*! \typedef ContextMem
         \brief   Memory for the context.
-        \note    Adjust size based on platform implementation if fails on assert inside IPlatform::Initialize()
+        \note    Adjust size (66) based on platform implementation if fails on assert inside IPlatform::Initialize().
+                 All platforms are using jmp_buf which may have different size depending on compiler version, therefore
+                 take its size + approximate size of the platform implementation.
     */
-#ifdef _STK_ARCH_RISC_V
-    typedef Memory<96> ContextMem;
-#else
-    typedef Memory<32> ContextMem;
-#endif
+    typedef Memory<(sizeof(jmp_buf) + 64) / sizeof(size_t)> ContextMem;
 
     KernelService   m_service;         //!< run-time kernel service
     _TyPlatform     m_platform;        //!< platform driver
