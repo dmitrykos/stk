@@ -64,6 +64,38 @@ Tasks cooperate using `Sleep()`. Timing is best-effort.
 * `KERNEL_STATIC` – tasks created once at startup, infinite loop
 * `KERNEL_DYNAMIC` – tasks may exit, kernel returns to `main()` when done
 
+### Task Privilege Separation
+
+Starting with ARM Cortex-M3 and all newer cores (M3/M4/M7/M33/M55 etc.) that implement the Armv7-M or Armv8-M architecture with the **Memory Protection Unit (MPU)**, STK supports explicit privilege separation between tasks.
+
+| Access Mode         | Privileged (`ACCESS_PRIVILEGED`)                               | Unprivileged (`ACCESS_USER`)                                       |
+|---------------------|----------------------------------------------------------------|--------------------------------------------------------------------|
+| CPU privilege level | Runs in **Privileged Thread Mode**                             | Runs in **Unprivileged Thread Mode**                               |
+| Direct peripheral access | Allowed (normal register/bit-band access)                | Blocked by the hardware (BusFault on any peripheral access)        |
+| Ability to call SVC / trigger PendSV | Yes                                                  | No (but STK services allow Sleep, Delay, Yield, CS, ...)           |
+| Ability to execute privileged instructions (CPS, MRS/MSR for control regs, etc.) | Yes | No                                                                 |
+| Typical use case    | Drivers, hardware abstraction, critical infrastructure code  | Application logic, protocol parsers, third-party or untrusted code |
+
+#### Why this matters
+
+Modern embedded systems increasingly process **untrusted or complex data** (network packets, USB descriptors, sensor protocols, firmware updates, etc.). A single bug in data parsing code can corrupt peripheral registers, disable interrupts, or even brick the device.
+
+By marking tasks that parse potentially attacker-controlled data as `ACCESS_USER`, you get **hardware-enforced isolation**:
+
+- An erroneous or malicious write to a peripheral register immediately triggers a **hard BusFault** instead of silently corrupting hardware state.
+- Only explicitly trusted tasks (marked `ACCESS_PRIVILEGED`) are allowed to touch GPIO, UART, SPI, DMA, timers, etc.
+- The kernel itself and all STK services remain fully functional for unprivileged tasks (sleep, yield, critical sections, TLS, etc.).
+
+#### Example
+
+```cpp
+// Trusted driver task – needs direct hardware access
+class DriverTask : public stk::Task<256, ACCESS_PRIVILEGED> { ... };
+
+// Application task that parses USB or network data – runs unprivileged
+class ParserTask : public stk::Task<512, ACCESS_USER> { ... };
+```
+
 ---
 
 ## Hardware Support
