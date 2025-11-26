@@ -22,16 +22,16 @@ TEST_GROUP(KernelService)
     void teardown() {}
 };
 
-TEST(KernelService, GetMillisecondsToTicks)
+TEST(KernelService, GetMsecToTicks)
 {
     KernelServiceMock mock;
     mock.m_ticks = 1;
 
     mock.m_resolution = 1000;
-    CHECK_EQUAL(10, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
+    CHECK_EQUAL(10, (int32_t)GetMsecFromTicks(10, mock.GetTickResolution()));
 
     mock.m_resolution = 10000;
-    CHECK_EQUAL(100, (int32_t)GetMillisecondsFromTicks(10, mock.GetTickResolution()));
+    CHECK_EQUAL(100, (int32_t)GetMsecFromTicks(10, mock.GetTickResolution()));
 }
 
 static struct DelayContext

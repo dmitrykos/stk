@@ -61,12 +61,12 @@ private:
     {
         for (int32_t i = 0; i < _STK_HRT_TEST_ITRS; ++i)
         {
-            int64_t start = GetTimeNowMilliseconds();
+            int64_t start = GetTimeNowMsec();
 
             // add varying workload (10, 20, 30 ms) with deadline max 50 ms
             Delay(_STK_HRT_TEST_SLEEP * (m_task_id + 1));
 
-            int64_t diff = GetTimeNowMilliseconds() - start;
+            int64_t diff = GetTimeNowMsec() - start;
 
             printf("id=%d start=%d diff=%d\n", m_task_id, (int)start, (int)diff);
 
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 
     kernel.Initialize();
 
-#define TICKS(MS) GetTicksFromMilliseconds((MS), PERIODICITY_DEFAULT)
+#define TICKS(MS) GetTicksFromMsec((MS), PERIODICITY_DEFAULT)
 
     kernel.AddTask(&task1, TICKS(_STK_HRT_TEST_PERIODICITY * _STK_HRT_TEST_TASKS_MAX), TICKS(_STK_HRT_TEST_PERIODICITY / 2), TICKS(_STK_HRT_TEST_PERIODICITY * 0));
 

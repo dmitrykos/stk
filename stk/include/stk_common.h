@@ -297,9 +297,9 @@ public:
 
         /*! \brief      Called by Thread process (via IKernelService::Sleep) for exclusion of the calling process from scheduling (sleeping).
             \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
-            \param[in]  sleep_ticks: Time to sleep (ticks).
+            \param[in]  ticks: Time to sleep (ticks).
         */
-        virtual void OnTaskSleep(size_t caller_SP, uint32_t sleep_ticks) = 0;
+        virtual void OnTaskSleep(size_t caller_SP, int32_t ticks) = 0;
 
         /*! \brief      Called from the Thread process when task finished (its Run function exited by return).
             \param[out] stack: Stack of the exited task.
@@ -518,16 +518,16 @@ public:
     /*! \brief     Delay calling process.
         \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
         \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
-        \param[in] delay_ms: Delay time (milliseconds).
+        \param[in] msec: Delay time (milliseconds).
     */
-    virtual void Delay(uint32_t delay_ms) const = 0;
+    virtual void Delay(uint32_t msec) const = 0;
 
     /*! \brief     Put calling process into a sleep state.
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
         \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
-        \param[in] sleep_ms: Sleep time (milliseconds).
+        \param[in] msec: Sleep time (milliseconds).
     */
-    virtual void Sleep(uint32_t sleep_ms) = 0;
+    virtual void Sleep(uint32_t msec) = 0;
 
     /*! \brief     Notify scheduler that it can switch to a next task.
     */
