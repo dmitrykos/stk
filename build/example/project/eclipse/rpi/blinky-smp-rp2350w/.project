@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>blinky-rp2350w</name>
+	<name>blinky-smp-rp2350w</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,7 +36,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/blinky</name>
+			<name>src/blinky-smp</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -81,14 +81,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/blinky/example.cpp</name>
+			<name>src/blinky-smp/example.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/blinky/example.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/blinky-smp/example.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/blinky/example.h</name>
+			<name>src/blinky-smp/example.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/blinky/example.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/blinky-smp/example.h</locationURI>
+		</link>
+		<link>
+			<name>src/driver/cpu.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/cpu.h</locationURI>
 		</link>
 		<link>
 			<name>src/driver/led.h</name>
@@ -539,6 +544,11 @@
 			<name>deps/stk/src/stk.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/src/stk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/driver/rp2350w/cpu.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/rp2350w/cpu.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/driver/rp2350w/led.cpp</name>

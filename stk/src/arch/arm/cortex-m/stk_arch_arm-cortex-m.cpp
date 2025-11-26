@@ -19,6 +19,18 @@
 #include "arch/stk_arch_common.h"
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
+#ifndef _STK_ARCH_CPU_COUNT
+    #define _STK_ARCH_CPU_COUNT 1
+#endif
+
+#if (_STK_ARCH_CPU_COUNT == 1)
+    #define GetContext() g_Context[0]
+    #define SetContext(CTX) g_Context[0] = (CTX)
+#else
+    #define GetContext() g_Context[_STK_ARCH_GET_CPU_ID()]
+    #define SetContext(CTX) g_Context[_STK_ARCH_GET_CPU_ID()] = (CTX)
+#endif
+
 using namespace stk;
 
 #define STK_CORTEX_M_CRITICAL_SECTION_START(SES) do { SES = __get_PRIMASK(); __disable_irq(); } while (0)
@@ -173,11 +185,11 @@ static struct Context : public PlatformContext
     volatile bool m_started;//!< 'true' when in started state
     bool     m_exiting;     //!< 'true' when is exiting the scheduling process
 }
-* g_Context = NULL;
+* g_Context[_STK_ARCH_CPU_COUNT] = {};
 
 void PlatformArmCortexM::ProcessTick()
 {
-    g_Context->OnTick();
+    GetContext()->OnTick();
 }
 
 extern "C" void _STK_SYSTICK_HANDLER()
@@ -188,15 +200,15 @@ extern "C" void _STK_SYSTICK_HANDLER()
 
     // STM32 HAL is starting SysTick on its initialization that will cause a crash on NULL,
     // therefore use additional check if HAL_MODULE_ENABLED is defined
-    if ((g_Context != NULL) && g_Context->m_started)
+    if ((GetContext() != NULL) && GetContext()->m_started)
     {
 #else
     {
         // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
-        STK_ASSERT(g_Context->m_started);
-        STK_ASSERT(g_Context->m_handler != NULL);
+        STK_ASSERT(GetContext()->m_started);
+        STK_ASSERT(GetContext()->m_handler != NULL);
 #endif
-        g_Context->OnTick();
+        GetContext()->OnTick();
     }
 }
 
@@ -239,13 +251,13 @@ __stk_forceinline void SaveStackIdle()
     "LDR        r1, %0          \n"
     "STR        r0, [r1]        \n"
     : /* output: none */
-    : "m" (g_Context->m_stack_idle)
+    : "m" (GetContext()->m_stack_idle)
     : /* clobbers: none */);
 }
 
 __stk_forceinline void LoadStackActive()
 {
-    if (g_Context->m_stack_active->mode == ACCESS_PRIVILEGED)
+    if (GetContext()->m_stack_active->mode == ACCESS_PRIVILEGED)
        STK_CORTEX_M_PRIVILEGED_MODE_ON();
     else
        STK_CORTEX_M_PRIVILEGED_MODE_OFF();
@@ -255,7 +267,7 @@ __stk_forceinline void LoadStackActive()
     "LDR        r1, %0          \n"
     "LDR        r0, [r1]        \n" // load
     : /* output: none */
-    : "m" (g_Context->m_stack_active)
+    : "m" (GetContext()->m_stack_active)
     : /* clobbers: none */);
 
     // load general registers from the stack memory
@@ -344,10 +356,10 @@ static void StartScheduling()
     ClearFpuState();
 
     // notify kernel
-    g_Context->m_handler->OnStart(&g_Context->m_stack_active);
+    GetContext()->m_handler->OnStart(&GetContext()->m_stack_active);
 
     // schedule ticks
-    uint32_t result = SysTick_Config((uint32_t)STK_TIME_TO_CPU_TICKS_USEC(SystemCoreClock, g_Context->m_tick_resolution));
+    uint32_t result = SysTick_Config((uint32_t)STK_TIME_TO_CPU_TICKS_USEC(SystemCoreClock, GetContext()->m_tick_resolution));
     STK_ASSERT(result == 0);
     (void)result;
 
@@ -355,7 +367,7 @@ static void StartScheduling()
     NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
-    g_Context->m_started = true;
+    GetContext()->m_started = true;
 }
 
 void SVC_Handler_Main(size_t *stack)
@@ -375,8 +387,8 @@ void SVC_Handler_Main(size_t *stack)
     {
     case 0: {
         // disallow any duplicate attempt
-        STK_ASSERT(!g_Context->m_started);
-        if (g_Context->m_started)
+        STK_ASSERT(!GetContext()->m_started);
+        if (GetContext()->m_started)
             return;
 
         STK_CORTEX_M_DISABLE_INTERRUPTS();
@@ -422,7 +434,7 @@ static void OnTaskExit()
     uint32_t cs;
     STK_CORTEX_M_CRITICAL_SECTION_START(cs);
 
-    g_Context->m_handler->OnTaskExit(g_Context->m_stack_active);
+    GetContext()->m_handler->OnTaskExit(GetContext()->m_stack_active);
 
     STK_CORTEX_M_CRITICAL_SECTION_END(cs);
 
@@ -450,7 +462,7 @@ static void OnSchedulerSleep()
 
 static void OnSchedulerSleepOverride()
 {
-    if (!g_Context->m_overrider->OnSleep())
+    if (!GetContext()->m_overrider->OnSleep())
         OnSchedulerSleep();
 }
 
@@ -460,7 +472,7 @@ static void OnSchedulerExit()
     __set_PSP(0);     // clear PSP (for a clean register state)
 
     // jump to the exit from the IKernel::Start()
-    longjmp(g_Context->m_exit_buf, 0);
+    longjmp(GetContext()->m_exit_buf, 0);
 }
 
 void PlatformArmCortexM::Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us,
@@ -470,18 +482,18 @@ void PlatformArmCortexM::Initialize(const IMemory &ctx_memory, IEventHandler *ev
     STK_ASSERT(ctx_memory.GetSizeBytes() >= sizeof(Context));
 
     // allocate context within its memory region
-    g_Context = new (ctx_memory.GetPtr()) Context();
+    SetContext(new (ctx_memory.GetPtr()) Context());
 
-    g_Context->Initialize(event_handler, exit_trap, resolution_us);
+    GetContext()->Initialize(event_handler, exit_trap, resolution_us);
 }
 
 void PlatformArmCortexM::Start()
 {
-    g_Context->m_exiting = false;
+    GetContext()->m_exiting = false;
 
     // save jump location of the Exit trap
-    setjmp(g_Context->m_exit_buf);
-    if (g_Context->m_exiting)
+    setjmp(GetContext()->m_exit_buf);
+    if (GetContext()->m_exiting)
         return;
 
     STK_CORTEX_M_START_SCHEDULING();
@@ -492,7 +504,7 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
     STK_ASSERT(stack_memory->GetStackSize() > STK_CORTEX_M_REGISTER_COUNT);
 
     // initialize stack memory
-    size_t *stack_top = g_Context->InitStackMemory(stack_memory);
+    size_t *stack_top = GetContext()->InitStackMemory(stack_memory);
 
     // initialize Stack Pointer (SP)
     stack->SP = (size_t)(stack_top - STK_CORTEX_M_REGISTER_COUNT);
@@ -515,7 +527,7 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
         break; }
 
     case STACK_SLEEP_TRAP: {
-        PC = (size_t)(g_Context->m_overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep) & ~0x1UL;
+        PC = (size_t)(GetContext()->m_overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep) & ~0x1UL;
         LR = (size_t)STK_STACK_MEMORY_FILLER; // should not attempt to exit
         R0 = 0;
         break; }
@@ -556,8 +568,8 @@ void PlatformArmCortexM::Stop()
     // clear pending PendSV exception
     SCB->ICSR |= SCB_ICSR_PENDSVCLR_Msk;
 
-    g_Context->m_started = false;
-    g_Context->m_exiting = true;
+    GetContext()->m_started = false;
+    GetContext()->m_exiting = true;
 
     // make sure all assignments are set and executed
     __DSB();
@@ -570,22 +582,22 @@ void PlatformArmCortexM::Stop()
 
 int32_t PlatformArmCortexM::GetTickResolution() const
 {
-    return g_Context->m_tick_resolution;
+    return GetContext()->m_tick_resolution;
 }
 
 void PlatformArmCortexM::SwitchToNext()
 {
-    g_Context->m_handler->OnTaskSwitch(::GetCallerSP());
+    GetContext()->m_handler->OnTaskSwitch(::GetCallerSP());
 }
 
 void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 {
-    g_Context->m_handler->OnTaskSleep(::GetCallerSP(), ticks);
+    GetContext()->m_handler->OnTaskSleep(::GetCallerSP(), ticks);
 }
 
 void PlatformArmCortexM::ProcessHardFault()
 {
-    if ((g_Context->m_overrider == NULL) || !g_Context->m_overrider->OnHardFault())
+    if ((GetContext()->m_overrider == NULL) || !GetContext()->m_overrider->OnHardFault())
     {
         exit(1);
     }
@@ -593,8 +605,8 @@ void PlatformArmCortexM::ProcessHardFault()
 
 void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)
 {
-    STK_ASSERT(!g_Context->m_started);
-    g_Context->m_overrider = overrider;
+    STK_ASSERT(!GetContext()->m_started);
+    GetContext()->m_overrider = overrider;
 }
 
 size_t PlatformArmCortexM::GetCallerSP()
@@ -604,12 +616,12 @@ size_t PlatformArmCortexM::GetCallerSP()
 
 void stk::EnterCriticalSection()
 {
-    g_Context->EnterCriticalSection();
+    GetContext()->EnterCriticalSection();
 }
 
 void stk::ExitCriticalSection()
 {
-    g_Context->ExitCriticalSection();
+    GetContext()->ExitCriticalSection();
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

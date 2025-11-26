@@ -36,12 +36,12 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/secure_task</name>
+			<name>src/driver</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/driver</name>
+			<name>src/secure_task</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -81,16 +81,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/secure_task/example.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/secure_task/example.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/secure_task/example.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/secure_task/example.h</locationURI>
-		</link>
-		<link>
 			<name>src/driver/led.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/driver/led.h</locationURI>
@@ -99,6 +89,16 @@
 			<name>src/driver/rp2350w</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/secure_task/example.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/secure_task/example.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/secure_task/example.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/secure_task/example.h</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/boards/include</name>
@@ -347,11 +347,6 @@
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_crt0</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_cxx_options</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1134,16 +1129,6 @@
 			<name>deps/rpi/rp2_common/pico_crt0/rp2350</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_cxx_options/doc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cxx_options/doc.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_cxx_options/new_delete.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cxx_options/new_delete.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_cyw43_arch/cyw43_arch.c</name>

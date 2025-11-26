@@ -36,6 +36,8 @@
 #include <sys/types.h>
 #include "diag/trace.h"
 
+using namespace std;
+
 // ----------------------------------------------------------------------------
 
 namespace __gnu_cxx
