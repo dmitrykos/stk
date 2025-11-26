@@ -118,25 +118,25 @@ private:
     \param[in] resolution: Resolution (see IKernelService::GetTickResolution).
     \return    Milliseconds.
 */
-__stk_forceinline int64_t GetMillisecondsFromTicks(int64_t ticks, int32_t resolution)
+__stk_forceinline int64_t GetMsecFromTicks(int64_t ticks, int32_t resolution)
 {
     return (ticks * resolution) / 1000;
 }
 
 /*! \brief     Get ticks from milliseconds.
-    \param[in] ms: Milliseconds to convert.
+    \param[in] msec: Milliseconds to convert.
     \param[in] resolution: Resolution (see IKernelService::GetTickResolution).
     \return    Ticks.
 */
-__stk_forceinline int64_t GetTicksFromMilliseconds(int64_t ms, int32_t resolution)
+__stk_forceinline int64_t GetTicksFromMsec(int64_t msec, int32_t resolution)
 {
-    return ms * 1000 / resolution;
+    return msec * 1000 / resolution;
 }
 
 /*! \brief     Get current time in milliseconds.
     \return    Milliseconds.
 */
-__stk_forceinline int64_t GetTimeNowMilliseconds()
+__stk_forceinline int64_t GetTimeNowMsec()
 {
     int32_t resolution = Singleton<IKernelService *>::Get()->GetTickResolution();
 
@@ -149,21 +149,21 @@ __stk_forceinline int64_t GetTimeNowMilliseconds()
 /*! \brief     Delay calling process.
     \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
     \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
-    \param[in] delay_ms: Delay time (milliseconds).
+    \param[in] msec: Delay time (milliseconds).
 */
-__stk_forceinline void Delay(uint32_t delay_ms)
+__stk_forceinline void Delay(uint32_t msec)
 {
-    Singleton<IKernelService *>::Get()->Delay(delay_ms);
+    Singleton<IKernelService *>::Get()->Delay(msec);
 }
 
 /*! \brief     Put calling process into a sleep state.
     \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
     \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
-    \param[in] sleep_ms: Sleep time (milliseconds).
+    \param[in] msec: Sleep time (milliseconds).
 */
-__stk_forceinline void Sleep(uint32_t sleep_ms)
+__stk_forceinline void Sleep(uint32_t msec)
 {
-    Singleton<IKernelService *>::Get()->Sleep(sleep_ms);
+    Singleton<IKernelService *>::Get()->Sleep(msec);
 }
 
 /*! \brief     Notify scheduler that it can switch to a next task.

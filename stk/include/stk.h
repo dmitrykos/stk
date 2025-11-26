@@ -288,20 +288,20 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         int32_t GetTickResolution() const  { return m_platform->GetTickResolution(); }
 
-        __stk_attr_noinline void Delay(uint32_t delay_ms) const
+        __stk_attr_noinline void Delay(uint32_t msec) const
         {
-            int64_t deadline = GetTicks() + GetTicksFromMilliseconds(delay_ms, GetTickResolution());
+            int64_t deadline = GetTicks() + GetTicksFromMsec(msec, GetTickResolution());
             while (GetTicks() < deadline)
             {
                 __stk_relax_cpu();
             }
         }
 
-        __stk_attr_noinline void Sleep(uint32_t sleep_ms)
+        __stk_attr_noinline void Sleep(uint32_t msec)
         {
             if ((_Mode & KERNEL_HRT) == 0)
             {
-                m_platform->SleepTicks((uint32_t)GetTicksFromMilliseconds(sleep_ms, GetTickResolution()));
+                m_platform->SleepTicks((uint32_t)GetTicksFromMsec(msec, GetTickResolution()));
             }
             else
             {
@@ -716,7 +716,7 @@ protected:
         OnTaskSleep(caller_SP, 1);
     }
 
-    void OnTaskSleep(size_t caller_SP, uint32_t sleep_ticks)
+    void OnTaskSleep(size_t caller_SP, int32_t ticks)
     {
         KernelTask *task = FindTaskBySP(caller_SP);
         STK_ASSERT(task != NULL);
@@ -726,7 +726,7 @@ protected:
             task->HrtOnWorkCompleted();
         }
 
-        task->m_time_sleep -= sleep_ticks;
+        task->m_time_sleep -= ticks;
 
         while (task->m_time_sleep < 0)
         {
