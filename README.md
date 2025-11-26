@@ -33,17 +33,18 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 
 ## Key Features
 
-| Feature | Description |
-|--------|-------------|
-| Soft real-time | No strict time slots, cooperative scheduling |
-| Hard real-time (`KERNEL_HRT`) | Guaranteed execution window, deadline monitoring |
-| Static task model (`KERNEL_STATIC`) | Tasks created once at startup |
+| Feature                               | Description |
+|---------------------------------------|-------------|
+| Soft real-time                        | No strict time slots, cooperative scheduling |
+| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring |
+| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup |
 | Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime |
-| Low-power aware | MCU enters sleep when no task is runnable |
-| Critical section API | Basic synchronization primitive |
-| Development mode (x86) | Run the same threaded application on Windows |
-| Tiny footprint | Minimal code unrelated to scheduling |
-| Easy porting | Requires very small BSP surface |
+| Low-power aware                       | MCU enters sleep when no task is runnable |
+| Critical section API                  | Basic synchronization primitive |
+| Development mode (x86)                | Run the same threaded application on Windows |
+| Tiny footprint                        | Minimal code unrelated to scheduling |
+| Easy porting                          | Requires very small BSP surface |
+| Multi-core support                    | One STK instance per physical core for optimal, lock-free performance |
 
 ---
 
@@ -95,6 +96,71 @@ class DriverTask : public stk::Task<256, ACCESS_PRIVILEGED> { ... };
 // Application task that parses USB or network data – runs unprivileged
 class ParserTask : public stk::Task<512, ACCESS_USER> { ... };
 ```
+
+### Multi-Core Support
+
+STK fully supports multi-core embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7, or multi-core RISC-V devices) through a **per-core instance model**. This design delivers maximum performance while keeping the kernel extremely lightweight.
+
+#### Design Philosophy
+- **One independent STK instance per physical CPU core**
+- **No global scheduler or inter-core orchestration**
+- Each core manages only its own tasks/threads → zero contention inside the kernel
+- Fully **asynchronous operation** between instances → **no locks, no spinlocks, no cache-line bouncing**
+- Highest possible performance and deterministic timing on each individual core
+
+#### Key Advantages
+| Benefit                          | Explanation                                                                 |
+|----------------------------------|-----------------------------------------------------------------------------|
+| Zero inter-core overhead         | No cross-core communication inside STK itself                               |
+| Minimal latency                  | Scheduling decisions are local to the core                                  |
+| Full cache efficiency            | All kernel data structures stay in the local core’s L1 cache                |
+| Independent timing domains       | One core can run hard real-time tasks while another runs soft real-time or dynamic tasks |
+| Simple & predictable             | No complex AMP/SMP synchronization logic required in the kernel            |
+
+#### Inter-Task Cooperation Across Cores
+Tasks running on different cores can safely communicate and synchronize using standard, well-established primitives:
+
+- Atomic operations (`__atomic_*`, `__ATOMIC_*`, LDREX/STREX, RISC-V A-extension)
+- Hardware semaphores or event flags (often provided by the MCU vendor)
+- Message queues or mailboxes in shared (cache-coherent) memory
+- Interrupt-based signaling (core A triggers an inter-processor interrupt on core B)
+- Ring buffers with volatile/head-tail pointers protected by memory barriers
+
+These mechanisms are already part of virtually every multi-core embedded SDK.
+
+#### Usage Example (Dual-Core System)
+
+```cpp
+void start_core0()
+{
+    // Core 0 – Real-time control tasks
+    static stk::Kernel<KERNEL_STATIC, 8, stk::SwitchStrategyRoundRobin, PlatformDefault> kernel_core0;
+
+    kernel_core0.Initialize(PERIODICITY_1MS); // Hard real-time tick
+    kernel_core0.AddTask(&motor_control_task);
+    kernel_core0.AddTask(&sensor_task);
+    // ...
+    kernel_core0.Start();
+}
+
+void start_core1()
+{
+    // Core 1 – Communication & logging tasks
+    static stk::Kernel<KERNEL_DYNAMIC, 6, stk::SwitchStrategyRoundRobin, PlatformDefault> kernel_core1;
+
+    kernel_core1.Initialize(PERIODICITY_10MS); // Softer timing
+    kernel_core1.AddTask(&ethernet_task);
+    kernel_core1.AddTask(&logging_task);
+    // ...
+    kernel_core1.Start();
+}
+```
+
+There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `build/example/project/eclipse/rpi/blinky-smp-rp2350w`.
+
+STK’s multi-core model is intentionally simple, fast, and lock-free.
+
+By giving every physical core its own completely independent scheduler instance, STK achieves near-native performance while still providing full thread abstraction, privilege separation, sleep/yield semantics, and optional hard real-time guarantees on every core.
 
 ---
 
