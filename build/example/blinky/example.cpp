@@ -45,7 +45,7 @@ static void SwitchOnLED(uint8_t task_id)
 
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class MyTask : public stk::Task<256, _AccessMode>
+class MyTask : public stk::Task<2048, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -91,6 +91,7 @@ private:
 
             ++count;
 
+            // change LED state
             SwitchOnLED(task_id);
 
             // sleep 1s and delegate work to another task switching another LED

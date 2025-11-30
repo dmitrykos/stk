@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>blinky-rp2350w</name>
+	<name>blinky-rp2350w-riscv</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -26,6 +26,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>deps/risc-v</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -46,6 +51,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/risc-v/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/boards</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -56,7 +66,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/cyw43-driver</name>
+			<name>deps/rpi/lib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -101,7 +111,17 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/risc-v/include/risc-v</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/boards/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -126,7 +146,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/cyw43-driver/src</name>
+			<name>deps/rpi/lib/cyw43-driver</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -256,11 +276,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/hardware_riscv_platform_timer</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/hardware_sha256</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -341,12 +356,22 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_bootsel_via_double_reset</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_clib_interface</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_crt0</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_cxx_options</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -392,6 +417,11 @@
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_malloc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_mem_ops</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -471,6 +501,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_stdio_uart</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_stdlib</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -541,14 +576,39 @@
 			<locationURI>PARENT-6-PROJECT_LOC/stk/src/stk.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/driver/rp2350w/cpu.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/driver/rp2350w/cpu.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/driver/rp2350w/led.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/driver/rp2350w/led.cpp</locationURI>
 		</link>
 		<link>
+			<name>deps/risc-v/include/risc-v/encoding.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/risc-v/include/risc-v/encoding.h</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/boards/include/boards</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w/memmap_riscv.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/pico2_w/memmap_riscv.ld</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w/pico_flash_region.ld</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/pico2_w/pico_flash_region.ld</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/common/hardware_claim/claim.c</name>
@@ -626,84 +686,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/common/pico_util/queue.c</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43.h</locationURI>
+			<name>deps/rpi/lib/cyw43-driver/firmware</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_btbus.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_btbus.h</locationURI>
+			<name>deps/rpi/lib/cyw43-driver/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_bthci_uart.c</name>
+			<name>deps/rpi/rp2350/hardware_regs/RP2350.svd</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_bthci_uart.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_config.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_config.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_country.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_country.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_ctrl.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ctrl.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_debug_pins.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_debug_pins.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_internal.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_internal.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_ll.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ll.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_ll.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ll.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_lwip.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_lwip.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_sdio.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_sdio.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_sdio.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_sdio.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_spi.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_spi.h</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_stats.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_stats.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/cyw43-driver/src/cyw43_stats.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_stats.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2350/hardware_regs/RP2350.svd</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2350/hardware_regs/include</name>
@@ -809,6 +804,11 @@
 			<name>deps/rpi/rp2_common/hardware_exception/exception.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/hardware_exception/exception.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/hardware_exception/exception_table_riscv.S</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/hardware_exception/exception_table_riscv.S</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/hardware_exception/include</name>
@@ -922,11 +922,6 @@
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/hardware_riscv/include</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/hardware_riscv_platform_timer/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1101,6 +1096,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_bootsel_via_double_reset/pico_bootsel_via_double_reset.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_bootsel_via_double_reset/pico_bootsel_via_double_reset.c</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_clib_interface/doc.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_clib_interface/doc.h</locationURI>
@@ -1116,9 +1116,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_clib_interface/newlib_interface.c</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_crt0/crt0.S</name>
+			<name>deps/rpi/rp2_common/pico_crt0/crt0_riscv.S</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_crt0/crt0.S</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_crt0/crt0_riscv.S</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_crt0/doc.h</name>
@@ -1131,14 +1131,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_cxx_options/doc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cxx_options/doc.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_cxx_options/new_delete.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cxx_options/new_delete.cpp</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_cyw43_arch/cyw43_arch.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cyw43_arch/cyw43_arch.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_cyw43_arch/cyw43_arch_freertos.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_cyw43_arch/cyw43_arch_freertos.c</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_cyw43_arch/cyw43_arch_poll.c</name>
@@ -1176,21 +1181,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_double/double_conv_m33.S</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_double/double_conv_m33.S</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_double/double_math.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_double/double_math.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_double/double_sci_m33.S</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_double/double_sci_m33.S</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/pico_double/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1211,24 +1201,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_float/float_common_m33.S</name>
+			<name>deps/rpi/rp2_common/pico_float/float_single_hazard3.S</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_float/float_common_m33.S</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_float/float_conv32_vfp.S</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_float/float_conv32_vfp.S</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_float/float_math.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_float/float_math.c</locationURI>
-		</link>
-		<link>
-			<name>deps/rpi/rp2_common/pico_float/float_sci_m33_vfp.S</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_float/float_sci_m33_vfp.S</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_float/float_single_hazard3.S</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_float/include</name>
@@ -1251,11 +1226,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_int64_ops/pico_int64_ops_aeabi.S</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_int64_ops/pico_int64_ops_aeabi.S</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/pico_malloc/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1264,6 +1234,16 @@
 			<name>deps/rpi/rp2_common/pico_malloc/malloc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_malloc/malloc.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_mem_ops/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_mem_ops/mem_ops.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_mem_ops/mem_ops.c</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_multicore/include</name>
@@ -1386,11 +1366,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_standard_link/doc.h</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_standard_link/pico_flash_region.bzl</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_standard_link/pico_flash_region.bzl</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/pico_standard_link/pico_flash_region.template.ld</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_standard_link/pico_flash_region.template.ld</locationURI>
@@ -1399,6 +1374,16 @@
 			<name>deps/rpi/rp2_common/pico_status_led/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_status_led/status_led.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_status_led/status_led.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_status_led/ws2812.pio</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_status_led/ws2812.pio</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_stdio/include</name>
@@ -1419,6 +1404,16 @@
 			<name>deps/rpi/rp2_common/pico_stdio_semihosting/stdio_semihosting.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_stdio_semihosting/stdio_semihosting.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_stdio_uart/include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_stdio_uart/stdio_uart.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_stdio_uart/stdio_uart.c</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_stdlib/stdlib.c</name>
@@ -1451,7 +1446,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stk/include/arch/arm</name>
+			<name>deps/stk/include/arch/risc-v</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -1459,11 +1454,6 @@
 			<name>deps/stk/include/arch/stk_arch_common.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/stk_arch_common.h</locationURI>
-		</link>
-		<link>
-			<name>deps/stk/include/arch/x86</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/strategy/stk_strategy_rrobin.h</name>
@@ -1476,9 +1466,274 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/src/arch/risc-v</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/src/arch/x86</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/0xcb_helios.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/0xcb_helios.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_feather_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_feather_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_feather_rp2040_adalogger.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_feather_rp2040_adalogger.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_feather_rp2040_usb_host.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_feather_rp2040_usb_host.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_feather_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_feather_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_fruit_jam.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_fruit_jam.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_itsybitsy_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_itsybitsy_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_kb2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_kb2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_macropad_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_macropad_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_qtpy_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_qtpy_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/adafruit_trinkey_qt2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/adafruit_trinkey_qt2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/amethyst_fpga.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/amethyst_fpga.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/archi.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/archi.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/arduino_nano_rp2040_connect.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/arduino_nano_rp2040_connect.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/cytron_maker_pi_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/cytron_maker_pi_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/datanoisetv_rp2040_dsp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/datanoisetv_rp2040_dsp.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/datanoisetv_rp2350_dsp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/datanoisetv_rp2350_dsp.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/defcon32_badge.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/defcon32_badge.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/eelectronicparts_picomini_16mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/eelectronicparts_picomini_16mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/eelectronicparts_picomini_2mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/eelectronicparts_picomini_2mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/eelectronicparts_picomini_4mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/eelectronicparts_picomini_4mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/eelectronicparts_picomini_8mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/eelectronicparts_picomini_8mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/eetree_gamekit_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/eetree_gamekit_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/garatronic_pybstick26_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/garatronic_pybstick26_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_24.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_24.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_24ct.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_24ct.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_24t.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_24t.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_28.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_28.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_28ct.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_28ct.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_28t.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_28t.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_32.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_32ct.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_32ct.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_32t.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_32t.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_35.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_35.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_35ct.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_35ct.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/gen4_rp2350_35t.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/gen4_rp2350_35t.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/hellbender_0001.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/hellbender_0001.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/hellbender_2350A_devboard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/hellbender_2350A_devboard.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/ilabs_challenger_rp2350_bconnect.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/ilabs_challenger_rp2350_bconnect.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/ilabs_challenger_rp2350_wifi_ble.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/ilabs_challenger_rp2350_wifi_ble.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/ilabs_opendec02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/ilabs_opendec02.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/machdyne_werkzeug.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/machdyne_werkzeug.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/melopero_perpetuo_rp2350_lora.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/melopero_perpetuo_rp2350_lora.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/melopero_shake_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/melopero_shake_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/metrotech_xerxes_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/metrotech_xerxes_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/net8086_usb_interposer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/net8086_usb_interposer.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/none.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/none.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/nullbits_bit_c_pro.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/nullbits_bit_c_pro.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/olimex_rp2350_xl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/olimex_rp2350_xl.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/olimex_rp2350_xxl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/olimex_rp2350_xxl.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/phyx_rick_tny_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/phyx_rick_tny_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pi-plates_micropi.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pi-plates_micropi.h</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/boards/include/boards/pico.h</name>
@@ -1501,6 +1756,386 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pico_w.h</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_badger2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_badger2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_interstate75.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_interstate75.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_keybow2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_keybow2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_motor2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_motor2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_pga2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_pga2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_pga2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_pga2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_pico_plus2_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_pico_plus2_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_pico_plus2_w_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_pico_plus2_w_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_picolipo_16mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_picolipo_16mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_picolipo_4mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_picolipo_4mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_picosystem.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_picosystem.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_plasma2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_plasma2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_plasma2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_plasma2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_servo2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_servo2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_tiny2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_tiny2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_tiny2040_2mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_tiny2040_2mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pimoroni_tiny2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pimoroni_tiny2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pololu_3pi_2040_robot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pololu_3pi_2040_robot.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/pololu_zumo_2040_robot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/pololu_zumo_2040_robot.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/seeed_xiao_rp2040.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/seeed_xiao_rp2040.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/seeed_xiao_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/seeed_xiao_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/solderparty_rp2040_stamp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/solderparty_rp2040_stamp.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/solderparty_rp2040_stamp_carrier.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/solderparty_rp2040_stamp_carrier.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/solderparty_rp2040_stamp_round_carrier.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/solderparty_rp2040_stamp_round_carrier.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/solderparty_rp2350_stamp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/solderparty_rp2350_stamp.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/solderparty_rp2350_stamp_xl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/solderparty_rp2350_stamp_xl.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_iotnode_lorawan_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_iotnode_lorawan_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_iotredboard_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_iotredboard_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_micromod.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_micromod.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_promicro.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_promicro.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_promicro_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_promicro_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_thingplus.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_thingplus.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_thingplus_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_thingplus_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/sparkfun_xrp_controller.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/sparkfun_xrp_controller.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/switchscience_picossci2_conta_base.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/switchscience_picossci2_conta_base.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/switchscience_picossci2_dev_board.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/switchscience_picossci2_dev_board.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/switchscience_picossci2_micro.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/switchscience_picossci2_micro.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/switchscience_picossci2_rp2350_breakout.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/switchscience_picossci2_rp2350_breakout.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/switchscience_picossci2_tiny.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/switchscience_picossci2_tiny.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/tinycircuits_thumby_color_rp2350.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/tinycircuits_thumby_color_rp2350.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/uugear_wittypi5_hat_plus.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/uugear_wittypi5_hat_plus.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/vgaboard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/vgaboard.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_pico_cam_a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_pico_cam_a.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_ble.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_ble.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_eth.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_eth.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_geek.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_geek.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_lcd_0.96.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_lcd_0.96.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_lcd_1.28.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_lcd_1.28.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_matrix.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_matrix.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_one.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_one.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_pizero.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_pizero.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_plus_16mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_plus_16mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_plus_4mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_plus_4mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_power_management_hat_b.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_power_management_hat_b.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_tiny.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_tiny.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_touch_lcd_1.28.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_touch_lcd_1.28.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2040_zero.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2040_zero.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_eth.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_eth.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_geek.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_geek.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_lcd_0.96.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_lcd_0.96.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_lcd_1.28.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_lcd_1.28.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_one.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_one.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_plus_16mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_plus_16mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_plus_4mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_plus_4mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_tiny.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_tiny.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_touch_lcd_1.28.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_touch_lcd_1.28.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_usb_a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_usb_a.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/waveshare_rp2350_zero.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/waveshare_rp2350_zero.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/weact_studio_rp2040_16mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/weact_studio_rp2040_16mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/weact_studio_rp2040_2mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/weact_studio_rp2040_2mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/weact_studio_rp2040_4mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/weact_studio_rp2040_4mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/weact_studio_rp2040_8mb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/weact_studio_rp2040_8mb.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/weact_studio_rp2350b_core.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/weact_studio_rp2350b_core.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/wiznet_w5100s_evb_pico.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/wiznet_w5100s_evb_pico.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/include/boards/wiznet_w5100s_evb_pico2.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/include/boards/wiznet_w5100s_evb_pico2.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w/include/pico</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/common/hardware_claim/include/hardware</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1519,6 +2154,146 @@
 			<name>deps/rpi/common/pico_util/include/pico</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/README.md</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/README.md</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/cyw43_btfw_1yn.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/cyw43_btfw_1yn.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/cyw43_btfw_43439.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/cyw43_btfw_43439.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/cyw43_btfw_4343A1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/cyw43_btfw_4343A1.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/w43439A0_7_95_49_00_combined.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/w43439A0_7_95_49_00_combined.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/w43439_sdio_1yn_7_95_59_combined.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/w43439_sdio_1yn_7_95_59_combined.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/w4343WA1_7_45_98_102_combined.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/w4343WA1_7_45_98_102_combined.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/w4343WA1_7_45_98_50_combined.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/w4343WA1_7_45_98_50_combined.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/wb43439A0_7_95_49_00_combined.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/wb43439A0_7_95_49_00_combined.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/wifi_nvram_1dx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/wifi_nvram_1dx.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/wifi_nvram_1yn.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/wifi_nvram_1yn.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/firmware/wifi_nvram_43439.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/firmware/wifi_nvram_43439.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_btbus.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_btbus.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_bthci_uart.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_bthci_uart.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_config.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_config.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_country.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_country.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_ctrl.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ctrl.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_debug_pins.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_debug_pins.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_internal.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_internal.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_ll.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ll.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_ll.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_ll.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_lwip.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_lwip.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_sdio.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_sdio.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_sdio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_sdio.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_spi.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_spi.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_stats.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_stats.c</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/lib/cyw43-driver/src/cyw43_stats.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/lib/cyw43-driver/src/cyw43_stats.h</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2350/hardware_regs/include/hardware</name>
@@ -1656,11 +2431,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/hardware_riscv_platform_timer/include/hardware</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/hardware_sha256/include/hardware</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1756,11 +2526,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_crt0/rp2350/memmap_no_flash.ld</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/pico_crt0/rp2350/pico_flash_region.ld</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_crt0/rp2350/pico_flash_region.ld</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/pico_cyw43_arch/include/pico</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1841,6 +2606,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_mem_ops/include/pico</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_multicore/include/pico</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1906,6 +2676,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_stdio_uart/include/pico</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_time_adapter/include/pico</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1921,14 +2696,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/stk/include/arch/arm/cortex-m</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>deps/stk/include/arch/x86/win32</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>deps/stk/include/arch/risc-v/stk_arch_risc-v.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/risc-v/stk_arch_risc-v.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm/cortex-m</name>
@@ -1936,9 +2706,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/src/arch/risc-v/stk_arch_risc-v.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/src/arch/risc-v/stk_arch_risc-v.cpp</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/src/arch/x86/win32</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/boards/pico2_w/include/pico/config_autogen.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/boards/pico2_w/include/pico/config_autogen.h</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/common/hardware_claim/include/hardware/claim.h</name>
@@ -2156,11 +2936,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/hardware_riscv/include/hardware/riscv.h</locationURI>
 		</link>
 		<link>
-			<name>deps/rpi/rp2_common/hardware_riscv_platform_timer/include/hardware/riscv_platform_timer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/hardware_riscv_platform_timer/include/hardware/riscv_platform_timer.h</locationURI>
-		</link>
-		<link>
 			<name>deps/rpi/rp2_common/hardware_sha256/include/hardware/sha256.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/hardware_sha256/include/hardware/sha256.h</locationURI>
@@ -2229,6 +3004,11 @@
 			<name>deps/rpi/rp2_common/pico_async_context/include/pico/async_context_base.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_async_context/include/pico/async_context_base.h</locationURI>
+		</link>
+		<link>
+			<name>deps/rpi/rp2_common/pico_async_context/include/pico/async_context_freertos.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_async_context/include/pico/async_context_freertos.h</locationURI>
 		</link>
 		<link>
 			<name>deps/rpi/rp2_common/pico_async_context/include/pico/async_context_poll.h</name>
@@ -2336,6 +3116,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_malloc/include/pico/malloc.h</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_mem_ops/include/pico/mem_ops.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_mem_ops/include/pico/mem_ops.h</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_multicore/include/pico/multicore.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_multicore/include/pico/multicore.h</locationURI>
@@ -2406,6 +3191,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_stdio_semihosting/include/pico/stdio_semihosting.h</locationURI>
 		</link>
 		<link>
+			<name>deps/rpi/rp2_common/pico_stdio_uart/include/pico/stdio_uart.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_stdio_uart/include/pico/stdio_uart.h</locationURI>
+		</link>
+		<link>
 			<name>deps/rpi/rp2_common/pico_time_adapter/include/pico/time_adapter.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/pico_time_adapter/include/pico/time_adapter.h</locationURI>
@@ -2419,16 +3209,6 @@
 			<name>deps/rpi/rp2_common/tinyusb/include/bsp/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/tinyusb/include/bsp/board.h</locationURI>
-		</link>
-		<link>
-			<name>deps/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/arm/cortex-m/stk_arch_arm-cortex-m.h</locationURI>
-		</link>
-		<link>
-			<name>deps/stk/include/arch/x86/win32/stk_arch_x86-win32.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/x86/win32/stk_arch_x86-win32.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm/cortex-m/stk_arch_arm-cortex-m.cpp</name>
@@ -3230,17 +4010,8 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/cmsis/stub/CMSIS/Device/RP2350/Include/system_RP2350.h</locationURI>
 		</link>
-		<link>
-			<name>deps/rpi/rp2_common/cmsis/stub/CMSIS/Device/RP2350/Source/system_RP2350.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/deps/target/rpi/rp2_common/cmsis/stub/CMSIS/Device/RP2350/Source/system_RP2350.c</locationURI>
-		</link>
 	</linkedResources>
 	<variableList>
-		<variable>
-			<name>PICO_SDK</name>
-			<value>file:/E:/SVN/pico-sdk</value>
-		</variable>
 		<variable>
 			<name>copy_PARENT</name>
 			<value>$%7BPARENT-2-ECLIPSE_HOME%7D/SVN/private/stk</value>

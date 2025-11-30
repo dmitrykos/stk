@@ -63,6 +63,20 @@ public:
     int32_t                   m_tick_resolution; //!< system tick resolution (microseconds)
 };
 
+/*! \def   GetContext
+    \brief Get platform's context.
+*/
+/*! \def   SetContext
+    \brief Set platform's context.
+*/
+#if (_STK_ARCH_CPU_COUNT == 1)
+    #define GetContext() g_Context[0]
+    #define SetContext(CTX) g_Context[0] = (CTX)
+#else
+    #define GetContext() g_Context[_STK_ARCH_GET_CPU_ID()]
+    #define SetContext(CTX) g_Context[_STK_ARCH_GET_CPU_ID()] = (CTX)
+#endif
+
 /*! \def   STK_TIME_TO_CPU_TICKS_USEC
     \brief Convert time (microseconds) to CPU ticks.
 */

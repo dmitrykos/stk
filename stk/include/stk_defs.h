@@ -159,6 +159,13 @@
     #define STK_STACK_MEMORY_FILLER ((size_t)(sizeof(size_t) <= 4 ? 0xdeadbeef : 0xdeadbeefdeadbeef))
 #endif
 
+/*! \def   _STK_ARCH_CPU_COUNT
+    \brief Physical CPU count (default: 1).
+*/
+#ifndef _STK_ARCH_CPU_COUNT
+    #define _STK_ARCH_CPU_COUNT 1
+#endif
+
 /*! \def   STK_STACK_SIZE_MIN
     \brief Minimal stack size (number of size_t).
     \see   TrapStackStackMemory
@@ -169,7 +176,15 @@
            stk_config.h file.
 */
 #ifndef STK_STACK_SIZE_MIN
-    #define STK_STACK_SIZE_MIN 32
+    #if (__riscv_32e != 1)
+        #if (__riscv_flen == 0)
+            #define STK_STACK_SIZE_MIN (64 * 4) // note: smaller size causes memory corruption on RP2350
+        #else
+            #define STK_STACK_SIZE_MIN (128 * 4)
+        #endif
+    #else
+        #define STK_STACK_SIZE_MIN 32
+    #endif
 #endif
 
 /*! \def   STK_ALLOCATE_COUNT

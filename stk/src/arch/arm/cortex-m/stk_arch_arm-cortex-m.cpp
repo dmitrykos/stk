@@ -19,18 +19,6 @@
 #include "arch/stk_arch_common.h"
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
-#ifndef _STK_ARCH_CPU_COUNT
-    #define _STK_ARCH_CPU_COUNT 1
-#endif
-
-#if (_STK_ARCH_CPU_COUNT == 1)
-    #define GetContext() g_Context[0]
-    #define SetContext(CTX) g_Context[0] = (CTX)
-#else
-    #define GetContext() g_Context[_STK_ARCH_GET_CPU_ID()]
-    #define SetContext(CTX) g_Context[_STK_ARCH_GET_CPU_ID()] = (CTX)
-#endif
-
 using namespace stk;
 
 #define STK_CORTEX_M_CRITICAL_SECTION_START(SES) do { SES = __get_PRIMASK(); __disable_irq(); } while (0)

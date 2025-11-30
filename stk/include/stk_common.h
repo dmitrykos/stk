@@ -27,7 +27,7 @@ typedef void (*RunFuncType) (void *user_data);
 /*! \enum  EAccessMode
     \brief Hardware access mode by the user task.
 */
-enum EAccessMode
+enum EAccessMode : int32_t
 {
     ACCESS_USER = 0,  //!< Unprivileged access mode (access to some hardware is restricted, see CPU manual for details).
     ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
@@ -161,7 +161,7 @@ private:
 /*! \class IStackMemory
     \brief Interface for a stack memory region.
 */
-class IStackMemory
+__attribute__((section(".data"))) class IStackMemory
 {
 public:
     /*! \brief Get pointer to the stack memory.

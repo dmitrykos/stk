@@ -256,12 +256,12 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         bool HrtIsDeadlineMissed(int32_t duration) const { return (duration > m_hrt[0].deadline); }
 
-        ITask      *m_user;       //!< user task
-        Stack       m_stack;      //!< stack descriptor
-        uint32_t    m_state;      //!< state flags
-        int32_t     m_time_sleep; //!< time to sleep (ticks)
-        SrtInfo     m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
-        HrtInfo     m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        ITask    *m_user;       //!< user task
+        Stack     m_stack;      //!< stack descriptor
+        uint32_t  m_state;      //!< state flags
+        int32_t   m_time_sleep; //!< time to sleep (ticks)
+        SrtInfo   m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
+        HrtInfo   m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
     /*! \class KernelService
@@ -766,6 +766,7 @@ protected:
         {
             KernelTask *task = &m_task_storage[i];
 
+            // advance by +1 millisecond
             if (task->m_time_sleep < 0)
                 ++task->m_time_sleep;
         }
@@ -1120,7 +1121,7 @@ protected:
 
     /*! \typedef ContextMem
         \brief   Memory for the context.
-        \note    Adjust size (66) based on platform implementation if fails on assert inside IPlatform::Initialize().
+        \note    Adjust size (64) based on platform implementation if fails on assert inside IPlatform::Initialize().
                  All platforms are using jmp_buf which may have different size depending on compiler version, therefore
                  take its size + approximate size of the platform implementation.
     */
