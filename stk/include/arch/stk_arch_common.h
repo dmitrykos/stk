@@ -54,6 +54,9 @@ public:
         while (itr < stack_top)
             *itr++ = STK_STACK_MEMORY_FILLER;
 
+        // expecting 16-byte aligned memory for a stack
+        STK_ASSERT(((uintptr_t)stack_top & (16 - 1)) == 0);
+
         return stack_top;
     }
 
@@ -71,10 +74,8 @@ public:
 */
 #if (_STK_ARCH_CPU_COUNT == 1)
     #define GetContext() g_Context[0]
-    #define SetContext(CTX) g_Context[0] = (CTX)
 #else
     #define GetContext() g_Context[_STK_ARCH_GET_CPU_ID()]
-    #define SetContext(CTX) g_Context[_STK_ARCH_GET_CPU_ID()] = (CTX)
 #endif
 
 /*! \def   STK_TIME_TO_CPU_TICKS_USEC

@@ -54,7 +54,7 @@ static void SwitchOnLED()
 
 // Task's core (thread)
 template <uint8_t _TaskId, stk::EAccessMode _AccessMode>
-class MyTask : public stk::Task<256, _AccessMode>
+class MyTask : public stk::Task<2048, _AccessMode>
 {
 public:
 #if 0

@@ -16,16 +16,26 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
+#include "stk_helper.h"
 #include "arch/stk_arch_common.h"
 #include "arch/risc-v/stk_arch_risc-v.h"
 
 using namespace stk;
+
+#ifndef STK_RISCV_ISR_SECTION
+    #define STK_RISCV_ISR_SECTION
+#endif
 
 // RISC-V does not have PendSV interrupt functionality similar to Arm Cortex-M, so reserve
 // this functionality for the future extension
 //#define _STK_RISCV_USE_PENDSV
 #ifdef _STK_RISCV_USE_PENDSV
 #error RISC-V has no PendSV interrupt functionality similar to Arm Cortex-M!
+#endif
+
+// Set tick timer (MTIMECMP) per physical CPU core (1) or not (0)
+#ifndef STK_RISCV_CLINT_MTIMECMP_PER_HART
+    #define STK_RISCV_CLINT_MTIMECMP_PER_HART (1)
 #endif
 
 // CLINT
@@ -60,8 +70,8 @@ using namespace stk;
 
 #define STK_RISCV_ISR extern "C" STK_RISCV_ISR_SECTION __attribute__ ((interrupt ("machine")))
 
-//! Use main stack for ISR handling.
-#define STK_RISCV_USE_MAIN_STACK_FOR_ISR
+//! Use private stack allocated by Context of size STK_RISCV_ISR_STACK_SIZE for handling ISRs.
+#define STK_RISCV_ISR_STACK_SIZE 256
 
 //! Timer handler.
 #ifndef _STK_SYSTICK_HANDLER
@@ -152,19 +162,6 @@ using namespace stk;
 #define STK_RISCV_REG_INDEX(REG) (-((STK_RISCV_REGISTER_COUNT + 1) - REG))
 #define STK_RISCV_SRV_INDEX(REG) (STK_RISCV_REG_INDEX(REG) - STK_SERVICE_SLOTS)
 
-#ifdef __NEWLIB__
-/*! \brief Placement new operator for allocation of Context.
-*/
-__stk_forceinline void *operator new(std::size_t, void *ptr) noexcept
-{
-    return ptr;
-}
-__stk_forceinline void operator delete(void*, void*) noexcept
-{
-    // required counterpart for new(), does nothing
-}
-#endif
-
 static __stk_forceinline void HW_DisableIrq()
 {
     __asm volatile("csrrci zero, mstatus, %0"
@@ -215,8 +212,8 @@ static __stk_forceinline uint64_t HW_GetMtime()
 #if ( __riscv_xlen > 32)
     return *((volatile uint64_t *)STK_RISCV_CLINT_MTIME_ADDR);
 #else
-    volatile uint32_t *mtime_hi = ((volatile uint32_t *)STK_RISCV_CLINT_MTIME_ADDR) + 1;
-    volatile uint32_t *mtime_lo = ((volatile uint32_t *)STK_RISCV_CLINT_MTIME_ADDR);
+    volatile uint32_t *mtime_hi = ((uint32_t *)STK_RISCV_CLINT_MTIME_ADDR) + 1;
+    volatile uint32_t *mtime_lo = ((uint32_t *)STK_RISCV_CLINT_MTIME_ADDR);
 
     uint32_t hi, lo;
     do
@@ -238,7 +235,7 @@ static __stk_forceinline void HW_SetMtimecmp(uint64_t advance)
     uint64_t next = HW_GetMtime() + advance;
 
     uint32_t hart;
-#ifdef STK_RISCV_CLINT_MTIMECMP_PER_HART
+#if STK_RISCV_CLINT_MTIMECMP_PER_HART
     hart = read_csr(mhartid);
 #else
     hart = 0;
@@ -246,11 +243,12 @@ static __stk_forceinline void HW_SetMtimecmp(uint64_t advance)
 #if (__riscv_xlen == 64)
     ((volatile uint64_t *)STK_RISCV_CLINT_MTIMECMP_ADDR)[hart] = next;
 #else
-    volatile uint32_t *mtime_lo = (volatile uint32_t *)((uint64_t *)STK_RISCV_CLINT_MTIMECMP_ADDR + hart);
+    volatile uint32_t *mtime_lo = (uint32_t *)((uint64_t *)STK_RISCV_CLINT_MTIMECMP_ADDR + hart);
     volatile uint32_t *mtime_hi = mtime_lo + 1;
 
-    STK_ASSERT(((uintptr_t)mtime_lo & 3) == 0);
-    STK_ASSERT(((uintptr_t)mtime_hi & 3) == 0);
+    // expecting 4-byte aligned memory
+    STK_ASSERT(((uintptr_t)mtime_lo & (4 - 1)) == 0);
+    STK_ASSERT(((uintptr_t)mtime_hi & (4 - 1)) == 0);
 
     // prevent unexpected interrupt by setting some very large value to the high part
     // details: https://riscv.org/wp-content/uploads/2017/05/riscv-privileged-v1.10.pdf, page 31
@@ -286,12 +284,6 @@ static __stk_forceinline void ScheduleContextSwitch()
 #endif
 }
 
-//! ISR handler's stack memory.
-#ifndef STK_RISCV_USE_MAIN_STACK_FOR_ISR
-typedef StackMemoryDef<128> TIsrStackMemory;
-static TIsrStackMemory::Type g_IsrStackMem = {};
-#endif
-
 //! Define _STK_SYSTEM_CLOCK_VAR privately by the driver if _STK_SYSTEM_CLOCK_EXTERNAL
 //! is 0 or undefined.
 #if !_STK_SYSTEM_CLOCK_EXTERNAL
@@ -305,20 +297,27 @@ static struct Context : public PlatformContext
     {
         PlatformContext::Initialize(handler, exit_trap, resolution_us);
 
-    #ifndef STK_RISCV_USE_MAIN_STACK_FOR_ISR
-        m_stack_main.SP = (size_t)&g_IsrStackMem[TIsrStackMemory::SIZE];
-    #else
-        m_stack_main.SP = STK_STACK_MEMORY_FILLER;
-    #endif
-        m_stack_main.mode = ACCESS_PRIVILEGED;
-        m_csu           = 0;
-        m_csu_nesting   = 0;
-        m_overrider     = NULL;
-        m_specific      = NULL;
-        m_tick_period   = STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, resolution_us);
-        m_starting      = false;
-        m_started       = false;
-        m_exiting       = false;
+        // init ISR's stack
+        {
+            StackMemoryWrapper<STK_RISCV_ISR_STACK_SIZE> stack_isr_mem(&m_stack_isr_mem);
+            m_stack_isr.SP   = (size_t)InitStackMemory(&stack_isr_mem);
+            m_stack_isr.mode = ACCESS_PRIVILEGED;
+        }
+
+        // init Main stack
+        {
+            m_stack_main.SP   = STK_STACK_MEMORY_FILLER;
+            m_stack_main.mode = ACCESS_PRIVILEGED;
+        }
+
+        m_csu         = 0;
+        m_csu_nesting = 0;
+        m_overrider   = NULL;
+        m_specific    = NULL;
+        m_tick_period = STK_TIME_TO_CPU_TICKS_USEC(_STK_SYSTEM_CLOCK_VAR, resolution_us);
+        m_starting    = false;
+        m_started     = false;
+        m_exiting     = false;
     }
 
     __stk_forceinline void OnTick()
@@ -347,21 +346,24 @@ static struct Context : public PlatformContext
             STK_RISCV_CRITICAL_SECTION_END(m_csu);
     }
 
-    typedef IPlatform::IEventOverrider           eovrd_t;
-    typedef PlatformRiscV::ISpecificEventHandler sehndl_t;
+    typedef IPlatform::IEventOverrider                               eovrd_t;
+    typedef PlatformRiscV::ISpecificEventHandler                     sehndl_t;
+    typedef StackMemoryWrapper<STK_RISCV_ISR_STACK_SIZE>::MemoryType isrmem_t;
 
-    Stack     m_stack_main;  //!< stack info
-    jmp_buf   m_exit_buf;    //!< saved context of the exit point
-    size_t    m_csu;         //!< user critical session
-    uint32_t  m_csu_nesting; //!< depth of user critical session nesting
-    eovrd_t  *m_overrider;   //!< platform events overrider
-    sehndl_t *m_specific;    //!< platform-specific event handler
-    int32_t   m_tick_period; //!< system tick periodicity (microseconds, ticks)
-    bool      m_starting;    //!< 'true' when in is being started
-    bool      m_started;     //!< 'true' when in started state
-    bool      m_exiting;     //!< 'true' when is exiting the scheduling process
+    Stack     m_stack_main;    //!< main stack info
+    Stack     m_stack_isr;     //!< isr stack info
+    jmp_buf   m_exit_buf;      //!< saved context of the exit point
+    isrmem_t  m_stack_isr_mem; //!< ISR stack memory
+    size_t    m_csu;           //!< user critical session
+    uint32_t  m_csu_nesting;   //!< depth of user critical session nesting
+    eovrd_t  *m_overrider;     //!< platform events overrider
+    sehndl_t *m_specific;      //!< platform-specific event handler
+    int32_t   m_tick_period;   //!< system tick periodicity (microseconds, ticks)
+    bool      m_starting;      //!< 'true' when in is being started
+    bool      m_started;       //!< 'true' when in started state
+    bool      m_exiting;       //!< 'true' when is exiting the scheduling process
 }
-* g_Context[_STK_ARCH_CPU_COUNT] = {};
+g_Context[_STK_ARCH_CPU_COUNT];
 
 void PlatformRiscV::ProcessTick()
 {
@@ -369,7 +371,7 @@ void PlatformRiscV::ProcessTick()
     size_t cs;
     STK_RISCV_CRITICAL_SECTION_START(cs);
 
-    GetContext()->OnTick();
+    GetContext().OnTick();
 
     STK_RISCV_CRITICAL_SECTION_END(cs);
 #else
@@ -474,9 +476,9 @@ static __stk_forceinline void SaveContext()
     SREG " sp, 0(t0)                 \n"
     : /* output: none */
 #ifdef _STK_RISCV_USE_PENDSV
-    : "m"(GetContext()->m_stack_idle)
+    : "m"(GetContext().m_stack_idle)
 #else
-    : "m"(GetContext()->m_stack_active)
+    : "m"(GetContext().m_stack_active)
 #endif
     : /* clobbers: none */);
 }
@@ -488,7 +490,7 @@ static __stk_forceinline void LoadContext()
     LREG " t0, %0                    \n"
     LREG " sp, 0(t0)                 \n" // load
     : /* output: none */
-    : "m"(GetContext()->m_stack_active)
+    : "m"(GetContext().m_stack_active)
     : /* clobbers: none */);
 
     __asm volatile(
@@ -605,7 +607,7 @@ static __stk_forceinline void SaveMainSP()
 {
     __asm volatile(
     SREG " sp, %0"
-    : "=m"(GetContext()->m_stack_main)
+    : "=m"(GetContext().m_stack_main)
     : /* input: none */
     : /* clobbers: none */);
 }
@@ -615,7 +617,16 @@ static __stk_forceinline void LoadMainSP()
     __asm volatile(
     LREG " sp, %0"
     : /* output: none */
-    : "m"(GetContext()->m_stack_main)
+    : "m"(GetContext().m_stack_main)
+    : /* clobbers: none */);
+}
+
+static __stk_forceinline void LoadIsrSP()
+{
+    __asm volatile(
+    LREG " sp, %0"
+    : /* output: none */
+    : "m"(GetContext().m_stack_isr)
     : /* clobbers: none */);
 }
 
@@ -629,14 +640,14 @@ __stk_forceinline void OnTaskRun()
 extern "C" STK_RISCV_ISR_SECTION __stk_attr_used void TrySwitchContext() // __stk_attr_used for LTO
 {
     // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
-    STK_ASSERT(GetContext()->m_started);
-    STK_ASSERT(GetContext()->m_handler != NULL);
+    STK_ASSERT(GetContext().m_started);
+    STK_ASSERT(GetContext().m_handler != NULL);
 
     // reschedule timer (note: before OnTick because timer can be stopped in Stop)
-    HW_SetMtimecmp(GetContext()->m_tick_period);
+    HW_SetMtimecmp(GetContext().m_tick_period);
 
     // process tick
-    GetContext()->OnTick();
+    GetContext().OnTick();
 }
 
 #ifdef _STK_RISCV_USE_PENDSV
@@ -646,7 +657,7 @@ STK_RISCV_ISR void _STK_SYSTICK_HANDLER()
     size_t sp = HW_GetCallerSP();
 
     // load SP of the main stack to handle ISR
-    LoadMainSP();
+    LoadIsrSP();
 
     // try switch context (do via asm function call to avoid inlining)
     __asm volatile(
@@ -670,8 +681,8 @@ extern "C" STK_RISCV_ISR_SECTION __stk_attr_naked void _STK_SYSTICK_HANDLER()
 
     // internal ISR processing
     {
-        // load SP of the main stack to handle ISR
-        LoadMainSP();
+        // load SP of ISR's stack for handling TrySwitchContext
+        LoadIsrSP();
 
         // try switch context (do via asm function call to avoid inlining)
         __asm volatile(
@@ -690,10 +701,8 @@ extern "C" STK_RISCV_ISR_SECTION __stk_attr_naked void _STK_SYSTICK_HANDLER()
 
 static __stk_forceinline void StartScheduling()
 {
-#ifdef STK_RISCV_USE_MAIN_STACK_FOR_ISR
-    // save SP of main stack to reuse it for subsequent ISRs
+    // save SP of main stack to reuse it for scheduler exit
     SaveMainSP();
-#endif
 
     // enable FPU (if available)
     EnableFullFpuAccess();
@@ -702,14 +711,14 @@ static __stk_forceinline void StartScheduling()
     ClearFpuState();
 
     // notify kernel
-    GetContext()->m_handler->OnStart(&GetContext()->m_stack_active);
+    GetContext().m_handler->OnStart(&GetContext().m_stack_active);
 
     // configure timer
-    HW_SetMtimecmp(GetContext()->m_tick_period);
+    HW_SetMtimecmp(GetContext().m_tick_period);
 
     // change state before enabling interrupt
-    GetContext()->m_started  = true;
-    GetContext()->m_starting = false;
+    GetContext().m_started  = true;
+    GetContext().m_starting = false;
 
     // enable timer interrupt
     set_csr(mie, MIP_MTIP);
@@ -736,11 +745,11 @@ STK_RISCV_ISR void _STK_SVC_HANDLER()
     if (cause == IRQ_M_EXT)
     {
         // not starting scheduler, then try to forward ecall to user
-        if (!GetContext()->m_starting)
+        if (!GetContext().m_starting)
         {
             // forward event to user
-            if (GetContext()->m_specific != NULL)
-                GetContext()->m_specific->OnException(cause);
+            if (GetContext().m_specific != NULL)
+                GetContext().m_specific->OnException(cause);
 
             // switch to the next instruction of the caller space (PC) after the return
             write_csr(mepc, read_csr(mepc) + sizeof(size_t));
@@ -754,14 +763,16 @@ STK_RISCV_ISR void _STK_SVC_HANDLER()
     }
     else
     {
-        if ((GetContext() != NULL) && (GetContext()->m_specific != NULL))
+        if (GetContext().m_specific != NULL)
         {
             // forward event to user
-            GetContext()->m_specific->OnException(cause);
+            GetContext().m_specific->OnException(cause);
         }
         else
         {
             // trap further execution
+            // note: normally, if trapped here with cause 2 or 4 then check stack memory size of the
+            // tasks, scheduler and ISR, they were likely overwritten if your code is 100% correct
             for (;;)
             {
                 //assert(false);
@@ -776,7 +787,7 @@ static void OnTaskExit()
     size_t cs;
     STK_RISCV_CRITICAL_SECTION_START(cs);
 
-    GetContext()->m_handler->OnTaskExit(GetContext()->m_stack_active);
+    GetContext().m_handler->OnTaskExit(GetContext().m_stack_active);
 
     STK_RISCV_CRITICAL_SECTION_END(cs);
 
@@ -796,50 +807,46 @@ static STK_RISCV_ISR_SECTION void OnSchedulerSleep()
     {
         __asm volatile ("fence rw, rw" : : : "memory"); // data barrier (DSB)
         STK_RISCV_WFI();                                // enter sleep until interrupt
+    #ifdef __riscv_zifencei
         __asm volatile ("fence.i" : : : "memory");      // instruction sync (ISB)
+    #endif
     }
 }
 
 static STK_RISCV_ISR_SECTION void OnSchedulerSleepOverride()
 {
-    if (!GetContext()->m_overrider->OnSleep())
+    if (!GetContext().m_overrider->OnSleep())
         OnSchedulerSleep();
 }
 
 static void OnSchedulerExit()
 {
-    LoadMainSP(); // switch to main stack
+    // switch to main stack
+    LoadMainSP();
 
     // jump to the exit from the IKernel::Start()
-    longjmp(GetContext()->m_exit_buf, 0);
+    longjmp(GetContext().m_exit_buf, 0);
 }
 
-void PlatformRiscV::Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us,
-    Stack *exit_trap)
+void PlatformRiscV::Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
 {
-    // note: if fails, increase the memory size
-    STK_ASSERT(ctx_memory.GetSizeBytes() >= sizeof(Context));
-
-    // allocate context within its memory region
-    SetContext(new (ctx_memory.GetPtr()) Context());
-
-    GetContext()->Initialize(event_handler, exit_trap, resolution_us);
+    GetContext().Initialize(event_handler, exit_trap, resolution_us);
 }
 
 void PlatformRiscV::Start()
 {
-    GetContext()->m_exiting = false;
+    GetContext().m_exiting = false;
 
     // save jump location of the Exit trap
-    setjmp(GetContext()->m_exit_buf);
-    if (GetContext()->m_exiting)
+    setjmp(GetContext().m_exit_buf);
+    if (GetContext().m_exiting)
         return;
 
     // enable FPU (if available)
     EnableFullFpuAccess();
 
     // start
-    GetContext()->m_starting = true;
+    GetContext().m_starting = true;
     STK_RISCV_START_SCHEDULING();
 }
 
@@ -869,7 +876,7 @@ bool PlatformRiscV::InitStack(EStackType stack_type, Stack *stack, IStackMemory 
         break; }
 
     case STACK_SLEEP_TRAP: {
-        MEPC = (size_t)(GetContext()->m_overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep);
+        MEPC = (size_t)(GetContext().m_overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep);
         RA   = (size_t)STK_STACK_MEMORY_FILLER; // should not attempt to exit
         X10  = 0;
         break; }
@@ -906,8 +913,8 @@ void PlatformRiscV::Stop()
     // stop timer
     SysTick_Stop();
 
-    GetContext()->m_started = false;
-    GetContext()->m_exiting = true;
+    GetContext().m_started = false;
+    GetContext().m_exiting = true;
 
     // make sure all assignments are set and executed
     __sync_synchronize();
@@ -915,22 +922,22 @@ void PlatformRiscV::Stop()
 
 int32_t PlatformRiscV::GetTickResolution() const
 {
-    return GetContext()->m_tick_resolution;
+    return GetContext().m_tick_resolution;
 }
 
 void PlatformRiscV::SwitchToNext()
 {
-    GetContext()->m_handler->OnTaskSwitch(::HW_GetCallerSP());
+    GetContext().m_handler->OnTaskSwitch(::HW_GetCallerSP());
 }
 
 void PlatformRiscV::SleepTicks(uint32_t ticks)
 {
-    GetContext()->m_handler->OnTaskSleep(::HW_GetCallerSP(), ticks);
+    GetContext().m_handler->OnTaskSleep(::HW_GetCallerSP(), ticks);
 }
 
 void PlatformRiscV::ProcessHardFault()
 {
-    if ((GetContext()->m_overrider == NULL) || !GetContext()->m_overrider->OnHardFault())
+    if ((GetContext().m_overrider == NULL) || !GetContext().m_overrider->OnHardFault())
     {
         exit(1);
     }
@@ -938,8 +945,8 @@ void PlatformRiscV::ProcessHardFault()
 
 void PlatformRiscV::SetEventOverrider(IEventOverrider *overrider)
 {
-    STK_ASSERT(!GetContext()->m_started);
-    GetContext()->m_overrider = overrider;
+    STK_ASSERT(!GetContext().m_started);
+    GetContext().m_overrider = overrider;
 }
 
 size_t PlatformRiscV::GetCallerSP()
@@ -949,18 +956,18 @@ size_t PlatformRiscV::GetCallerSP()
 
 void PlatformRiscV::SetSpecificEventHandler(ISpecificEventHandler *handler)
 {
-    STK_ASSERT(!GetContext()->m_started);
-    GetContext()->m_specific = handler;
+    STK_ASSERT(!GetContext().m_started);
+    GetContext().m_specific = handler;
 }
 
 void stk::EnterCriticalSection()
 {
-    GetContext()->EnterCriticalSection();
+    GetContext().EnterCriticalSection();
 }
 
 void stk::ExitCriticalSection()
 {
-    GetContext()->ExitCriticalSection();
+    GetContext().ExitCriticalSection();
 }
 
 #endif // _STK_ARCH_RISC_V

@@ -26,7 +26,7 @@ static void InitLeds()
 
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class LedTask : public stk::Task<512, _AccessMode>
+class LedTask : public stk::Task<2048, _AccessMode>
 {
     LedState m_task_id;
 
@@ -75,7 +75,7 @@ private:
 
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class CtrlTask : public stk::Task<256, _AccessMode>
+class CtrlTask : public stk::Task<2048, _AccessMode>
 {
 public:
     CtrlTask() {}

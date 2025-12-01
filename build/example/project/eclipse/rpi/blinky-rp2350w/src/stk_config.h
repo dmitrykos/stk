@@ -10,20 +10,19 @@
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-#include "RP2350.h"
+#include <RP2350.h>
+#include <pico.h>
 
-// Undefine if MCU is Arm Cortex-M4
+// Use ARM Cortex-M33 cores of RP2350
 #define _STK_ARCH_ARM_CORTEX_M
 
-#ifdef _STK_ARCH_ARM_CORTEX_M
-    // Redefine if SysTick handler name is different from SysTick_Handler
-    #define _STK_SYSTICK_HANDLER isr_systick
+// Define _STK_CPU_COUNT as 2 to use STK on both CPU cores or on CPU1, if 1 then STK can be hosted on CPU0 only
+#define _STK_ARCH_CPU_COUNT    (2)
+#define _STK_ARCH_GET_CPU_ID() (*(uint32_t *)(SIO_BASE + SIO_CPUID_OFFSET)) // see get_core_num() in pico/platform.h
 
-    // Redefine if PendSv handler name is different from PendSV_Handler
-    #define _STK_PENDSV_HANDLER isr_pendsv
-
-    // Redefine if SVC handler name is different from SVC_Handler
-    #define _STK_SVC_HANDLER isr_svcall
-#endif
+// RP2350 ISR handlers, see crt0.S of pico-sdk
+#define _STK_SYSTICK_HANDLER   isr_systick
+#define _STK_PENDSV_HANDLER    isr_pendsv
+#define _STK_SVC_HANDLER       isr_svcall
 
 #endif /* STK_CONFIG_H_ */

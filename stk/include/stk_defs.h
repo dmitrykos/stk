@@ -178,9 +178,9 @@
 #ifndef STK_STACK_SIZE_MIN
     #if (__riscv_32e != 1)
         #if (__riscv_flen == 0)
-            #define STK_STACK_SIZE_MIN (64 * 4) // note: smaller size causes memory corruption on RP2350
+            #define STK_STACK_SIZE_MIN 256 // note: smaller size causes memory corruption on RP2350
         #else
-            #define STK_STACK_SIZE_MIN (128 * 4)
+            #define STK_STACK_SIZE_MIN 512
         #endif
     #else
         #define STK_STACK_SIZE_MIN 32
