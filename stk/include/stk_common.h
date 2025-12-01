@@ -27,7 +27,7 @@ typedef void (*RunFuncType) (void *user_data);
 /*! \enum  EAccessMode
     \brief Hardware access mode by the user task.
 */
-enum EAccessMode
+enum EAccessMode : int32_t
 {
     ACCESS_USER = 0,  //!< Unprivileged access mode (access to some hardware is restricted, see CPU manual for details).
     ACCESS_PRIVILEGED //!< Privileged access mode (access to hardware is fully unrestricted).
@@ -168,29 +168,13 @@ public:
     */
     virtual size_t *GetStack() const = 0;
 
-    /*! \brief Get size of the stack memory array (number of size_t elements in the array).
+    /*! \brief Get number of elements of the stack memory array.
     */
     virtual uint32_t GetStackSize() const = 0;
-};
 
-
-/*! \class IMemory
-    \brief Interface for a memory region.
-*/
-class IMemory
-{
-public:
-    /*! \brief Get pointer to the memory.
+    /*! \brief Get size of the memory in bytes.
     */
-    virtual size_t *GetPtr() const = 0;
-
-    /*! \brief Get size of the memory array (number of size_t elements in the array).
-    */
-    virtual uint32_t GetSize() const = 0;
-
-    /*! \brief Get size of the memory array in bytes.
-    */
-    virtual uint32_t GetSizeBytes() const = 0;
+    virtual uint32_t GetStackSizeBytes() const = 0;
 };
 
 /*! \class ITask
@@ -327,13 +311,12 @@ public:
     };
 
     /*! \brief     Initialize scheduler's context.
-        \param[in] ctx_memory: Memory for the context.
         \param[in] event_handler: Event handler.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
         \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */
-    virtual void Initialize(const IMemory &ctx_memory, IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
+    virtual void Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
 
     /*! \brief     Start scheduling.
         \note      This function never returns!

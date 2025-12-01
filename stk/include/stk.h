@@ -53,10 +53,10 @@ namespace stk {
 template <int32_t _Mode, uint32_t _Size, class _TyStrategy, class _TyPlatform>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
-    /*! \typedef TrapStackStackMemory
+    /*! \typedef TrapStackMemory
         \brief   Stack memory wrapper type of the Exit trap.
     */
-    typedef StackMemoryWrapper<STACK_SIZE_MIN> TrapStackStackMemory;
+    typedef StackMemoryWrapper<STACK_SIZE_MIN> TrapStackMemory;
 
     /*! \enum  ERequest
         \brief Request flags.
@@ -256,12 +256,12 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         bool HrtIsDeadlineMissed(int32_t duration) const { return (duration > m_hrt[0].deadline); }
 
-        ITask      *m_user;       //!< user task
-        Stack       m_stack;      //!< stack descriptor
-        uint32_t    m_state;      //!< state flags
-        int32_t     m_time_sleep; //!< time to sleep (ticks)
-        SrtInfo     m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
-        HrtInfo     m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        ITask    *m_user;       //!< user task
+        Stack     m_stack;      //!< stack descriptor
+        uint32_t  m_state;      //!< state flags
+        int32_t   m_time_sleep; //!< time to sleep (ticks)
+        SrtInfo   m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
+        HrtInfo   m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
     };
 
     /*! \class KernelService
@@ -384,8 +384,7 @@ public:
         m_fsm_state = FSM_STATE_NONE;
         m_request   = REQUEST_NONE;
 
-        m_platform.Initialize(m_ctx_memory, this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
-
+        m_platform.Initialize(this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
         m_service.Initialize(&m_platform);
     }
 
@@ -509,7 +508,7 @@ protected:
         {
             TrapStack &sleep = m_sleep_trap[0];
 
-            TrapStackStackMemory wrapper(&sleep.memory);
+            TrapStackMemory wrapper(&sleep.memory);
             sleep.stack.mode = ACCESS_PRIVILEGED;
 
             m_platform.InitStack(STACK_SLEEP_TRAP, &sleep.stack, &wrapper, NULL);
@@ -520,7 +519,7 @@ protected:
         {
             TrapStack &exit = m_exit_trap[0];
 
-            TrapStackStackMemory wrapper(&exit.memory);
+            TrapStackMemory wrapper(&exit.memory);
             exit.stack.mode = ACCESS_PRIVILEGED;
 
             m_platform.InitStack(STACK_EXIT_TRAP, &exit.stack, &wrapper, NULL);
@@ -766,6 +765,7 @@ protected:
         {
             KernelTask *task = &m_task_storage[i];
 
+            // advance by +1 millisecond
             if (task->m_time_sleep < 0)
                 ++task->m_time_sleep;
         }
@@ -1112,19 +1112,11 @@ protected:
     */
     struct TrapStack
     {
-        typedef TrapStackStackMemory::MemoryType Memory;
+        typedef TrapStackMemory::MemoryType Memory;
 
         Stack  stack;  //!< stack information
         Memory memory; //!< stack memory
     };
-
-    /*! \typedef ContextMem
-        \brief   Memory for the context.
-        \note    Adjust size (66) based on platform implementation if fails on assert inside IPlatform::Initialize().
-                 All platforms are using jmp_buf which may have different size depending on compiler version, therefore
-                 take its size + approximate size of the platform implementation.
-    */
-    typedef Memory<(sizeof(jmp_buf) + 64) / sizeof(size_t)> ContextMem;
 
     KernelService   m_service;         //!< run-time kernel service
     _TyPlatform     m_platform;        //!< platform driver
@@ -1133,7 +1125,6 @@ protected:
     TaskStorageType m_task_storage;    //!< task storage
     TrapStack       m_sleep_trap[1];   //!< sleep trap
     TrapStack       m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
-    ContextMem      m_ctx_memory;      //!< context's memory
     EFsmState       m_fsm_state;       //!< FSM state
     uint32_t        m_request;         //!< pending requests from the tasks
 

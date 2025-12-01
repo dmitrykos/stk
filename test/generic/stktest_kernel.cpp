@@ -39,11 +39,6 @@ TEST(Kernel, Init)
     kernel.Initialize();
 
     CHECK_TRUE(((IKernel *)&kernel)->IsInitialized());
-
-    CHECK_TRUE(platform->m_ctx_memory != NULL);
-    CHECK_TRUE(platform->m_ctx_memory->GetPtr() != NULL);
-    CHECK_TRUE(platform->m_ctx_memory->GetSizeBytes() != 0);
-    CHECK_TRUE(platform->m_ctx_memory->GetSize() * sizeof(size_t) == platform->m_ctx_memory->GetSizeBytes());
 }
 
 TEST(Kernel, InitDoubleFail)
