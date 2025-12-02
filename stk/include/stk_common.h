@@ -19,6 +19,9 @@
 
 namespace stk {
 
+// Forward declaraions:
+class IKernelService;
+
 /*! \typedef RunFuncType
     \brief   User task main entry function prototype.
 */
@@ -91,71 +94,6 @@ struct Stack
 {
     size_t      SP;   //!< Stack Pointer (SP) register
     EAccessMode mode; //!< access mode
-};
-
-/*! \class Singleton
-    \brief Provides access to the referenced instance via a single method Singleton<_InstanceType>::Get().
-    \note  Singleton design pattern (see Kernel::KernelService for a practical example).
-
-    Usage example:
-    \code
-    // initialize in a source file:
-    class MyClass : private Singleton<MyClass *>
-    {
-        MyClass()
-        {
-            Singleton<MyClass *>::Bind(this);
-        }
-    };
-
-    // initialize in a source file:
-    template <> MyClass *Singleton<MyClass *>::m_instance = NULL;
-
-    // use anywhere after MyClass was instantiated
-    Singleton<MyClass *>::Get()->SomeUsefulMethod();
-    \endcode
-*/
-template <class _InstanceType> class Singleton
-{
-public:
-
-    /*! \brief  Get IKernelService instance.
-        \note   IKernelService instance is available only after kernel was started with Kernel::Start().
-    */
-    static __stk_forceinline _InstanceType const &Get() { return m_instance; }
-
-protected:
-    /*! \brief     Bind instance to the singleton.
-        \param[in] instance: Instance to bind.
-    */
-    static void Bind(const _InstanceType &instance)
-    {
-        STK_ASSERT(instance != NULL);
-        STK_ASSERT(m_instance == NULL);
-
-        m_instance = instance;
-    }
-
-#ifdef _STK_UNDER_TEST
-    /*! \brief     Unbind instance from the singleton.
-        \note      It is only enabled when STK is under a test, should not be in production.
-        \param[in] instance: Instance to unbind.
-    */
-    static void Unbind(const _InstanceType &instance)
-    {
-        STK_ASSERT(instance != NULL);
-
-        // allow if not bound
-        if (m_instance == NULL)
-            return;
-
-        STK_ASSERT(m_instance == instance);
-        m_instance = NULL;
-    }
-#endif
-
-private:
-    static _InstanceType m_instance; //!< referenced single instance
 };
 
 /*! \class IStackMemory
@@ -312,11 +250,12 @@ public:
 
     /*! \brief     Initialize scheduler's context.
         \param[in] event_handler: Event handler.
+        \param[in] service: Kernel service.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
         \param[in] exit_trap: Stack of the Exit trap (optional, provided if kernel is operating in KERNEL_DYNAMIC mode).
         \note      This function never returns!
     */
-    virtual void Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap) = 0;
+    virtual void Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us, Stack *exit_trap) = 0;
 
     /*! \brief     Start scheduling.
         \note      This function never returns!
@@ -489,6 +428,10 @@ public:
 class IKernelService
 {
 public:
+    /*! \brief     Get CPU-local instance of the kernel service.
+    */
+    static IKernelService *GetInstance();
+
     /*! \brief     Get number of ticks elapsed since the start of the kernel.
     */
     virtual int64_t GetTicks() const = 0;

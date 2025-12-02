@@ -110,9 +110,9 @@ __stk_forceinline void ScheduleContextSwitch()
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
+    void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, exit_trap, resolution_us);
+        PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
 
         m_csu         = 0;
         m_csu_nesting = 0;
@@ -450,10 +450,10 @@ static void OnSchedulerExit()
     longjmp(GetContext().m_exit_buf, 0);
 }
 
-void PlatformArmCortexM::Initialize(IEventHandler *event_handler, uint32_t resolution_us,
+void PlatformArmCortexM::Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us,
     Stack *exit_trap)
 {
-    GetContext().Initialize(event_handler, exit_trap, resolution_us);
+    GetContext().Initialize(event_handler, service, exit_trap, resolution_us);
 }
 
 void PlatformArmCortexM::Start()
@@ -591,6 +591,11 @@ void stk::EnterCriticalSection()
 void stk::ExitCriticalSection()
 {
     GetContext().ExitCriticalSection();
+}
+
+IKernelService *IKernelService::GetInstance()
+{
+    return GetContext().m_service;
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

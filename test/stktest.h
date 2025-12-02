@@ -42,6 +42,8 @@ namespace stk {
  */
 namespace test {
 
+extern IKernelService *g_KernelService;
+
 /*! \class TestAssertPassed
     \brief Throwable class for catching assertions from _STK_ASSERT_IMPL().
 */
@@ -66,6 +68,7 @@ public:
     explicit PlatformTestMock()
     {
         m_event_handler     = NULL;
+        m_service           = NULL;
         m_started           = false;
         m_hard_fault        = false;
         m_switch_to_next_nr = 0;
@@ -78,14 +81,21 @@ public:
         m_overrider         = NULL;
     }
 
-    virtual ~PlatformTestMock() {}
+    virtual ~PlatformTestMock()
+    {
+        STK_ASSERT(m_service == g_KernelService);
+        g_KernelService = NULL;
+    }
 
-    void Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
+    void Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us, Stack *exit_trap)
     {
         m_event_handler = event_handler;
+        m_service       = service;
         m_started       = false;
         m_resolution    = resolution_us;
         m_exit_trap     = exit_trap;
+
+        g_KernelService = service;
     }
 
     void Start()
@@ -176,6 +186,7 @@ public:
         return m_stack_active->SP;
     }
 
+    IKernelService  *m_service;
     Stack           *m_exit_trap;
     bool             m_fail_InitStack;
     int32_t          m_resolution;

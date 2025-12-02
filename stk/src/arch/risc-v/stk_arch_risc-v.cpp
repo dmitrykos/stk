@@ -293,9 +293,9 @@ volatile uint32_t _STK_SYSTEM_CLOCK_VAR = _STK_SYSTEM_CLOCK_FREQUENCY;
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
+    void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, exit_trap, resolution_us);
+        PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
 
         // init ISR's stack
         {
@@ -828,9 +828,9 @@ static void OnSchedulerExit()
     longjmp(GetContext().m_exit_buf, 0);
 }
 
-void PlatformRiscV::Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
+void PlatformRiscV::Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us, Stack *exit_trap)
 {
-    GetContext().Initialize(event_handler, exit_trap, resolution_us);
+    GetContext().Initialize(event_handler, service, exit_trap, resolution_us);
 }
 
 void PlatformRiscV::Start()
@@ -968,6 +968,11 @@ void stk::EnterCriticalSection()
 void stk::ExitCriticalSection()
 {
     GetContext().ExitCriticalSection();
+}
+
+IKernelService *IKernelService::GetInstance()
+{
+    return GetContext().m_service;
 }
 
 #endif // _STK_ARCH_RISC_V

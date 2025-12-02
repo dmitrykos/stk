@@ -119,12 +119,13 @@ __stk_forceinline int64_t GetTicksFromMsec(int64_t msec, int32_t resolution)
 */
 __stk_forceinline int64_t GetTimeNowMsec()
 {
-    int32_t resolution = Singleton<IKernelService *>::Get()->GetTickResolution();
+    IKernelService *service = IKernelService::GetInstance();
+    int32_t resolution = service->GetTickResolution();
 
     if (resolution == 1000)
-        return Singleton<IKernelService *>::Get()->GetTicks();
+        return service->GetTicks();
     else
-        return (Singleton<IKernelService *>::Get()->GetTicks() * resolution) / 1000;
+        return (service->GetTicks() * resolution) / 1000;
 }
 
 /*! \brief     Delay calling process.
@@ -134,7 +135,7 @@ __stk_forceinline int64_t GetTimeNowMsec()
 */
 __stk_forceinline void Delay(uint32_t msec)
 {
-    Singleton<IKernelService *>::Get()->Delay(msec);
+    IKernelService::GetInstance()->Delay(msec);
 }
 
 /*! \brief     Put calling process into a sleep state.
@@ -144,14 +145,14 @@ __stk_forceinline void Delay(uint32_t msec)
 */
 __stk_forceinline void Sleep(uint32_t msec)
 {
-    Singleton<IKernelService *>::Get()->Sleep(msec);
+    IKernelService::GetInstance()->Sleep(msec);
 }
 
 /*! \brief     Notify scheduler that it can switch to a next task.
 */
 __stk_forceinline void Yield()
 {
-    Singleton<IKernelService *>::Get()->SwitchToNext();
+    IKernelService::GetInstance()->SwitchToNext();
 }
 
 } // namespace stk

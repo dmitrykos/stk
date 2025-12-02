@@ -20,7 +20,7 @@ namespace stk {
 class PlatformArmCortexM : public IPlatform
 {
 public:
-    void Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap);
+    void Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us, Stack *exit_trap);
     void Start();
     void Stop();
     bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
@@ -58,12 +58,12 @@ __stk_forceinline void SetTls(uintptr_t tp)
     __asm volatile("MOV r9, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
 }
 
-/*! \brief     Enter to critical section.
+/*! \brief     Enter a critical section.
     \note      Use with care, critical section changes timing of tasks. Supports nesting.
 */
 void EnterCriticalSection();
 
-/*! \brief     Exit from critical section.
+/*! \brief     Exit a critical section.
     \note      Must follow EnterCriticalSection().
 */
 void ExitCriticalSection();

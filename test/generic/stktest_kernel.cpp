@@ -36,9 +36,14 @@ TEST(Kernel, Init)
     Kernel<KERNEL_STATIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
+    CHECK_TRUE(platform != NULL);
+
     kernel.Initialize();
 
     CHECK_TRUE(((IKernel *)&kernel)->IsInitialized());
+
+    CHECK_TRUE(IKernelService::GetInstance() != NULL);
+    CHECK_TRUE(IKernelService::GetInstance() == platform->m_service);
 }
 
 TEST(Kernel, InitDoubleFail)

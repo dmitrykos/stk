@@ -15,6 +15,7 @@ using namespace stk::test;
 
 TestContext test::g_TestContext;
 void (* g_RelaxCpuHandler)() = NULL;
+IKernelService *test::g_KernelService = NULL;
 
 /*! \fn    STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.
@@ -39,6 +40,11 @@ extern void STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)
 	what += StringFrom(line);
 
 	CHECK_TEXT(false, what.asCharString());
+}
+
+IKernelService *IKernelService::GetInstance()
+{
+    return g_KernelService;
 }
 
 int main(int argc, char **argv)
