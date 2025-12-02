@@ -29,9 +29,11 @@ public:
         \param[in] exit_trap: Exit trap's stack.
         \param[in] resolution_us: Tick resolution in microseconds (for example 1000 equals to 1 millisecond resolution).
     */
-    virtual void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
+    virtual void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap,
+        int32_t resolution_us)
     {
         m_handler         = handler;
+        m_service         = service;
         m_stack_idle      = exit_trap;
         m_stack_active    = NULL;
         m_tick_resolution = resolution_us;
@@ -61,6 +63,7 @@ public:
     }
 
     IPlatform::IEventHandler *m_handler;         //!< kernel event handler
+    IKernelService           *m_service;         //!< kernel service
     Stack                    *m_stack_idle;      //!< idle task stack
     Stack                    *m_stack_active;    //!< active task stack
     int32_t                   m_tick_resolution; //!< system tick resolution (microseconds)
@@ -72,10 +75,12 @@ public:
 /*! \def   SetContext
     \brief Set platform's context.
 */
+#ifndef _STK_UNDER_TEST
 #if (_STK_ARCH_CPU_COUNT == 1)
     #define GetContext() g_Context[0]
 #else
     #define GetContext() g_Context[_STK_ARCH_GET_CPU_ID()]
+#endif
 #endif
 
 /*! \def   STK_TIME_TO_CPU_TICKS_USEC

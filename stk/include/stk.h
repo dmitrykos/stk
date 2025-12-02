@@ -20,13 +20,6 @@
 
 namespace stk {
 
-/*! \def   g_KernelService
-    \brief Pointer to the IKernelService instance which becomes available when scheduling
-           is started with Kernel::Start().
-    \note  Singleton design pattern.
-*/
-#define g_KernelService stk::Singleton<stk::IKernelService *>::Get()
-
 /*! \class Kernel
     \brief Concrete implementation of IKernel (thread scheduling kernel).
     \note  Kernel expects at least 1 task, e.g. Kernel<N> where N != 0.
@@ -271,18 +264,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
     {
         friend class Kernel;
 
-        /*! \class SingletonBinder
-            \brief Exposes IKernelService instance through the Singleton<IKernelService *>::Get().
-                   Acts as a singleton instance binder at run-time. IKernelService instance becomes
-                   available before user tasks are started.
-            \note  Singleton design pattern (see Singleton).
-        */
-        class SingletonBinder : private Singleton<IKernelService *>
-        {
-            //! \note Only Kernel's internal environment has access to the SingletonBinder::Bind() function.
-            template <int32_t _Mode0, uint32_t _Size0, class _TyStrategy0, class _TyPlatform0> friend class Kernel;
-        };
-
     public:
         int64_t GetTicks() const { return m_ticks; }
 
@@ -317,17 +298,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         explicit KernelService() : m_platform(0), m_ticks(0) {}
 
-    #ifdef _STK_UNDER_TEST
-        /*! \brief     Destructor.
-            \note      It is used only when STK is under a test, should not be in production.
-        */
-        ~KernelService()
-        {
-            // allow in multiple tests
-            SingletonBinder::Unbind(this);
-        }
-    #endif
-
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
                        instance (see g_KernelService).
@@ -336,17 +306,13 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         void Initialize(IPlatform *platform)
         {
             m_platform = static_cast<_TyPlatform *>(platform);
-
-            // make instance accessible for the user
-            if (Singleton<IKernelService *>::Get() == NULL)
-                SingletonBinder::Bind(this);
         }
 
         /*! \brief     Increment tick by 1.
         */
         void IncrementTick() { ++m_ticks; }
 
-        _TyPlatform       *m_platform; //!< platform
+        _TyPlatform     *m_platform; //!< platform
         volatile int64_t m_ticks;    //!< CPU ticks elapsed (volatile to reload value from the memory by the consumer)
     };
 
@@ -384,8 +350,8 @@ public:
         m_fsm_state = FSM_STATE_NONE;
         m_request   = REQUEST_NONE;
 
-        m_platform.Initialize(this, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
         m_service.Initialize(&m_platform);
+        m_platform.Initialize(this, &m_service, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
     }
 
     __stk_attr_noinline void AddTask(ITask *user_task)

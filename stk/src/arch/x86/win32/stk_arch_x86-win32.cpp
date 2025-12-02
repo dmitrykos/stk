@@ -44,9 +44,9 @@ using namespace stk;
 //! Internal context.
 static struct Context : public PlatformContext
 {
-    void Initialize(IPlatform::IEventHandler *handler, Stack *exit_trap, int32_t resolution_us)
+    void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap, int32_t resolution_us)
     {
-        PlatformContext::Initialize(handler, exit_trap, resolution_us);
+        PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
 
         m_overrider    = NULL;
         m_sleep_trap    = NULL;
@@ -385,9 +385,10 @@ bool Context::InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack
     return true;
 }
 
-void PlatformX86Win32::Initialize(IEventHandler *event_handler, uint32_t resolution_us, Stack *exit_trap)
+void PlatformX86Win32::Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us,
+    Stack *exit_trap)
 {
-    g_Context.Initialize(event_handler, exit_trap, resolution_us);
+    g_Context.Initialize(event_handler, service, exit_trap, resolution_us);
 }
 
 void PlatformX86Win32::Start()
@@ -465,6 +466,11 @@ void stk::EnterCriticalSection()
 void stk::ExitCriticalSection()
 {
     g_Context.ExitCriticalSection();
+}
+
+IKernelService *IKernelService::GetInstance()
+{
+    return g_Context.m_service;
 }
 
 #endif // _STK_ARCH_X86_WIN32
