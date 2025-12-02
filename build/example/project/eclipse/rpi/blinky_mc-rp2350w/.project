@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>blinky_smp-rp2350w</name>
+	<name>blinky_mc-rp2350w</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -36,7 +36,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/blinky_smp</name>
+			<name>src/blinky_mc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -81,14 +81,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/blinky_smp/example.cpp</name>
+			<name>src/blinky_mc/example.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/blinky_smp/example.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/blinky_mc/example.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/blinky_smp/example.h</name>
+			<name>src/blinky_mc/example.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/blinky_smp/example.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/blinky_mc/example.h</locationURI>
 		</link>
 		<link>
 			<name>src/driver/cpu.h</name>
