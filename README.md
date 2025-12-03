@@ -47,6 +47,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 | Development mode (x86)                | Run the same threaded application on Windows |
 | 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests |
 | QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M0 and M4 |
+
 ---
 
 ## Modes of Operation
