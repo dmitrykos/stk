@@ -43,6 +43,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 | Low-power aware                       | MCU enters sleep when no task is runnable (sleeping) |
 | Critical section API                  | Basic synchronization primitive |
 | Tiny footprint                        | Minimal code unrelated to scheduling |
+| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1) |
 | Easy porting                          | Requires very small BSP surface |
 | Development mode (x86)                | Run the same threaded application on Windows |
 | 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests |
