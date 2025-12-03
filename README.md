@@ -39,13 +39,14 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 | Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring |
 | Static task model (`KERNEL_STATIC`)   | Tasks created once at startup |
 | Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime |
-| Low-power aware                       | MCU enters sleep when no task is runnable |
+| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance |
+| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping) |
 | Critical section API                  | Basic synchronization primitive |
-| Development mode (x86)                | Run the same threaded application on Windows |
 | Tiny footprint                        | Minimal code unrelated to scheduling |
 | Easy porting                          | Requires very small BSP surface |
-| Multi-core support                    | One STK instance per physical core for optimal, lock-free performance |
-
+| Development mode (x86)                | Run the same threaded application on Windows |
+| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests |
+| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M0 and M4 |
 ---
 
 ## Modes of Operation
@@ -99,7 +100,7 @@ class ParserTask : public stk::Task<512, ACCESS_USER> { ... };
 
 ### Multi-Core Support
 
-STK fully supports multi-core embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7, or multi-core RISC-V devices) through a **per-core instance model**. This design delivers maximum performance while keeping the kernel extremely lightweight.
+STK fully supports multi-core embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7/M0, or multi-core RISC-V devices) through a **per-core instance model** (Asymmetric Multi-Processing). This design delivers maximum performance while keeping the kernel extremely lightweight.
 
 #### Design Philosophy
 - **One independent STK instance per physical CPU core**
@@ -115,7 +116,7 @@ STK fully supports multi-core embedded microcontrollers (e.g., ARM Cortex-M55, d
 | Minimal latency                  | Scheduling decisions are local to the core                                  |
 | Full cache efficiency            | All kernel data structures stay in the local core’s L1 cache                |
 | Independent timing domains       | One core can run hard real-time tasks while another runs soft real-time or dynamic tasks |
-| Simple & predictable             | No complex AMP/SMP synchronization logic required in the kernel            |
+| Simple & predictable             | No complex SMP synchronization logic required in the kernel            |
 
 #### Inter-Task Cooperation Across Cores
 Tasks running on different cores can safely communicate and synchronize using standard, well-established primitives:
@@ -167,7 +168,7 @@ By giving every physical core its own completely independent scheduler instance,
 ## Hardware Support
 
 ### CPU Architectures
-* ARM Cortex-M0/M3/M4/M7/M33
+* ARM Cortex-M (ARMv6-M, ARMv7-M, ARMv7E-M, ARMv8-M, ARMv8.1-M)
 * RISC-V RV32I (RV32IMA_ZICSR)
 * RISC-V RV32E (RV32EMA_ZICSR) — including very small RAM devices
 
