@@ -40,17 +40,14 @@ using namespace stk;
 
 // CLINT
 // Details: https://github.com/riscv/riscv-aclint/blob/main/riscv-aclint.adoc
-#ifndef _STK_RISCV_CLINT_BASE_ADDR
-    #define _STK_RISCV_CLINT_BASE_ADDR (0x2000000)
-#endif
-#ifndef STK_RISCV_CLINT_MSIP_ADDR
-    #define STK_RISCV_CLINT_MSIP_ADDR (_STK_RISCV_CLINT_BASE_ADDR + 0x0000) // 4-byte value, 1 per hart
+#ifndef STK_RISCV_CLINT_BASE_ADDR
+    #define STK_RISCV_CLINT_BASE_ADDR (0x2000000)
 #endif
 #ifndef STK_RISCV_CLINT_MTIMECMP_ADDR
-    #define STK_RISCV_CLINT_MTIMECMP_ADDR (_STK_RISCV_CLINT_BASE_ADDR + 0x4000) // 8-byte value, 1 per hart
+    #define STK_RISCV_CLINT_MTIMECMP_ADDR (STK_RISCV_CLINT_BASE_ADDR + 0x4000) // 8-byte value, 1 per hart
 #endif
 #ifndef STK_RISCV_CLINT_MTIME_ADDR
-    #define STK_RISCV_CLINT_MTIME_ADDR (_STK_RISCV_CLINT_BASE_ADDR + 0xBFF8) // 8-byte value, global
+    #define STK_RISCV_CLINT_MTIME_ADDR (STK_RISCV_CLINT_BASE_ADDR + 0xBFF8) // 8-byte value, global
 #endif
 
 #define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); } while (0)
