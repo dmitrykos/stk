@@ -24,9 +24,16 @@ static void InitLeds()
     Led::Init(Led::GREEN, false);
 }
 
+// R2350 requires larger stack due to stack-memory heavy SDK API
+#ifdef _PICO_H
+enum { TASK_STACK_SIZE = 1024 };
+#else
+enum { TASK_STACK_SIZE = 256 };
+#endif
+
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class LedTask : public stk::Task<512, _AccessMode>
+class LedTask : public stk::Task<TASK_STACK_SIZE, _AccessMode>
 {
     LedState m_task_id;
 

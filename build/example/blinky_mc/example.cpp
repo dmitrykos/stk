@@ -73,9 +73,16 @@ private:
     }
 };
 
+// R2350 requires larger stack due to stack-memory heavy SDK API
+#ifdef _PICO_H
+enum { TASK_STACK_SIZE = 1024 };
+#else
+enum { TASK_STACK_SIZE = 256 };
+#endif
+
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class CtrlTask : public stk::Task<2048, _AccessMode>
+class CtrlTask : public stk::Task<TASK_STACK_SIZE, _AccessMode>
 {
 public:
     CtrlTask() {}

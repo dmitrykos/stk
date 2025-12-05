@@ -43,9 +43,16 @@ static void SwitchOnLED(uint8_t task_id)
     }
 }
 
+// R2350 requires larger stack due to stack-memory heavy SDK API
+#ifdef _PICO_H
+enum { TASK_STACK_SIZE = 1024 };
+#else
+enum { TASK_STACK_SIZE = 256 };
+#endif
+
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
-class MyTask : public stk::Task<2048, _AccessMode>
+class MyTask : public stk::Task<TASK_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
