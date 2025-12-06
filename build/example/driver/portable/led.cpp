@@ -17,9 +17,9 @@ static const char *Led_GetPin(Led::Id led)
 {
     switch (led)
     {
-    case Led::RED: return "RED";
-    case Led::GREEN: return "GREEN";
-    case Led::BLUE: return "BLUE";
+    case LED_RED: return "RED";
+    case LED_GREEN: return "GREEN";
+    case LED_BLUE: return "BLUE";
     default:
         assert(false);
         return NULL;
@@ -49,3 +49,17 @@ void Led::Set(Id led, bool state)
     Log("LED_SET_STATE", led, state);
 }
 
+// C interface
+extern "C" {
+
+void Led_Init(LedId led, bool init_state)
+{
+    Led::Init(led, init_state);
+}
+
+void Led_Set(LedId led, bool state)
+{
+    Led::Set(led, state);
+}
+
+} // extern "C"

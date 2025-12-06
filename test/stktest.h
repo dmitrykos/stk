@@ -215,9 +215,15 @@ public:
         m_switch_to_next = false;
         m_ticks          = 0;
         m_resolution     = 0;
+        m_tid            = 0;
     }
     virtual ~KernelServiceMock()
     { }
+
+    size_t GetTid() const
+    {
+        return m_tid;
+    }
 
     int64_t GetTicks() const
     {
@@ -251,6 +257,7 @@ public:
     bool    m_switch_to_next;
     int64_t m_ticks;
     int32_t m_resolution;
+    size_t  m_tid;
 };
 
 /*! \class TaskMock

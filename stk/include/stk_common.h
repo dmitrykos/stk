@@ -432,12 +432,19 @@ public:
     */
     static IKernelService *GetInstance();
 
-    /*! \brief     Get number of ticks elapsed since the start of the kernel.
+    /*! \brief     Get thread Id.
+        \return    Thread Id.
+    */
+    virtual size_t GetTid() const = 0;
+
+    /*! \brief     Get number of ticks elapsed since kernel start.
+        \return    Ticks.
     */
     virtual int64_t GetTicks() const = 0;
 
     /*! \brief     Get number of microseconds in one tick.
         \note      Tick is a periodicity of the system timer expressed in microseconds.
+        \return    Microseconds in one tick.
     */
     virtual int32_t GetTickResolution() const = 0;
 
