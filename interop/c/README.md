@@ -10,7 +10,7 @@ C interface provides full access to C++ version of STK.
 #include <stk_c.h>
 
 #define STACK_SIZE 256
-uint32_t g_Stack[3][STACK_SIZE];
+uint32_t g_Stack[2][STACK_SIZE];
 
 void task_func1(void *arg) {
     while (true) {

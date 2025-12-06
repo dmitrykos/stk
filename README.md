@@ -44,6 +44,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 | Critical section API                  | Basic synchronization primitive |
 | Tiny footprint                        | Minimal code unrelated to scheduling |
 | Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1) |
+| C++ and C API                         | Can be used easily in C++ and C projects |
 | Easy porting                          | Requires very small BSP surface |
 | Development mode (x86)                | Run the same threaded application on Windows |
 | 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests |
