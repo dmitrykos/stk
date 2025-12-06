@@ -265,6 +265,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         friend class Kernel;
 
     public:
+        size_t GetTid() const { return m_platform->GetCallerSP(); }
+
         int64_t GetTicks() const { return m_ticks; }
 
         int32_t GetTickResolution() const  { return m_platform->GetTickResolution(); }

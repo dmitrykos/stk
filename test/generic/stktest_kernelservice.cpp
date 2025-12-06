@@ -92,6 +92,22 @@ TEST(KernelService, InitStackFailure)
     }
 }
 
+TEST(KernelService, GetTid)
+{
+    Kernel<KERNEL_STATIC, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    platform->ProcessTick();
+
+    size_t tid = stk::GetTid();
+    CHECK_EQUAL(tid, platform->GetCallerSP());
+}
+
 TEST(KernelService, GetTickResolution)
 {
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;

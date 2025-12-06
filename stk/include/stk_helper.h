@@ -94,6 +94,14 @@ private:
     MemoryType *m_stack; //!< pointer to the wrapped memory region
 };
 
+/*! \brief     Get thread Id.
+    \return    Thread Id.
+*/
+__stk_forceinline size_t GetTid()
+{
+    return IKernelService::GetInstance()->GetTid();
+}
+
 /*! \brief     Get milliseconds from ticks.
     \param[in] ticks: Ticks to convert.
     \param[in] resolution: Resolution (see IKernelService::GetTickResolution).
@@ -112,6 +120,23 @@ __stk_forceinline int64_t GetMsecFromTicks(int64_t ticks, int32_t resolution)
 __stk_forceinline int64_t GetTicksFromMsec(int64_t msec, int32_t resolution)
 {
     return msec * 1000 / resolution;
+}
+
+/*! \brief     Get number of ticks elapsed since kernel start.
+    \return    Ticks.
+*/
+__stk_forceinline int64_t GetTicks()
+{
+    return IKernelService::GetInstance()->GetTicks();
+}
+
+/*! \brief     Get number of microseconds in one tick.
+    \note      Tick is a periodicity of the system timer expressed in microseconds.
+    \return    Microseconds in one tick.
+*/
+__stk_forceinline int32_t GetTickResolution()
+{
+    return IKernelService::GetInstance()->GetTickResolution();
 }
 
 /*! \brief     Get current time in milliseconds.
