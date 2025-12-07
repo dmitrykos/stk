@@ -1,5 +1,6 @@
+![Logo](docs/img/stk_logo_200px.png)
 # SuperTinyKernel (STK)
-A minimalistic C++ thread scheduling kernel for embedded systems.
+Minimalistic C++/C Thread Scheduler for Embedded Systems.
 
 ---
 
