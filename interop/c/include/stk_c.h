@@ -15,6 +15,17 @@
 #include <stdbool.h>
 #include <assert.h>
 
+/*! \file  stk_c.h
+    \brief C interface for C++ STK
+
+    This file provides functions for using STK in a C project.
+
+    \defgroup c_interface C interface for C++ STK
+    \brief    Functions for using STK in C projects.
+
+    @{
+*/
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -261,5 +272,7 @@ void stk_exit_critical_section(void);
 #ifdef __cplusplus
 }
 #endif
+
+/** @} */
 
 #endif /* STK_C_H_ */

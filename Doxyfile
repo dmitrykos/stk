@@ -48,13 +48,13 @@ PROJECT_NAME           = "SuperTinyKernel: Minimalistic thread scheduling kernel
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = 0.1.x
+PROJECT_NUMBER         = 1.0.0
 
 # Using the PROJECT_BRIEF tag one can provide an optional one line description
 # for a project that appears at the top of each page and should give viewer a
 # quick idea about the purpose of the project. Keep the description short.
 
-PROJECT_BRIEF          = "Copyright (c) 2022 Dmitry Kostjucenko <dmitry.kostjucenko@gmail.com>, License: MIT License, see LICENSE for a full text."
+PROJECT_BRIEF          = "Copyright (c) 2025 Neutron Code Limited <stk@neutroncode.com>, License: MIT License, see LICENSE for a full text."
 
 # With the PROJECT_LOGO tag one can specify a logo or an icon that is included
 # in the documentation. The maximum height of the logo should not exceed 55
@@ -909,7 +909,9 @@ WARN_LOGFILE           =
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = stk \
+                         interop \
                          test \
+                         README.md \
                          @DOXYGEN_INPUT@
 
 # This tag can be used to specify the character encoding of the source files
@@ -1109,7 +1111,7 @@ FILTER_SOURCE_PATTERNS =
 # (index.html). This can be useful if you have a project on for instance GitHub
 # and want to reuse the introduction page also for the doxygen output.
 
-USE_MDFILE_AS_MAINPAGE =
+USE_MDFILE_AS_MAINPAGE = README.md
 
 # The Fortran standard specifies that for fixed formatted Fortran code all
 # characters from position 72 are to be considered as comment. A common

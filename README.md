@@ -57,7 +57,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), naviage its co
 ### Soft Real-Time (default)
 Tasks cooperate using `Sleep()`. Timing is best-effort.
 
-### Hard Real-Time (`KERNEL_HRT`)
+### Hard Real-Time (KERNEL_HRT)
 * Periodic tasks with strict execution windows
 * Kernel enforces deadlines
 * Any violation fails the application deterministically
@@ -190,6 +190,14 @@ No other libraries required.
 
 ---
 
+## Dedicated C interface
+
+STK is developed in C++ using classic OOP design patterns. It also provides dedicated C interface for easier integration with C projects.
+
+C interface can be found in [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) folder.
+
+---
+
 ## Development Mode (x86)
 
 STK includes a **full scheduling emulator** for Windows:
@@ -203,12 +211,18 @@ STK includes a **full scheduling emulator** for Windows:
 
 ## Tested Boards
 
+STK has been tested on the following boards:
+
 * STM STM32F0DISCOVERY (Cortex-M0)
 * STM NUCLEO-F103RB (Cortex-M3)
 * NXP FRDM-K66F (Cortex-M4F)
 * STM STM32F4DISCOVERY (Cortex-M4F)
 * NXP MIMXRT1050 EVKB (Cortex-M7)
-* Raspberry Pico 2 W (Cortex-M33 / RISC-V variant)
+* Raspberry Pi Pico 2 W (Cortex-M33 / RISC-V variant)
+
+> **Note:** The list of tested boards does **not** limit STK’s compatibility.  
+
+STK is designed to be **CPU-architecture agnostic**, meaning it does not depend on a specific board but relies on the underlying CPU architecture. As long as the target CPU is supported, STK can be integrated with your platform.
 
 ---
 
@@ -273,9 +287,7 @@ For NXP platforms:
 
 > If you are targeting only ARM, RISC-V tools are not required.
 
----
-
-## Examples
+### Examples
 
 Example projects are located in:
 
@@ -289,7 +301,7 @@ Grouped by platform:
 * `rpi` – Raspberry Pico
 * `x86` – Windows emulator
 
-### Import into Eclipse CDT
+#### Import into Eclipse CDT
 
 ```
 File → Import... → Existing Projects into Workspace →
@@ -302,7 +314,7 @@ STM32 and Raspberry Pico examples include SDK files in:
 deps/target
 ```
 
-### NXP Examples
+#### NXP Examples
 
 Located in:
 
@@ -319,7 +331,7 @@ Compatible with:
 
 ---
 
-## Example Code
+#### Example Code
 
 Below example toggles RGB LEDs on a development board. Each LED is controlled by its own thread, switching at 1s intervals:
 
@@ -563,15 +575,6 @@ SRCS += \
 #### 4. Build
 Build your project normally — STK will now be compiled together with it.
 
-#### Pros
-✅ Simplest integration
-✅ No dependency management required
-✅ Works offline
-
-#### Cons
-⚠ Manual updates required when STK changes
-⚠ Easy to accidentally exclude platform files
-
 ---
 
 ## Test Coverage
@@ -610,9 +613,9 @@ projects.
 
 ---
 
-## Commercial Services
+## Additional Services
 
-Contact: `stk@neutroncode.com`
+Contact `stk@neutroncode.com` for additional requests and services:
 
 * Dedicated license (warranty of title, perpetual usage rights)
 * Integration and consulting

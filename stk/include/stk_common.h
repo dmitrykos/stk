@@ -193,7 +193,7 @@ class IPlatform
 {
 public:
     /*! \class IEventHandler
-        \brief Interface of the back-end event handler.
+        \brief Interface for a back-end event handler.
 
         It is inherited by the kernel implementation and delivers events from ISR.
     */
@@ -230,7 +230,7 @@ public:
     };
 
     /*! \class IEventOverrider
-        \brief Interface of the platform event overrider.
+        \brief Interface for a platform event overrider.
         \note  Optional. Can be used to extend functionality of default IPlatform driver handlers from the user-space.
     */
     class IEventOverrider
