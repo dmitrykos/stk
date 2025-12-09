@@ -290,6 +290,22 @@ private:
     }
 };
 
+/*! \class TaskMockW
+    \brief Task mock for SwitchStrategySmoothWeightedRoundRobin and similar algorithms.
+    \note  QEMU allocates small stack for the function, therefore stack size is limited to STACK_SIZE_MIN for tests to pass (256 was causing a hard fault).
+*/
+template <int32_t _Weight, EAccessMode _AccessMode>
+class TaskMockW : public TaskW<_Weight, STACK_SIZE_MIN, _AccessMode>
+{
+public:
+    RunFuncType GetFunc() { return &Run; }
+    void *GetFuncUserData() { return this; }
+
+private:
+    static void Run(void *user_data) { ((TaskMockW *)user_data)->RunInner(); }
+    void RunInner() {}
+};
+
 } // namespace test
 } // namespace stk
 

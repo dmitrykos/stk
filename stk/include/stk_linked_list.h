@@ -27,7 +27,8 @@ template <class _Ty, bool _ClosedLoop> class DListEntry
     friend class DListHead<_Ty, _ClosedLoop>;
 
 public:
-    explicit DListEntry() : m_head(NULL), m_next(NULL), m_prev(NULL) {}
+    explicit DListEntry() : m_head(NULL), m_next(NULL), m_prev(NULL)
+    {}
 
     typedef DListEntry<_Ty, _ClosedLoop> DLEntryType;
     typedef DListHead<_Ty, _ClosedLoop>  DLHeadType;
@@ -37,8 +38,8 @@ public:
     DLEntryType *GetPrev() const { return m_prev; }
     bool IsLinked() const        { return (GetHead() != NULL); }
 
-    operator _Ty *()             { return (_Ty *)this; }
-    operator const _Ty *() const { return (_Ty *)this; }
+    operator _Ty *()             { return static_cast<_Ty *>(this); }
+    operator const _Ty *() const { return static_cast<_Ty *>(this); }
 
 protected:
     /*! \brief     Default destructor.
@@ -46,7 +47,8 @@ protected:
                    It is non-virtual to avoid bloating binary with stdc++ dependency
                    therefore it can not be used for a deletion of the parent object.
     */
-    ~DListEntry() {}
+    ~DListEntry()
+    {}
 
 private:
     void Link(DLHeadType *head, DLEntryType *next, DLEntryType *prev)
@@ -90,7 +92,8 @@ template <class _Ty, bool _ClosedLoop> class DListHead
 public:
     typedef DListEntry<_Ty, _ClosedLoop> DLEntryType;
 
-    explicit DListHead(): m_count(0), m_first(NULL), m_last(NULL) {}
+    explicit DListHead(): m_count(0), m_first(NULL), m_last(NULL)
+    {}
 
     size_t GetSize() const             { return m_count; }
     bool IsEmpty() const               { return (m_count == 0); }

@@ -71,6 +71,12 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 * `KERNEL_STATIC` – tasks created once at startup, kernel never returns to `main()`
 * `KERNEL_DYNAMIC` – tasks may exit, kernel returns to `main()` when all tasks exit
 
+### Built-in Scheduling Strategies
+
+* Round-Robin - `SwitchStrategyRoundRobin`
+* Smooth Weighted Round-Robin - `SwitchStrategySmoothWeightedRoundRobin`, distributes CPU time proportionally to task weights, avoids bursts by smoothing the task execution over the time
+* Custom - API allows implementation of the custom algorithm via the `ITaskSwitchStrategy` interface
+
 ### Task Privilege Separation
 
 Starting with ARM Cortex-M3 and all newer cores (M3/M4/M7/M33/M55/...) that implement the Armv7-M or Armv8-M architecture with the **Memory Protection Unit (MPU)**, STK supports explicit privilege separation between tasks.

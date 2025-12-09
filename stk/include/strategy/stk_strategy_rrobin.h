@@ -22,6 +22,8 @@ namespace stk {
 class SwitchStrategyRoundRobin : public ITaskSwitchStrategy
 {
 public:
+    enum { WEIGHT_API = 0 };
+
     void AddTask(IKernelTask *task) { m_tasks.LinkBack(task); }
 
     void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }

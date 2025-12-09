@@ -60,6 +60,28 @@ public:
     uint32_t GetStackSizeBytes() const { return _StackSize * sizeof(size_t); }
     EAccessMode GetAccessMode() const { return _AccessMode; }
     virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
+    virtual int32_t GetWeight() const { return 1; }
+
+private:
+    typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
+};
+
+/*! \class TaskW
+    \brief Partial implementation of the user task. Use for SwitchStrategySmoothWeightedRoundRobin.
+
+    See implementation details and example in Task.
+*/
+template <int32_t _Weight, uint32_t _StackSize, EAccessMode _AccessMode>
+class TaskW : public ITask
+{
+public:
+    enum { STACK_SIZE = _StackSize };
+    size_t *GetStack() const { return const_cast<size_t *>(m_stack); }
+    uint32_t GetStackSize() const { return _StackSize; }
+    uint32_t GetStackSizeBytes() const { return _StackSize * sizeof(size_t); }
+    EAccessMode GetAccessMode() const { return _AccessMode; }
+    virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
+    virtual int32_t GetWeight() const { return _Weight; }
 
 private:
     typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
