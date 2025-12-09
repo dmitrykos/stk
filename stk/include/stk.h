@@ -13,6 +13,7 @@
 #include "stk_helper.h"
 #include "stk_arch.h"
 #include "strategy/stk_strategy_rrobin.h"
+#include "strategy/stk_strategy_swrrobin.h"
 
 /*! \file  stk.h
     \brief Contains core implementation (Kernel) of the task scheduler.
@@ -89,13 +90,23 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         /*! \brief Default initializer.
         */
         explicit KernelTask() : m_user(NULL), m_stack(), m_state(STATE_NONE), m_time_sleep(0),
-            m_srt(), m_hrt() {}
+            m_srt(), m_hrt(), m_rt_weight() {}
 
         ITask *GetUserTask() { return m_user; }
 
         Stack *GetUserStack() { return &m_stack; }
 
         bool IsBusy() const { return (m_user != NULL); }
+
+        void SetCurrentWeight(int32_t weight)
+        {
+            if (_TyStrategy::WEIGHT_API)
+                m_rt_weight[0] = weight;
+        }
+
+        int32_t GetWeight() const { return (_TyStrategy::WEIGHT_API ? m_user->GetWeight() : 1); }
+
+        int32_t GetCurrentWeight() const { return (_TyStrategy::WEIGHT_API ? m_rt_weight[0] : 1); }
 
     private:
         /*! \class SrtInfo
@@ -255,6 +266,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         int32_t   m_time_sleep; //!< time to sleep (ticks)
         SrtInfo   m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
         HrtInfo   m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        int32_t   m_rt_weight[_TyStrategy::WEIGHT_API ? 1 : 0];       //!< current (run-time) weight, see SwitchStrategySmoothWeightedRoundRobin
     };
 
     /*! \class KernelService

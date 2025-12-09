@@ -148,6 +148,12 @@ public:
         \note      Optional handler. Use it for logging of the faulty task.
     */
     virtual void OnDeadlineMissed(uint32_t duration) = 0;
+
+    /*! \brief     Get static base weight of the task.
+        \return    Static weight value of the task.
+        \see       SwitchStrategySmoothWeightedRoundRobin, IKernelTask::GetWeight
+    */
+    virtual int32_t GetWeight() const = 0;
 };
 
 /*! \class IKernelTask
@@ -175,6 +181,24 @@ public:
     /*! \brief     Get pointer to the user task's stack.
     */
     virtual Stack *GetUserStack() = 0;
+
+    /*! \brief     Get static base weight assigned to the task.
+        \return    Static weight value of the task.
+        \see       SwitchStrategySmoothWeightedRoundRobin, ITask::GetWeight
+    */
+    virtual int32_t GetWeight() const = 0;
+
+    /*! \brief     Set the current dynamic weight value used by the scheduling strategy.
+        \param[in] weight: New current dynamic weight value.
+        \see       SwitchStrategySmoothWeightedRoundRobin
+    */
+    virtual void SetCurrentWeight(int32_t weight) = 0;
+
+    /*! \brief     Get the current dynamic weight value of this task.
+        \return    Current dynamic weight value.
+        \see       SwitchStrategySmoothWeightedRoundRobin
+    */
+    virtual int32_t GetCurrentWeight() const = 0;
 };
 
 /*! \class IPlatform

@@ -119,6 +119,7 @@ TEST(KernelService, GetTickResolution)
     kernel.Start();
 
     CHECK_EQUAL(periodicity, g_KernelService->GetTickResolution());
+    CHECK_EQUAL(periodicity, stk::GetTickResolution());
 }
 
 TEST(KernelService, GetTicks)
@@ -135,10 +136,53 @@ TEST(KernelService, GetTicks)
     // ISR calls OnSysTick 1-st time
     platform->ProcessTick();
     CHECK_EQUAL(1, (int32_t)g_KernelService->GetTicks());
+    CHECK_EQUAL(1, (int32_t)stk::GetTicks());
 
     // ISR calls OnSysTick 2-nd time
     platform->ProcessTick();
     CHECK_EQUAL(2, (int32_t)g_KernelService->GetTicks());
+    CHECK_EQUAL(2, (int32_t)stk::GetTicks());
+}
+
+TEST(KernelService, GetTimeNowMsec)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize(PERIODICITY_DEFAULT);
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    CHECK_EQUAL(0, (int32_t)stk::GetTimeNowMsec());
+
+    // make 1000 ticks
+    for (int32_t i = 0; i < 1000; ++i)
+        platform->ProcessTick();
+
+    // 1000 usec * 1000 ticks = 1000 ms
+    CHECK_EQUAL(1000, (int32_t)stk::GetTimeNowMsec());
+}
+
+TEST(KernelService, GetTimeNowMsecWith10UsecTick)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    // set periodicity to 10 microsecond
+    kernel.Initialize(10);
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    CHECK_EQUAL(0, (int32_t)stk::GetTimeNowMsec());
+
+    // make 1000 ticks
+    for (int32_t i = 0; i < 1000; ++i)
+        platform->ProcessTick();
+
+    // 10 usec * 1000 ticks = 10 ms
+    CHECK_EQUAL(10, (int32_t)stk::GetTimeNowMsec());
 }
 
 static struct SwitchToNextRelaxCpuContext

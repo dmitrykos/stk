@@ -176,6 +176,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyroundrobin.cpp</locationURI>
 		</link>
 		<link>
+			<name>deps/test/generic/stktest_switchstrategyswroundrobin.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyswroundrobin.cpp</locationURI>
+		</link>
+		<link>
 			<name>deps/cpputest/include/CppUTest/CommandLineArguments.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/deps/cpputest/include/CppUTest/CommandLineArguments.h</locationURI>
