@@ -71,22 +71,32 @@ typedef void (*stk_task_entry_t)(void *arg);
   Kernel creation
  ==========================================================================*/
 
-/*! \brief  Create a Static (compile-time fixed) non-HRT kernel
+/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategyRoundRobin scheduling strategy
  *  \return Pointer to kernel instance (statically allocated, never fails)
  */
 stk_kernel_t *stk_kernel_create_static(void);
 
-/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel
+/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategyRoundRobin scheduling strategy
  *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
  */
 stk_kernel_t *stk_kernel_create_dynamic(void);
 
-/*! \brief  Create a Static Hard Real-Time (HRT) kernel
+/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails)
+ */
+stk_kernel_t *stk_kernel_create_static_swrr(void);
+
+/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_dynamic_swrr(void);
+
+/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyRoundRobin scheduling strategy
  *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
  */
 stk_kernel_t *stk_kernel_create_hrt_static(void);
 
-/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel
+/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyRoundRobin scheduling strategy
  *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
  */
 stk_kernel_t *stk_kernel_create_hrt_dynamic(void);
@@ -121,6 +131,13 @@ void stk_kernel_add_task_hrt(stk_kernel_t *k,
                              int32_t periodicity_ticks,
                              int32_t deadline_ticks,
                              int32_t start_delay_ticks);
+
+/*! \brief Remove a task from scheduling (Dynamic kernels only)
+ *  \param k     Kernel handle
+ *  \param task  Task to remove
+ *  \note  The task must have exited (returned from its entry function)
+ */
+void stk_kernel_remove_task(stk_kernel_t *k, stk_task_t *task);
 
 /*! \brief Start the scheduler
  *  \param k Kernel handle
@@ -162,12 +179,12 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  uint32_t *stack,
                                  uint32_t stack_size);
 
-/*! \brief Remove a task from scheduling (Dynamic kernels only)
- *  \param k     Kernel handle
- *  \param task  Task to remove
- *  \note  The task must have exited (returned from its entry function)
+/*! \brief Set weight for a task when using scheduler (non-HRT mode) with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
+ *  \param task   Task created with stk_task_create_*
+ *  \param weight Weight of the task (must be non-zero, positive number)
+ *  \note  Weight must be set before a task is added to the kernel
  */
-void stk_kernel_remove_task(stk_kernel_t *k, stk_task_t *task);
+void stk_task_set_weight(stk_task_t *task, int32_t weight);
 
 /*==========================================================================
   Runtime services (available inside tasks)

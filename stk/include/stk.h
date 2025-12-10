@@ -343,6 +343,10 @@ public:
     explicit Kernel() : m_platform(), m_strategy(), m_task_now(NULL), m_task_storage(), m_sleep_trap(),
         m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(~0)
     {
+        // HRT mode does not support scheduling strategy with task weights
+        STK_STATIC_ASSERT((!_TyStrategy::WEIGHT_API && ((_Mode & KERNEL_HRT) != 0)) ||
+            ((_Mode & KERNEL_HRT) == 0));
+
     #ifdef _DEBUG
         // _TyPlatform must inherit IPlatform
         IPlatform *platform = &m_platform;

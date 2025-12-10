@@ -46,6 +46,11 @@ private:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling
 };
 
+/*! \typedef SwitchStrategyRR
+    \brief   Shortcut for SwitchStrategyRoundRobin.
+*/
+typedef SwitchStrategyRoundRobin SwitchStrategyRR;
+
 } // namespace stk
 
 #endif /* STK_STRATEGY_RROBIN_H_ */

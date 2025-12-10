@@ -121,7 +121,7 @@ void RunExample()
     // optional: you can override sleep and hard fault default behaviors
     kernel.GetPlatform()->SetEventOverrider(&overrider);
 
-#define TICKS(MS) GetTicksFromMilliseconds(MS, PERIODICITY_DEFAULT)
+#define TICKS(MS) GetTicksFromMsec(MS, PERIODICITY_DEFAULT)
 
     //                     periodicity      deadline    start delay
     kernel.AddTask(&task1, TICKS(1000 * 3), TICKS(100), TICKS(1000 * 0));

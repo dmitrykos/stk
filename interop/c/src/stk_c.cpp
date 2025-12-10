@@ -17,10 +17,12 @@
 
 using namespace stk;
 
-typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRoundRobin, PlatformDefault> KernelStaticRR;
-typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRoundRobin, PlatformDefault> KernelDynamicRR;
-typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRoundRobin, PlatformDefault> KernelStaticHrtRR;
-typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRoundRobin, PlatformDefault> KernelDynamicHrtRR;
+typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticRR;
+typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicRR;
+typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelStaticSWRR;
+typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelDynamicSWRR;
+typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticHrtRR;
+typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicHrtRR;
 
 inline void *operator new(std::size_t, void *ptr) noexcept
 {
@@ -40,6 +42,7 @@ public:
     void *GetFuncUserData() { return m_user_data; }
     EAccessMode GetAccessMode() const { return m_mode; }
     virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
+    virtual int32_t GetWeight() const { return m_weight; }
 
     // IStackMemory
     size_t *GetStack() const { return m_stack; }
@@ -57,7 +60,10 @@ public:
         m_stack      = stack;
         m_stack_size = stack_size;
         m_mode       = mode;
+        m_weight     = 1;
     }
+
+    void SetWeight(int32_t weight) { m_weight = weight; }
 
 private:
     RunFuncType m_func;
@@ -65,6 +71,7 @@ private:
     size_t     *m_stack;
     size_t      m_stack_size;
     EAccessMode m_mode;
+    int32_t     m_weight;
 };
 
 struct TaskSlot
@@ -84,6 +91,8 @@ public:
         None,
         StaticRR,
         DynamicRR,
+        StaticSWRR,
+        DynamicSWRR,
         StaticHrtRR,
         DynamicHrtRR
     };
@@ -113,6 +122,12 @@ public:
         case Type::DynamicRR:
             ptr = new (&dynamic_rr) KernelDynamicRR();
             break;
+        case Type::StaticSWRR:
+            ptr = new (&static_swrr) KernelStaticSWRR();
+            break;
+        case Type::DynamicSWRR:
+            ptr = new (&dynamic_swrr) KernelDynamicSWRR();
+            break;
         case Type::StaticHrtRR:
             ptr = new (&static_hrt_rr) KernelStaticHrtRR();
             break;
@@ -137,6 +152,12 @@ public:
         case Type::DynamicRR:
             dynamic_rr.~KernelDynamicRR();
             break;
+        case Type::StaticSWRR:
+            static_swrr.~KernelStaticSWRR();
+            break;
+        case Type::DynamicSWRR:
+            dynamic_swrr.~KernelDynamicSWRR();
+            break;
         case Type::StaticHrtRR:
             static_hrt_rr.~KernelStaticHrtRR();
             break;
@@ -157,6 +178,8 @@ private:
     {
         KernelStaticRR static_rr;
         KernelDynamicRR dynamic_rr;
+        KernelStaticSWRR static_swrr;
+        KernelDynamicSWRR dynamic_swrr;
         KernelStaticHrtRR static_hrt_rr;
         KernelDynamicHrtRR dynamic_hrt_rr;
     };
@@ -164,7 +187,7 @@ private:
 
 // Static vars
 static KernelWrapper s_Kernel[STK_CPU_COUNT];
-static TaskSlot     s_Tasks[STK_TASKS_MAX];
+static TaskSlot      s_Tasks[STK_TASKS_MAX];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -248,6 +271,16 @@ stk_kernel_t *stk_kernel_create_static()
 stk_kernel_t *stk_kernel_create_dynamic()
 {
     return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicRR));
+}
+
+stk_kernel_t *stk_kernel_create_static_swrr()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticSWRR));
+}
+
+stk_kernel_t *stk_kernel_create_dynamic_swrr()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicSWRR));
 }
 
 stk_kernel_t *stk_kernel_create_hrt_static()
@@ -342,6 +375,14 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
     STK_ASSERT(stack);
     STK_ASSERT(stack_size);
     return reinterpret_cast<stk_task_t *>(AllocateTask(entry, arg, stack, stack_size, ACCESS_USER));
+}
+
+void stk_task_set_weight(stk_task_t *task, int32_t weight)
+{
+    STK_ASSERT(task);
+    STK_ASSERT(weight > 0);
+    auto taskw = reinterpret_cast<TaskWrapper *>(task);
+    taskw->SetWeight(weight);
 }
 
 void stk_task_destroy(stk_task_t *task)

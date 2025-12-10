@@ -110,6 +110,11 @@ private:
     int32_t                   m_total_weight = 0; //!< sum of all task weights
 };
 
+/*! \typedef SwitchStrategySWRR
+    \brief   Shortcut for SwitchStrategySmoothWeightedRoundRobin.
+*/
+typedef SwitchStrategySmoothWeightedRoundRobin SwitchStrategySWRR;
+
 } // namespace stk
 
 #endif /* STK_STRATEGY_SWRROBIN_H_ */
