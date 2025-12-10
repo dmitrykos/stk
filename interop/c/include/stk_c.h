@@ -181,7 +181,7 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
 
 /*! \brief Set weight for a task when using scheduler (non-HRT mode) with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
  *  \param task   Task created with stk_task_create_*
- *  \param weight Weight of the task (must be non-zero, positive number)
+ *  \param weight Weight of the task (must be non-zero, positive 24-bit number)
  *  \note  Weight must be set before a task is added to the kernel
  */
 void stk_task_set_weight(stk_task_t *task, int32_t weight);

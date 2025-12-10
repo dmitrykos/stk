@@ -381,8 +381,7 @@ void stk_task_set_weight(stk_task_t *task, int32_t weight)
 {
     STK_ASSERT(task);
     STK_ASSERT(weight > 0);
-    auto taskw = reinterpret_cast<TaskWrapper *>(task);
-    taskw->SetWeight(weight);
+    reinterpret_cast<TaskWrapper *>(task)->SetWeight(weight);
 }
 
 void stk_task_destroy(stk_task_t *task)

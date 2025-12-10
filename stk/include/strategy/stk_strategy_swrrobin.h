@@ -51,7 +51,7 @@ public:
     void AddTask(IKernelTask *task)
     {
         int32_t weight = task->GetWeight();
-        STK_ASSERT(weight > 0);
+        STK_ASSERT((weight > 0) && (weight <= 0x7FFFFF)); // must not be negative, max 24-bit number
 
         task->SetCurrentWeight(0);
 

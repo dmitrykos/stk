@@ -150,7 +150,7 @@ public:
     virtual void OnDeadlineMissed(uint32_t duration) = 0;
 
     /*! \brief     Get static base weight of the task.
-        \return    Static weight value of the task.
+        \return    Static weight value of the task (must be non-zero, positive 24-bit number).
         \see       SwitchStrategySmoothWeightedRoundRobin, IKernelTask::GetWeight
     */
     virtual int32_t GetWeight() const = 0;
