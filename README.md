@@ -75,11 +75,14 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ### Built-in Scheduling Strategies
 
-* `SwitchStrategyRoundRobin` - Round-Robin, for Soft or HRT modes
-* `SwitchStrategySmoothWeightedRoundRobin` - Smooth Weighted Round-Robin, distributes CPU time proportionally to task weights, avoids bursts by smoothing the task execution over the time
-* `SwitchStrategyRM` - Rate-Monotonic (RM) switching strategy, for HRT mode
-* `SwitchStrategyDM` - Deadline-Monotonic (DM) switching strategy, for HRT mode
-* Custom - API allows implementation of the custom algorithm via the `ITaskSwitchStrategy` interface
+| Strategy Name                            | Mode        | Description                                                                                                  |
+|------------------------------------------|-------------|--------------------------------------------------------------------------------------------------------------|
+| `SwitchStrategyRoundRobin`               | Soft / HRT  | Round-Robin scheduling strategy (Default)                                                                    |
+| `SwitchStrategySmoothWeightedRoundRobin` | Soft / HRT  | Smooth weighted Round-Robin; distributes CPU time proportionally to task weights and avoids execution bursts |
+| `SwitchStrategyRM`                       | HRT         | Rate-Monotonic (RM) switching strategy                                                                       |
+| `SwitchStrategyDM`                       | HRT         | Deadline-Monotonic (DM) switching strategy                                                                   |
+| Custom                                   | Soft / HRT  | Custom algorithm implemented via the ITaskSwitchStrategy interface                                           |
+
 
 ### Task Privilege Separation
 

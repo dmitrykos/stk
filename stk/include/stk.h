@@ -14,7 +14,7 @@
 #include "stk_arch.h"
 #include "strategy/stk_strategy_rrobin.h"
 #include "strategy/stk_strategy_swrrobin.h"
-#include "strategy/stk_strategy_rmonotonic.h"
+#include "strategy/stk_strategy_monotonic.h"
 
 /*! \file  stk.h
     \brief Contains core implementation (Kernel) of the task scheduler.
