@@ -834,28 +834,18 @@ TEST(Kernel, HrtTaskDeadlineMissed)
     g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
     g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
 
-    try
-    {
-        platform->ProcessTick();
+    platform->ProcessTick();
 
-        g_TestContext.ExpectAssert(true);
+    g_TestContext.ExpectAssert(true);
 
-        // 2-nd tick goes outside the deadline
-        platform->ProcessTick();
+    // 2-nd tick goes outside the deadline
+    platform->ProcessTick();
 
-        // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
-        Yield();
+    // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
+    Yield();
 
-        // 3-nd tick goes outside the deadline
-        platform->ProcessTick();
-
-        CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    // 3-nd tick goes outside the deadline
+    platform->ProcessTick();
 
     CHECK_TRUE(platform->m_hard_fault);
     CHECK_EQUAL(2, task.m_deadline_missed);

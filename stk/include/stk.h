@@ -275,7 +275,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
             m_user->OnDeadlineMissed(duration);
             platform->ProcessHardFault();
-            STK_ASSERT(false);
         }
 
         /*! \brief     Called when task process called IKernelService::SwitchToNext to inform Kernel that work is completed.

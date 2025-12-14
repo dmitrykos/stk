@@ -205,13 +205,6 @@ public:
         STK_ASSERT(m_tasks.GetSize() == _TaskCount);
 
         SchedulabilityCheckResult<_TaskCount> ret;
-
-        if (m_tasks.IsEmpty())
-        {
-            ret.schedulable = false;
-            return ret;
-        }
-
         TaskTiming tasks[_TaskCount];
 
         // fill tasks timing

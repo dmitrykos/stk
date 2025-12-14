@@ -249,6 +249,25 @@ TEST(SwitchStrategyMonotonic, AlgorithmDM)
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 
+TEST(SwitchStrategyMonotonic, FailedWCRT)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
+
+    kernel.Initialize();
+
+    // Overload CPU: C/T > RMUB
+    kernel.AddTask(&task1, 50, 50, 0); // 100% CPU
+    kernel.AddTask(&task2, 30, 60, 0); // additional load
+
+    auto result = strategy->IsSchedulableWCRT<2>();
+    CHECK_FALSE_TEXT(result, "Task set should be unschedulable according to WCRT");
+
+    CHECK_EQUAL(50, result.info[0].cpu_load.total);
+    CHECK_EQUAL(150, result.info[1].cpu_load.total);
+}
+
 TEST(SwitchStrategyMonotonic, SchedulableWCRT)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
@@ -271,26 +290,6 @@ TEST(SwitchStrategyMonotonic, SchedulableWCRT)
     CHECK_EQUAL(55, result.info[1].cpu_load.total);
     CHECK_EQUAL(85, result.info[2].cpu_load.total);
 }
-
-TEST(SwitchStrategyMonotonic, FailedWCRT)
-{
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
-    TaskMock<ACCESS_USER> task1, task2;
-    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
-
-    kernel.Initialize();
-
-    // Overload CPU: C/T > RMUB
-    kernel.AddTask(&task1, 50, 50, 0); // 100% CPU
-    kernel.AddTask(&task2, 30, 60, 0); // additional load
-
-    auto result = strategy->IsSchedulableWCRT<2>();
-    CHECK_FALSE_TEXT(result, "Task set should be unschedulable according to WCRT");
-
-    CHECK_EQUAL(50, result.info[0].cpu_load.total);
-    CHECK_EQUAL(150, result.info[1].cpu_load.total);
-}
-
 
 } // namespace stk
 } // namespace test
