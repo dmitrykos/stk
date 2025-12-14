@@ -75,8 +75,8 @@ TEST(SwitchStrategyMonotonic, PriorityNextRM)
 
     // Smaller periodicity = higher priority (Rate-Monotonic)
     kernel.AddTask(&task1, 300, 300, 0);
-    kernel.AddTask(&task2, 200, 200, 0);
     kernel.AddTask(&task3, 100, 100, 0);
+    kernel.AddTask(&task2, 200, 200, 0);
 
     // Highest priority task must be selected first
     IKernelTask *next = strategy->GetFirst();
@@ -109,8 +109,8 @@ TEST(SwitchStrategyMonotonic, PriorityNextDM)
 
     // Smaller deadline = higher priority (Deadline-Monotonic)
     kernel.AddTask(&task1, 300, 300, 0);
-    kernel.AddTask(&task2, 200, 200, 0);
     kernel.AddTask(&task3, 100, 100, 0);
+    kernel.AddTask(&task2, 200, 200, 0);
 
     // Highest priority task must be selected first
     IKernelTask *next = strategy->GetFirst();

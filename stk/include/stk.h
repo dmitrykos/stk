@@ -194,7 +194,14 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         /*! \brief     Schedule the removal of the task from the kernel on next tick.
         */
-        void ScheduleRemoval() { m_state |= STATE_REMOVE_PENDING; }
+        void ScheduleRemoval()
+        {
+            m_state |= STATE_REMOVE_PENDING;
+
+            // when task is existing we mark it as sleeping to prevent HRT schedulers misdetecting as not-sleeping/active task
+            if (_Mode & KERNEL_HRT)
+                HrtOnWorkCompleted();
+        }
 
         /*! \brief     Check if task is pending removal.
         */
@@ -250,10 +257,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             const int32_t duration = m_hrt[0].duration;
 
             STK_ASSERT(duration >= 0);
-
-            // check if deadline is missed (HRT failure)
-            if (HrtIsDeadlineMissed(duration))
-                HrtHardFailDeadline(platform);
 
             m_time_sleep = -(m_hrt[0].periodicity - duration);
             m_hrt[0].duration = 0;
@@ -777,12 +780,12 @@ protected:
     void UpdateTasks()
     {
         UpdateTaskRequest();
-        UpdateTaskSleep();
+        UpdateTaskTiming();
     }
 
-    /*! \brief     Update sleep timers of the sleeping tasks.
+    /*! \brief     Update task timers (sleep, duration of HRT task).
     */
-    void UpdateTaskSleep()
+    void UpdateTaskTiming()
     {
         for (int32_t i = 0; i < TASKS_MAX; ++i)
         {
@@ -797,11 +800,15 @@ protected:
             // in HRT mode we trace how long task spent
             if (_Mode & KERNEL_HRT)
             {
-                ++task->m_hrt[0].duration;
+                // make sure task is valid
+                if (task->IsBusy())
+                {
+                    ++task->m_hrt[0].duration;
 
-                // check if deadline is missed (HRT failure)
-                if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
-                    task->HrtHardFailDeadline(&m_platform);
+                    // check if deadline is missed (HRT failure)
+                    if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
+                        task->HrtHardFailDeadline(&m_platform);
+                }
             }
         }
     }
@@ -994,7 +1001,11 @@ protected:
         (*active) = next->GetUserStack();
 
         // if stack memory is exceeded these assertions will be hit
-        STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+        if (now->IsBusy())
+        {
+            // current task could exit, thus we check it with IsBusy to avoid referencing NULL returned by GetUserTask()
+            STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+        }
         STK_ASSERT(next->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
 
         m_task_now = next;
