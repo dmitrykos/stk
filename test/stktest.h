@@ -268,6 +268,9 @@ template <EAccessMode _AccessMode>
 class TaskMock : public Task<STACK_SIZE_MIN, _AccessMode>
 {
 public:
+    TaskMock() : m_deadline_missed(0)
+    {}
+
     RunFuncType GetFunc() { return &Run; }
     void *GetFuncUserData() { return this; }
 

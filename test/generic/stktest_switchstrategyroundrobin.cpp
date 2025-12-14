@@ -43,7 +43,7 @@ TEST(SwitchStrategyRoundRobin, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -73,7 +73,7 @@ TEST(SwitchStrategyRoundRobin, EndlessNext)
     kernel.Initialize();
     kernel.AddTask(&task1);
 
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     IKernelTask *next = strategy->GetFirst();
     CHECK_TEXT(strategy->GetNext(next) == next, "Expecting the same next task1 (endless looping)");
@@ -115,7 +115,7 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
     // Add tasks
     kernel.AddTask(&task1);
 
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     IKernelTask *next = strategy->GetFirst();
 

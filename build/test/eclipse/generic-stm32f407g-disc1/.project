@@ -26,11 +26,6 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>test</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>deps/cpputest</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -46,24 +41,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/generic</name>
+			<name>src/test</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>test/stktest.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.cpp</locationURI>
-		</link>
-		<link>
-			<name>test/stktest.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.h</locationURI>
-		</link>
-		<link>
-			<name>test/stktest_context.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
 		</link>
 		<link>
 			<name>deps/cpputest/include</name>
@@ -96,24 +76,24 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/generic/stktest_kernel.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernel.cpp</locationURI>
+			<name>src/test/generic</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>test/generic/stktest_kernelservice.cpp</name>
+			<name>src/test/stktest.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernelservice.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.cpp</locationURI>
 		</link>
 		<link>
-			<name>test/generic/stktest_misc.cpp</name>
+			<name>src/test/stktest.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_misc.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.h</locationURI>
 		</link>
 		<link>
-			<name>test/generic/stktest_switchstrategyroundrobin.cpp</name>
+			<name>src/test/stktest_context.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyroundrobin.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
 		</link>
 		<link>
 			<name>deps/cpputest/include/CppUTest</name>
@@ -269,6 +249,36 @@
 			<name>deps/stm32fx/src/write.c</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/deps/target/stm32fx/src/write.c</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_kernel.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernel.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_kernelservice.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernelservice.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_misc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_misc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_switchstrategymonotonic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategymonotonic.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_switchstrategyroundrobin.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyroundrobin.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_switchstrategyswroundrobin.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyswroundrobin.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/cpputest/include/CppUTest/CommandLineArguments.h</name>

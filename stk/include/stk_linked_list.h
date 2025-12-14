@@ -151,7 +151,6 @@ public:
         }
     }
 
-private:
     void Link(DLEntryType *entry, DLEntryType *next = NULL, DLEntryType *prev = NULL)
     {
         STK_ASSERT(entry != NULL);
@@ -173,6 +172,7 @@ private:
             UpdateEnds();
     }
 
+private:
     void UpdateEnds()
     {
         if (IsEmpty())

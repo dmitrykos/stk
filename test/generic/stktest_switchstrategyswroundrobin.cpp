@@ -43,7 +43,7 @@ TEST(SwitchStrategySWRoundRobin, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategySmoothWeightedRoundRobin, PlatformTestMock> kernel;
     TaskMockW<1, ACCESS_USER> task1;
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -73,7 +73,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     kernel.Initialize();
     kernel.AddTask(&task1);
 
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     IKernelTask *next = strategy->GetFirst();
 
@@ -148,7 +148,7 @@ TEST(SwitchStrategySWRoundRobin, Algorithm)
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    ITaskSwitchStrategy *strategy = ((IKernel &)kernel).GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
     IKernelTask *next = strategy->GetFirst();
 
     // scheduling stats
@@ -210,10 +210,10 @@ TEST(SwitchStrategySWRoundRobin, Algorithm)
         else    CHECK_TEXT(false, "Unknown task selected after removal");
     }
 
-    const int nw1 = 1, nw2 = 2;
-    const int ntotal = nw1 + nw2;
-    const int nexp1 = (steps * nw1) / ntotal;
-    const int nexp2 = steps - nexp1;
+    const int32_t nw1 = 1, nw2 = 2;
+    const int32_t ntotal = nw1 + nw2;
+    const int32_t nexp1 = (steps * nw1) / ntotal;
+    const int32_t nexp2 = steps - nexp1;
 
     CHECK_TRUE_TEXT(within_tol(nexp1, count1, tol_frac), "Task1 proportion off after removal");
     CHECK_TRUE_TEXT(within_tol(nexp2, count2, tol_frac), "Task2 proportion off after removal");

@@ -831,65 +831,85 @@ TEST(Kernel, HrtTaskDeadlineMissed)
     kernel.AddTask(&task, 2, 1, 0);
     kernel.Start();
 
-    // 2-nd tick goes outside the deadline
-    platform->ProcessTick();
-
     g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
     g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
 
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
-        Yield();
-        CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    platform->ProcessTick();
+
+    g_TestContext.ExpectAssert(true);
+
+    // 2-nd tick goes outside the deadline
+    platform->ProcessTick();
+
+    // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
+    Yield();
+
+    // 3-nd tick goes outside the deadline
+    platform->ProcessTick();
 
     CHECK_TRUE(platform->m_hard_fault);
     CHECK_EQUAL(2, task.m_deadline_missed);
 }
 
-TEST(Kernel, HrtDeadlineMissedOnTaskExit)
+TEST(Kernel, HrtTaskDeadlineNotMissed)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
     kernel.Initialize();
-    kernel.AddTask(&task, 1, 1, 0);
+    kernel.AddTask(&task, 2, 1, 0);
     kernel.Start();
 
-    // 2-nd tick goes outside the deadline
+    g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
+    g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
+
     platform->ProcessTick();
 
-    // task returns (exiting) without calling SwitchToNext
-    platform->EventTaskExit(platform->m_stack_active);
+    // task completes its work and yields to kernel, its workload is 1 ticks now that is within deadline 1
+    Yield();
 
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        // on next tick kernel will attempt to remove pending task and will check its deadline
-        platform->ProcessTick();
-        CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    // 2-nd tick continues scheduling normally
+    platform->ProcessTick();
 
-    CHECK_TRUE(platform->m_hard_fault);
-    CHECK_EQUAL(2, task.m_deadline_missed);
+    CHECK_FALSE(platform->m_hard_fault);
+    CHECK_EQUAL(0, task.m_deadline_missed);
+}
+
+TEST(Kernel, HrtSkipSleepingNext)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1, 2, 2, 0);
+    kernel.AddTask(&task2, 3, 3, 0);
+    kernel.Start();
+
+    g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
+    g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
+
+    CHECK_EQUAL(platform->m_stack_active->SP, (size_t)task1.GetStack());
+    platform->ProcessTick();
+    platform->ProcessTick();
+    Yield();
+    CHECK_EQUAL(platform->m_stack_active->SP, (size_t)task2.GetStack());
+    platform->ProcessTick();
+    platform->ProcessTick();
+    platform->ProcessTick();
+    Yield();
+    platform->ProcessTick();
+    CHECK_EQUAL(platform->m_stack_active->SP, (size_t)task1.GetStack());
+
+    CHECK_FALSE(platform->m_hard_fault);
+    CHECK_EQUAL(0, task1.m_deadline_missed);
+    CHECK_EQUAL(0, task2.m_deadline_missed);
 }
 
 TEST(Kernel, HrtTaskExitDuringSleepState)
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
@@ -901,9 +921,7 @@ TEST(Kernel, HrtTaskExitDuringSleepState)
     // task returns (exiting) without calling SwitchToNext
     platform->EventTaskExit(platform->m_stack_active);
 
-    platform->ProcessTick();
-    platform->ProcessTick();
-    platform->ProcessTick();
+    platform->ProcessTick(); // removes first task
     platform->ProcessTick();
 }
 

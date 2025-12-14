@@ -28,21 +28,21 @@ public:
 
     void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }
 
-    IKernelTask *GetNext(IKernelTask *current)
+    IKernelTask *GetNext(IKernelTask *current) const
     {
-        STK_ASSERT(m_tasks.GetSize() != 0);
-        return (* current->GetNext());
+        STK_ASSERT(!m_tasks.IsEmpty());
+        return (*current->GetNext());
     }
 
-    IKernelTask *GetFirst()
+    IKernelTask *GetFirst() const
     {
-        STK_ASSERT(m_tasks.GetSize() != 0);
-        return (* m_tasks.GetFirst());
+        STK_ASSERT(!m_tasks.IsEmpty());
+        return (*m_tasks.GetFirst());
     }
 
     size_t GetSize() const { return m_tasks.GetSize(); }
 
-private:
+protected:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling
 };
 

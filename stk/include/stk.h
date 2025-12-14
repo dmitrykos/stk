@@ -14,6 +14,7 @@
 #include "stk_arch.h"
 #include "strategy/stk_strategy_rrobin.h"
 #include "strategy/stk_strategy_swrrobin.h"
+#include "strategy/stk_strategy_rmonotonic.h"
 
 /*! \file  stk.h
     \brief Contains core implementation (Kernel) of the task scheduler.
@@ -98,6 +99,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         bool IsBusy() const { return (m_user != NULL); }
 
+        bool IsSleeping() const { return (m_time_sleep < 0); }
+
         void SetCurrentWeight(int32_t weight)
         {
             if (_TyStrategy::WEIGHT_API)
@@ -105,8 +108,10 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         }
 
         int32_t GetWeight() const { return (_TyStrategy::WEIGHT_API ? m_user->GetWeight() : 1); }
-
         int32_t GetCurrentWeight() const { return (_TyStrategy::WEIGHT_API ? m_rt_weight[0] : 1); }
+
+        int32_t GetHrtPeriodicity() const { return (_Mode & KERNEL_HRT ? m_hrt[0].periodicity : 0);  }
+        int32_t GetHrtDeadline() const { return (_Mode & KERNEL_HRT ? m_hrt[0].deadline : 0);  }
 
     private:
         /*! \class SrtInfo
@@ -148,13 +153,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 periodicity = 0;
                 deadline    = 0;
                 duration    = 0;
-                last_ticks  = 0;
             }
 
             int32_t periodicity; //!< scheduling periodicity (ticks)
             int32_t deadline;    //!< work deadline (ticks)
             int32_t duration;    //!< current duration of the active state when work is being carried out by the task (ticks)
-            int64_t last_ticks;  //!< last saved tick value obtained by IKernelService::GetTicks (ticks)
         };
 
         /*! \brief     Release variables from info about previous task.
@@ -191,7 +194,14 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         /*! \brief     Schedule the removal of the task from the kernel on next tick.
         */
-        void ScheduleRemoval() { m_state |= STATE_REMOVE_PENDING; }
+        void ScheduleRemoval()
+        {
+            m_state |= STATE_REMOVE_PENDING;
+
+            // when task is existing we mark it as sleeping to prevent HRT schedulers misdetecting as not-sleeping/active task
+            if (_Mode & KERNEL_HRT)
+                HrtOnWorkCompleted();
+        }
 
         /*! \brief     Check if task is pending removal.
         */
@@ -216,38 +226,55 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void HrtInit(uint32_t periodicity_tc, uint32_t deadline_tc, int32_t start_delay_tc)
         {
+            STK_ASSERT(periodicity_tc > 0);
+            STK_ASSERT(deadline_tc > 0);
+            STK_ASSERT(start_delay_tc >= 0);
+            STK_ASSERT(periodicity_tc < INT32_MAX);
+            STK_ASSERT(deadline_tc < INT32_MAX);
+
             m_hrt[0].periodicity = periodicity_tc;
             m_hrt[0].deadline    = deadline_tc;
-            m_time_sleep         = -start_delay_tc;
+
+            m_time_sleep = -start_delay_tc;
         }
 
         /*! \brief     Called when task is switched into the scheduling process.
             \note      Related to stk::KERNEL_HRT mode only.
             \param[in] ticks: Current ticks of the Kernel.
         */
-        void HrtOnSwitchedIn(int64_t ticks) { m_hrt[0].last_ticks = ticks; }
+        void HrtOnSwitchedIn()
+        {
+            m_hrt[0].duration = 0;
+        }
 
         /*! \brief     Called when task is switched out from the scheduling process.
             \note      Related to stk::KERNEL_HRT mode only.
             \param[in] platform: Platform driver instance.
             \param[in] ticks: Current ticks of the Kernel.
         */
-        void HrtOnSwitchedOut(IPlatform *platform, int64_t ticks)
+        void HrtOnSwitchedOut(IPlatform *platform)
         {
-            int32_t duration = m_hrt[0].duration + (int32_t)(ticks - m_hrt[0].last_ticks);
-            m_hrt[0].duration = 0;
+            const int32_t duration = m_hrt[0].duration;
 
             STK_ASSERT(duration >= 0);
 
-            // check if deadline is missed (HRT failure)
-            if (HrtIsDeadlineMissed(duration))
-            {
-                m_user->OnDeadlineMissed(duration);
-                platform->ProcessHardFault();
-                STK_ASSERT(false);
-            }
-
             m_time_sleep = -(m_hrt[0].periodicity - duration);
+            m_hrt[0].duration = 0;
+        }
+
+        /*! \brief     Hard-fail HRT task when it missed its deadline.
+            \note      Related to stk::KERNEL_HRT mode only.
+            \param[in] platform: Platform driver instance.
+        */
+        void HrtHardFailDeadline(IPlatform *platform)
+        {
+            const int32_t duration = m_hrt[0].duration;
+
+            STK_ASSERT(duration >= 0);
+            STK_ASSERT(HrtIsDeadlineMissed(duration));
+
+            m_user->OnDeadlineMissed(duration);
+            platform->ProcessHardFault();
         }
 
         /*! \brief     Called when task process called IKernelService::SwitchToNext to inform Kernel that work is completed.
@@ -407,16 +434,11 @@ public:
     {
         if (_Mode & KERNEL_HRT)
         {
-            STK_ASSERT(periodicity_tc > 0);
-            STK_ASSERT(deadline_tc > 0);
-            STK_ASSERT(start_delay_tc >= 0);
-            STK_ASSERT(periodicity_tc < INT32_MAX);
-            STK_ASSERT(deadline_tc < INT32_MAX);
             STK_ASSERT(user_task != NULL);
             STK_ASSERT(IsInitialized());
             STK_ASSERT(!IsStarted());
 
-            AllocateAndAddNewTask(user_task)->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
+            HrtAllocateAndAddNewTask(user_task, periodicity_tc, deadline_tc, start_delay_tc);
         }
         else
         {
@@ -457,6 +479,8 @@ public:
     bool IsStarted() const { return (m_task_now != NULL); }
 
     IPlatform *GetPlatform() { return &m_platform; }
+
+    ITaskSwitchStrategy *GetSwitchStrategy() { return &m_strategy; }
 
 protected:
     /*! \enum  EFsmState
@@ -551,13 +575,30 @@ protected:
         \param[in] user_task: User task for which kernel task object is allocated.
         \return    Kernel task.
     */
-    KernelTask *AllocateAndAddNewTask(ITask *user_task)
+    void AllocateAndAddNewTask(ITask *user_task)
     {
         KernelTask *task = AllocateNewTask(user_task);
         STK_ASSERT(task != NULL);
 
         m_strategy.AddTask(task);
-        return task;
+    }
+
+    /*! \brief     Allocate new instance of KernelTask and add it into the HRT scheduling process.
+        \note      Related to stk::KERNEL_HRT mode only.
+        \param[in] user_task: User task for which kernel task object is allocated.
+        \param[in] periodicity_tc: Periodicity time at which task is scheduled (ticks).
+        \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
+        \param[in] start_delay_tc: Initial start delay for the task (ticks).
+        \return    Kernel task.
+    */
+    void HrtAllocateAndAddNewTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc)
+    {
+        KernelTask *task = AllocateNewTask(user_task);
+        STK_ASSERT(task != NULL);
+
+        task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
+
+        m_strategy.AddTask(task);
     }
 
     /*! \brief     Request to add new task.
@@ -677,7 +718,7 @@ protected:
 
             if (_Mode & KERNEL_HRT)
             {
-                m_task_now->HrtOnSwitchedIn(m_service.GetTicks());
+                m_task_now->HrtOnSwitchedIn();
             }
         }
         else
@@ -711,7 +752,7 @@ protected:
 
         task->m_time_sleep -= ticks;
 
-        while (task->m_time_sleep < 0)
+        while (task->IsSleeping())
         {
             __stk_relax_cpu();
         }
@@ -738,20 +779,36 @@ protected:
     void UpdateTasks()
     {
         UpdateTaskRequest();
-        UpdateTaskSleep();
+        UpdateTaskTiming();
     }
 
-    /*! \brief     Update sleep timers of the sleeping tasks.
+    /*! \brief     Update task timers (sleep, duration of HRT task).
     */
-    void UpdateTaskSleep()
+    void UpdateTaskTiming()
     {
         for (int32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
 
             // advance by +1 millisecond
-            if (task->m_time_sleep < 0)
+            if (task->IsSleeping())
+            {
                 ++task->m_time_sleep;
+            }
+            else
+            // in HRT mode we trace how long task spent
+            if (_Mode & KERNEL_HRT)
+            {
+                // make sure task is valid
+                if (task->IsBusy())
+                {
+                    ++task->m_hrt[0].duration;
+
+                    // check if deadline is missed (HRT failure)
+                    if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
+                        task->HrtHardFailDeadline(&m_platform);
+                }
+            }
         }
     }
 
@@ -814,7 +871,7 @@ protected:
                                 // current task will not be switched out in StateSwitch because it is the last one
                                 // therefore make sure deadline is checked for this task
                                 if (m_strategy.GetSize() == 1)
-                                    itr->HrtOnSwitchedOut(&m_platform, m_service.GetTicks());
+                                    itr->HrtOnSwitchedOut(&m_platform);
                             }
 
                             // move to the next
@@ -847,7 +904,7 @@ protected:
             }
 
             // check if task is sleeping
-            if ((itr != NULL) && (itr->m_time_sleep < 0))
+            if ((itr != NULL) && itr->IsSleeping())
             {
                 // if iterated back to self then all tasks are sleeping and kernel should enter a sleep mode
                 if (itr == sleep_end)
@@ -943,17 +1000,19 @@ protected:
         (*active) = next->GetUserStack();
 
         // if stack memory is exceeded these assertions will be hit
-        STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+        if (now->IsBusy())
+        {
+            // current task could exit, thus we check it with IsBusy to avoid referencing NULL returned by GetUserTask()
+            STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
+        }
         STK_ASSERT(next->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
 
         m_task_now = next;
 
         if (_Mode & KERNEL_HRT)
         {
-            int64_t ticks = m_service.GetTicks();
-
-            now->HrtOnSwitchedOut(&m_platform, ticks);
-            next->HrtOnSwitchedIn(ticks);
+            now->HrtOnSwitchedOut(&m_platform);
+            next->HrtOnSwitchedIn();
         }
 
         return true; // switch context
@@ -983,7 +1042,7 @@ protected:
 
         if (_Mode & KERNEL_HRT)
         {
-            next->HrtOnSwitchedIn(m_service.GetTicks());
+            next->HrtOnSwitchedIn();
         }
 
         return true; // switch context
@@ -1010,7 +1069,7 @@ protected:
 
         if (_Mode & KERNEL_HRT)
         {
-            now->HrtOnSwitchedOut(&m_platform, m_service.GetTicks());
+            now->HrtOnSwitchedOut(&m_platform);
         }
 
         return true; // switch context
@@ -1049,13 +1108,6 @@ protected:
 
         return false;
     }
-
-#ifdef _STK_UNDER_TEST
-    /*! \brief     Get switch strategy instance.
-        \return    Pointer to the ITaskSwitchStrategy concrete class instance.
-    */
-    ITaskSwitchStrategy *GetSwitchStrategy() { return &m_strategy; }
-#endif
 
     /*! \brief     Check if kernel was initialized with IKernel::Initialize().
         \return    True if initialized, otherwise false.
