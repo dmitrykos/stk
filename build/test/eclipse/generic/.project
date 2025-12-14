@@ -36,7 +36,7 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/test</name>
+			<name>src/test</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -61,22 +61,22 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic</name>
+			<name>src/test/generic</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>deps/test/stktest.cpp</name>
+			<name>src/test/stktest.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/stktest.h</name>
+			<name>src/test/stktest.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest.h</locationURI>
 		</link>
 		<link>
-			<name>deps/test/stktest_context.h</name>
+			<name>src/test/stktest_context.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
 		</link>
@@ -156,27 +156,32 @@
 			<locationURI>PARENT-4-PROJECT_LOC/stk/src/stk.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/stktest_kernel.cpp</name>
+			<name>src/test/generic/stktest_kernel.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernel.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/stktest_kernelservice.cpp</name>
+			<name>src/test/generic/stktest_kernelservice.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_kernelservice.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/stktest_misc.cpp</name>
+			<name>src/test/generic/stktest_misc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_misc.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/stktest_switchstrategyroundrobin.cpp</name>
+			<name>src/test/generic/stktest_switchstrategymonotonic.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategymonotonic.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/test/generic/stktest_switchstrategyroundrobin.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyroundrobin.cpp</locationURI>
 		</link>
 		<link>
-			<name>deps/test/generic/stktest_switchstrategyswroundrobin.cpp</name>
+			<name>src/test/generic/stktest_switchstrategyswroundrobin.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyswroundrobin.cpp</locationURI>
 		</link>

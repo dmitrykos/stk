@@ -169,7 +169,7 @@ __stk_forceinline int64_t GetTimeNowMsec()
     IKernelService *service = IKernelService::GetInstance();
     int32_t resolution = service->GetTickResolution();
 
-    if (resolution == 1000)
+    if (1000 == resolution)
         return service->GetTicks();
     else
         return (service->GetTicks() * resolution) / 1000;
@@ -201,6 +201,76 @@ __stk_forceinline void Yield()
 {
     IKernelService::GetInstance()->SwitchToNext();
 }
+
+/*! \class PeriodicTimer
+    \brief Lightweight periodic time accumulator with callback notification.
+
+    \tparam _PeriodMsec Period value in milliseconds which defines the timer interval.
+
+    \note  This timer accumulates elapsed time between consecutive Update() calls
+           using stk::GetTimeNowMsec(). When the accumulated time reaches or exceeds
+           the configured period, a user-provided callback is invoked.
+
+    Usage example:
+    \code
+    PeriodicTimer<1000> timer; // 1 second period
+
+    timer.Update([](int64_t now, uint32_t elapsed) {
+        // called every ~1000 ms
+    });
+    \endcode
+*/
+template <uint32_t PeriodMsec>
+struct PeriodicTimer
+{
+    int64_t  prev;    //!< timestamp of the previous Update() call in milliseconds
+    uint32_t elapsed; //!< accumulated elapsed time in milliseconds
+
+    /*! \brief Construct a periodic timer and initialize the reference timestamp.
+    */
+    PeriodicTimer() : prev(GetTimeNowMsec()), elapsed(0)
+    {}
+
+    /*! \brief Reset the timer state.
+        \note  This method resets the accumulated elapsed time to zero and
+               reinitializes the reference timestamp using the current value
+               returned by stk::GetTimeNowMsec().
+        \note  After calling Reset(), the next callback invocation will occur
+               only after a full period has elapsed.
+    */
+    void Reset()
+    {
+        prev = GetTimeNowMsec();
+        elapsed = 0;
+    }
+
+    /*! \brief              Update the timer and invoke callback when the period is reached.
+        \tparam   _Callback Callable type accepting (int64_t now, uint32_t elapsed).
+        \param[in] cb       User callback invoked when accumulated time reaches the period.
+
+        \note  The callback is called with:
+               - \c now : current timestamp returned by stk::GetTimeNowMsec()
+               - \c elapsed : accumulated elapsed time in milliseconds
+
+        \note  If accumulated time exceeds the period, the remainder is preserved
+               to maintain timing accuracy across updates.
+
+        \warning This method assumes monotonic behavior of stk::GetTimeNowMsec().
+    */
+    template <typename _Callback>
+    void Update(_Callback&& cb)
+    {
+        int64_t now = GetTimeNowMsec();
+        elapsed += static_cast<uint32_t>(now - prev);
+        prev = now;
+
+        if (elapsed >= PeriodMsec)
+        {
+            cb(now, elapsed);
+            elapsed -= PeriodMsec;
+        }
+    }
+};
 
 } // namespace stk
 

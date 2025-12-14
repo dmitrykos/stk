@@ -199,6 +199,22 @@ public:
         \see       SwitchStrategySmoothWeightedRoundRobin
     */
     virtual int32_t GetCurrentWeight() const = 0;
+
+    /*! \brief     Get HRT task execution periodicity.
+        \return    Periodicity of the task (ticks).
+    */
+    virtual int32_t GetHrtPeriodicity() const = 0;
+
+    /*! \brief     Get HRT task deadline (max allowed task execution time).
+      \return      Deadline of the task in HRT ticks.
+    */
+    virtual int32_t GetHrtDeadline() const = 0;
+
+    /*! \brief     Check whether the task is currently sleeping.
+        \return    True if the task is sleeping, false otherwise.
+    */
+    virtual bool IsSleeping() const = 0;
+
 };
 
 /*! \class IPlatform
@@ -260,14 +276,14 @@ public:
     class IEventOverrider
     {
     public:
-        /*! \brief      Called by Kernel when its entering a sleep mode.
-            \return     True if event is handled otherwise False to let driver handle it.
+        /*! \brief  Called by Kernel when its entering a sleep mode.
+            \return True if event is handled otherwise False to let driver handle it.
         */
         virtual bool OnSleep() = 0;
 
-        /*! \brief      Called by Kernel when hard fault happens.
-            \note       Normally called by Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
-            \return     True if event is handled otherwise False to let driver handle it.
+        /*! \brief  Called by Kernel when hard fault happens.
+            \note   Normally called by Kernel when one of the scheduled tasks missed its deadline (see stk::KERNEL_HRT, IPlatform::HardFault).
+            \return True if event is handled otherwise False to let driver handle it.
         */
         virtual bool OnHardFault() = 0;
     };
@@ -366,14 +382,14 @@ public:
 
     /*! \brief     Get first task.
     */
-    virtual IKernelTask *GetFirst() = 0;
+    virtual IKernelTask *GetFirst() const = 0;
 
     /*! \brief     Get next linked task.
         \param[in] current: Pointer to the current task.
         \return    Pointer to the next task.
         \note      Some implementations may return NULL that denotes the end of the iteration.
     */
-    virtual IKernelTask *GetNext(IKernelTask *current) = 0;
+    virtual IKernelTask *GetNext(IKernelTask *current) const = 0;
 
     /*! \brief     Get number of tasks.
     */
@@ -436,12 +452,10 @@ public:
     */
     virtual IPlatform *GetPlatform() = 0;
 
-#ifdef _STK_UNDER_TEST
     /*! \brief     Get switch strategy instance.
         \return    Pointer to the ITaskSwitchStrategy concrete class instance.
     */
     virtual ITaskSwitchStrategy *GetSwitchStrategy() = 0;
-#endif
 };
 
 /*! \class IKernelService

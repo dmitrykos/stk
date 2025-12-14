@@ -51,18 +51,20 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ## Modes of Operation
 
-### Soft Real-Time (default)
+### Soft Real-Time (Default)
 
 * Tasks cooperate using `Sleep()` or `Yield()`
 * Timing is a best-effort
 * Tasks can not block execution of other tasks (preemptive scheduling, Round-Robin default scheduling strategy `SwitchStrategyRoundRobin`)
 
-### Hard Real-Time (KERNEL_HRT)
+### Hard Real-Time (HRT)
 
+* Separate kernel mode of operation set by `KERNEL_HRT` flag
 * Periodic tasks with strict execution windows
 * Tasks must notify kernel when the work is done by using `Yield()`
 * Kernel enforces deadlines
 * Any violation fails the application deterministically (`ITask::OnDeadlineMissed` callback is called)
+* Dedicated HRT task switching strategies (`SwitchStrategyRM`, `SwitchStrategyDM`)
 
 > HRT use cases: motor control, power electronics, aerospace systems.
 
@@ -73,8 +75,10 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ### Built-in Scheduling Strategies
 
-* Round-Robin - `SwitchStrategyRoundRobin`
-* Smooth Weighted Round-Robin - `SwitchStrategySmoothWeightedRoundRobin`, distributes CPU time proportionally to task weights, avoids bursts by smoothing the task execution over the time
+* `SwitchStrategyRoundRobin` - Round-Robin, for Soft or HRT modes
+* `SwitchStrategySmoothWeightedRoundRobin` - Smooth Weighted Round-Robin, distributes CPU time proportionally to task weights, avoids bursts by smoothing the task execution over the time
+* `SwitchStrategyRM` - Rate-Monotonic (RM) switching strategy, for HRT mode
+* `SwitchStrategyDM` - Deadline-Monotonic (DM) switching strategy, for HRT mode
 * Custom - API allows implementation of the custom algorithm via the `ITaskSwitchStrategy` interface
 
 ### Task Privilege Separation

@@ -65,13 +65,13 @@ public:
         m_tasks.Unlink(task);
     }
 
-    IKernelTask *GetNext(IKernelTask */*current*/)
+    IKernelTask *GetNext(IKernelTask */*current*/) const
     {
-        STK_ASSERT(m_tasks.GetSize() > 0);
+        STK_ASSERT(!m_tasks.IsEmpty());
 
         IKernelTask *selected = nullptr;
         int32_t max_weight = -1;
-        IKernelTask::ListEntryType *start = m_tasks.GetFirst(), *itr = start;
+        IKernelTask::ListEntryType *itr = m_tasks.GetFirst(), * const start = itr;
 
         do
         {
@@ -88,7 +88,7 @@ public:
 
             itr = itr->GetNext();
         }
-        while (itr != start);
+        while (start != itr);
 
         STK_ASSERT(selected != nullptr);
 
@@ -97,10 +97,10 @@ public:
         return selected;
     }
 
-    IKernelTask *GetFirst()
+    IKernelTask *GetFirst() const
     {
-        STK_ASSERT(m_tasks.GetSize() != 0);
-        return (* m_tasks.GetFirst());
+        STK_ASSERT(!m_tasks.IsEmpty());
+        return (*m_tasks.GetFirst());
     }
 
     size_t GetSize() const { return m_tasks.GetSize(); }

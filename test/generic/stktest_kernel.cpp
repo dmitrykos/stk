@@ -831,17 +831,24 @@ TEST(Kernel, HrtTaskDeadlineMissed)
     kernel.AddTask(&task, 2, 1, 0);
     kernel.Start();
 
-    // 2-nd tick goes outside the deadline
-    platform->ProcessTick();
-
     g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
     g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
 
     try
     {
+        platform->ProcessTick();
+
         g_TestContext.ExpectAssert(true);
+
+        // 2-nd tick goes outside the deadline
+        platform->ProcessTick();
+
         // task completes its work and yields to kernel, its workload is 2 ticks now that is outside deadline 1
         Yield();
+
+        // 3-nd tick goes outside the deadline
+        platform->ProcessTick();
+
         CHECK_TEXT(false, "expecting assertion when HRT task deadline is missed");
     }
     catch (TestAssertPassed &pass)
@@ -852,6 +859,31 @@ TEST(Kernel, HrtTaskDeadlineMissed)
 
     CHECK_TRUE(platform->m_hard_fault);
     CHECK_EQUAL(2, task.m_deadline_missed);
+}
+
+TEST(Kernel, HrtTaskDeadlineNotMissed)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize();
+    kernel.AddTask(&task, 2, 1, 0);
+    kernel.Start();
+
+    g_HrtTaskDeadlineMissedRelaxCpuContext.platform = platform;
+    g_RelaxCpuHandler = HrtTaskDeadlineMissedRelaxCpu;
+
+    platform->ProcessTick();
+
+    // task completes its work and yields to kernel, its workload is 1 ticks now that is within deadline 1
+    Yield();
+
+    // 2-nd tick continues scheduling normally
+    platform->ProcessTick();
+
+    CHECK_FALSE(platform->m_hard_fault);
+    CHECK_EQUAL(0, task.m_deadline_missed);
 }
 
 TEST(Kernel, HrtDeadlineMissedOnTaskExit)
@@ -901,8 +933,6 @@ TEST(Kernel, HrtTaskExitDuringSleepState)
     // task returns (exiting) without calling SwitchToNext
     platform->EventTaskExit(platform->m_stack_active);
 
-    platform->ProcessTick();
-    platform->ProcessTick();
     platform->ProcessTick();
     platform->ProcessTick();
 }

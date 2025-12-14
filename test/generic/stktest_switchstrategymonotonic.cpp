@@ -1,0 +1,296 @@
+/*
+ * SuperTinyKernel: Minimalistic C++ thread scheduling kernel for Embedded systems.
+ *
+ * Source: http://github.com/dmitrykos/stk
+ *
+ * Copyright (c) 2025 Neutron Code Limited <stk@neutroncode.com>
+ * License: MIT License, see LICENSE for a full text.
+ */
+
+#include "stktest.h"
+
+namespace stk {
+namespace test {
+
+// ============================================================================ //
+// ============================ SwitchStrategyMonotonic ====================== //
+// ============================================================================ //
+
+TEST_GROUP(SwitchStrategyMonotonic)
+{
+    void setup() {}
+    void teardown() {}
+};
+
+TEST(SwitchStrategyMonotonic, GetFirstEmpty)
+{
+    SwitchStrategyRM rr;
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        rr.GetFirst();
+        CHECK_TEXT(false, "expecting assertion when empty");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(SwitchStrategyMonotonic, GetNextEmpty)
+{
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    kernel.AddTask(&task1);
+    IKernelTask *ktask = strategy->GetFirst();
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL(0, strategy->GetSize());
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->GetNext(ktask);
+        CHECK_TEXT(false, "expecting assertion when empty");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(SwitchStrategyMonotonic, PriorityNextRM)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    // Smaller periodicity = higher priority (Rate-Monotonic)
+    kernel.AddTask(&task1, 300, 300, 0);
+    kernel.AddTask(&task2, 200, 200, 0);
+    kernel.AddTask(&task3, 100, 100, 0);
+
+    // Highest priority task must be selected first
+    IKernelTask *next = strategy->GetFirst();
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority (smallest periodicity)");
+
+    // GetNext must always return highest-priority READY task
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task must repeat (no round-robin)");
+
+    // Remove highest priority
+    kernel.RemoveTask(&task3);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
+
+    // Remove next highest
+    kernel.RemoveTask(&task2);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+}
+
+TEST(SwitchStrategyMonotonic, PriorityNextDM)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    // Smaller deadline = higher priority (Deadline-Monotonic)
+    kernel.AddTask(&task1, 300, 300, 0);
+    kernel.AddTask(&task2, 200, 200, 0);
+    kernel.AddTask(&task3, 100, 100, 0);
+
+    // Highest priority task must be selected first
+    IKernelTask *next = strategy->GetFirst();
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority (shortest deadline)");
+
+    // GetNext must always return highest-priority READY task
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task must repeat (no round-robin)");
+
+    // Remove highest priority
+    kernel.RemoveTask(&task3);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
+
+    // Remove next highest
+    kernel.RemoveTask(&task2);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+}
+
+TEST(SwitchStrategyMonotonic, AlgorithmRM)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    // --- Stage 1: Add first task -----------------------------------------
+
+    // Smaller periodicity = higher priority (Rate-Monotonic)
+    kernel.AddTask(&task1, 300, 300, 0);
+
+    IKernelTask *next = strategy->GetFirst();
+
+    // Single task -> always returned
+    for (int32_t i = 0; i < 5; i++)
+    {
+        next = strategy->GetNext(next);
+        CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
+    }
+
+    // --- Stage 2: Add second task ----------------------------------------
+
+    kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 3: Add third task -----------------------------------------
+
+    kernel.AddTask(&task3, 100, 100, 0); // highest priority
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 4: Remove a task ------------------------------------------
+
+    kernel.RemoveTask(&task3);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
+
+    kernel.RemoveTask(&task2);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+}
+
+TEST(SwitchStrategyMonotonic, AlgorithmDM)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    // --- Stage 1: Add first task -----------------------------------------
+
+    // Smaller deadline = higher priority (Deadline-Monotonic)
+    kernel.AddTask(&task1, 300, 300, 0);
+
+    IKernelTask *next = strategy->GetFirst();
+
+    // Single task -> always returned
+    for (int32_t i = 0; i < 5; i++)
+    {
+        next = strategy->GetNext(next);
+        CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
+    }
+
+    // --- Stage 2: Add second task ----------------------------------------
+
+    kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 3: Add third task -----------------------------------------
+
+    kernel.AddTask(&task3, 100, 100, 0); // highest priority
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 4: Remove a task ------------------------------------------
+
+    kernel.RemoveTask(&task3);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
+
+    kernel.RemoveTask(&task2);
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+}
+
+TEST(SwitchStrategyMonotonic, SchedulableWCRT)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3, task4;
+    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
+
+    kernel.Initialize();
+
+    // --- Stage 1: Schedulable tasks ---------------------------------------
+
+    // Task parameters: periodicity = execution time, deadline = task period
+    kernel.AddTask(&task1, 20, 40, 0);  // task1: C=20, T=40
+    kernel.AddTask(&task2, 30, 100, 0); // task2: C=30, T=100
+    kernel.AddTask(&task3, 10, 200, 0); // task3: C=10, T=200
+
+    auto result = strategy->IsSchedulableWCRT<3>();
+    CHECK_TEXT(result, "Task set should be schedulable according to WCRT");
+
+    CHECK_EQUAL(5, result.info[0].cpu_load.total);
+    CHECK_EQUAL(55, result.info[1].cpu_load.total);
+    CHECK_EQUAL(85, result.info[2].cpu_load.total);
+}
+
+TEST(SwitchStrategyMonotonic, FailedWCRT)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
+
+    kernel.Initialize();
+
+    // Overload CPU: C/T > RMUB
+    kernel.AddTask(&task1, 50, 50, 0); // 100% CPU
+    kernel.AddTask(&task2, 30, 60, 0); // additional load
+
+    auto result = strategy->IsSchedulableWCRT<2>();
+    CHECK_FALSE_TEXT(result, "Task set should be unschedulable according to WCRT");
+
+    CHECK_EQUAL(50, result.info[0].cpu_load.total);
+    CHECK_EQUAL(150, result.info[1].cpu_load.total);
+}
+
+
+} // namespace stk
+} // namespace test
