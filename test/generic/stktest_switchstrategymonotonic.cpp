@@ -43,7 +43,7 @@ TEST(SwitchStrategyMonotonic, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -69,7 +69,7 @@ TEST(SwitchStrategyMonotonic, PriorityNextRM)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -103,7 +103,7 @@ TEST(SwitchStrategyMonotonic, PriorityNextDM)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -137,7 +137,7 @@ TEST(SwitchStrategyMonotonic, AlgorithmRM)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -195,7 +195,7 @@ TEST(SwitchStrategyMonotonic, AlgorithmDM)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -253,7 +253,7 @@ TEST(SwitchStrategyMonotonic, FailedWCRT)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
-    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
+    const SwitchStrategyRM *strategy = static_cast<const SwitchStrategyRM *>(kernel.GetSwitchStrategy());
 
     kernel.Initialize();
 
@@ -261,7 +261,7 @@ TEST(SwitchStrategyMonotonic, FailedWCRT)
     kernel.AddTask(&task1, 50, 50, 0); // 100% CPU
     kernel.AddTask(&task2, 30, 60, 0); // additional load
 
-    auto result = strategy->IsSchedulableWCRT<2>();
+    auto result = SchedulabilityCheck::IsSchedulableWCRT<2>(strategy);
     CHECK_FALSE_TEXT(result, "Task set should be unschedulable according to WCRT");
 
     CHECK_EQUAL(50, result.info[0].cpu_load.total);
@@ -272,7 +272,7 @@ TEST(SwitchStrategyMonotonic, SchedulableWCRT)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3, task4;
-    SwitchStrategyRM *strategy = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy());
+    const SwitchStrategyRM *strategy = static_cast<const SwitchStrategyRM *>(kernel.GetSwitchStrategy());
 
     kernel.Initialize();
 
@@ -283,7 +283,7 @@ TEST(SwitchStrategyMonotonic, SchedulableWCRT)
     kernel.AddTask(&task2, 30, 100, 0); // task2: C=30, T=100
     kernel.AddTask(&task3, 10, 200, 0); // task3: C=10, T=200
 
-    auto result = strategy->IsSchedulableWCRT<3>();
+    auto result = SchedulabilityCheck::IsSchedulableWCRT<3>(strategy);
     CHECK_TEXT(result, "Task set should be schedulable according to WCRT");
 
     CHECK_EQUAL(5, result.info[0].cpu_load.total);

@@ -16,6 +16,7 @@ option(VENDOR_STM32   "Target STM32 devices" OFF)
 
 # Add static lib option
 option(BUILD_LIB      "build Library"        OFF)
+option(BUILD_C_IFACE  "build C interface"    OFF)
 #option(BUILD_EXAMPLES "build Examples"       OFF)
 option(BUILD_TESTS    "build Tests"          OFF)
 option(BUILD_DOC      "build Documentation"  OFF)

@@ -180,7 +180,7 @@ void RunExample()
     kernel.AddTask(&hwt1, MSEC(10), MSEC(100), MSEC(0));
     kernel.AddTask(&hwt2, MSEC(10), MSEC(100), MSEC(0));
 
-    auto wcrt_sched = static_cast<SwitchStrategyRM *>(kernel.GetSwitchStrategy())->IsSchedulableWCRT<TASK_COUNT>();
+    auto wcrt_sched = SchedulabilityCheck::IsSchedulableWCRT<TASK_COUNT>(kernel.GetSwitchStrategy());
     STK_ASSERT(wcrt_sched == true);
 
     kernel.Start();

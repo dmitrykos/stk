@@ -43,7 +43,7 @@ TEST(SwitchStrategySWRoundRobin, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategySmoothWeightedRoundRobin, PlatformTestMock> kernel;
     TaskMockW<1, ACCESS_USER> task1;
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -73,7 +73,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     kernel.Initialize();
     kernel.AddTask(&task1);
 
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     IKernelTask *next = strategy->GetFirst();
 
@@ -148,7 +148,7 @@ TEST(SwitchStrategySWRoundRobin, Algorithm)
     kernel.AddTask(&task2);
     kernel.AddTask(&task3);
 
-    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
     IKernelTask *next = strategy->GetFirst();
 
     // scheduling stats

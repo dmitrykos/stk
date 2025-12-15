@@ -23,12 +23,19 @@ elseif (RISCV)
     include(${CMAKE_CURRENT_SOURCE_DIR}/../deps/target/risc-v/ProjectInclude.cmake)
 endif()
 
-# Sources
+# C++ sources
 file(GLOB STK_LIB_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 file(GLOB STK_LIB_SRC_ARM_CORTEX_M ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/arm/cortex-m/*.cpp)
 file(GLOB STK_LIB_SRC_RISC_V ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/risc-v/*.cpp)
 file(GLOB STK_LIB_SRC_WIN32 ${CMAKE_CURRENT_SOURCE_DIR}/src/arch/x86/win32/*.cpp)
-set(STK_LIB_SRC ${STK_LIB_SRC} ${STK_LIB_SRC_ARM_CORTEX_M} ${STK_LIB_SRC_RISC_V} ${STK_LIB_SRC_WIN32})
+
+# C interface
+if (BUILD_C_IFACE)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../interop/c/include)
+    file(GLOB STK_LIB_SRC_C_IFACE ${CMAKE_CURRENT_SOURCE_DIR}/../interop/c/src/*.cpp)
+endif()
+
+set(STK_LIB_SRC ${STK_LIB_SRC} ${STK_LIB_SRC_ARM_CORTEX_M} ${STK_LIB_SRC_RISC_V} ${STK_LIB_SRC_WIN32} ${STK_LIB_SRC_C_IFACE})
 
 # Target
 add_library(${TARGET_NAME} STATIC ${STK_LIB_SRC})

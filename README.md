@@ -29,23 +29,23 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ## Key Features
 
-| Feature                               | Description                                                                                          |
-|---------------------------------------|------------------------------------------------------------------------------------------------------|
-| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling             |
-| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring                                                     |
-| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                        |
-| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                             |
-| Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces                                |
-| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                                |
-| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                                 |
-| Critical section API                  | Basic synchronization primitive                                                                      |
-| Tiny footprint                        | Minimal code unrelated to scheduling                                                                 |
-| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                             |
-| C++ and C API                         | Can be used easily in C++ and C projects                                                             |
-| Easy porting                          | Requires very small BSP surface                                                                      |
-| Development mode (x86)                | Run the same threaded application on Windows                                                         |
-| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                                   |
-| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M0 and M4 |
+| Feature                               | Description                                                                                   |
+|---------------------------------------|-----------------------------------------------------------------------------------------------|
+| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling      |
+| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring                                              |
+| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                 |
+| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                      |
+| Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces                         |
+| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                         |
+| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                          |
+| Critical section API                  | Basic synchronization primitive                                                               |
+| Tiny footprint                        | Minimal code unrelated to scheduling                                                          |
+| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                      |
+| C++ and C API                         | Can be used easily in C++ and C projects                                                      |
+| Easy porting                          | Requires very small BSP surface                                                               |
+| Development mode (x86)                | Run the same threaded application on Windows                                                  |
+| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                            |
+| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M  |
 
 ---
 
@@ -55,7 +55,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 * Tasks cooperate using `Sleep()` or `Yield()`
 * Timing is a best-effort
-* Tasks can not block execution of other tasks (preemptive scheduling, Round-Robin default scheduling strategy `SwitchStrategyRoundRobin`)
+* Tasks can not block execution of other tasks (preemptive scheduling, see **Built-in Scheduling Strategies**)
 
 ### Hard Real-Time (HRT)
 
@@ -64,7 +64,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 * Tasks must notify kernel when the work is done by using `Yield()`
 * Kernel enforces deadlines
 * Any violation fails the application deterministically (`ITask::OnDeadlineMissed` callback is called)
-* Dedicated HRT task switching strategies (`SwitchStrategyRM`, `SwitchStrategyDM`)
+* Dedicated HRT task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyRM`, `SwitchStrategyDM`)
 
 > HRT use cases: motor control, power electronics, aerospace systems.
 
@@ -75,13 +75,13 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ### Built-in Scheduling Strategies
 
-| Strategy Name                            | Mode        | Description                                                                                                  |
-|------------------------------------------|-------------|--------------------------------------------------------------------------------------------------------------|
-| `SwitchStrategyRoundRobin`               | Soft / HRT  | Round-Robin scheduling strategy (Default)                                                                    |
-| `SwitchStrategySmoothWeightedRoundRobin` | Soft / HRT  | Smooth weighted Round-Robin; distributes CPU time proportionally to task weights and avoids execution bursts |
-| `SwitchStrategyRM`                       | HRT         | Rate-Monotonic (RM) switching strategy                                                                       |
-| `SwitchStrategyDM`                       | HRT         | Deadline-Monotonic (DM) switching strategy                                                                   |
-| Custom                                   | Soft / HRT  | Custom algorithm implemented via the ITaskSwitchStrategy interface                                           |
+| Strategy Name                            | Mode        | Description                                                                                                         |
+|------------------------------------------|-------------|---------------------------------------------------------------------------------------------------------------------|
+| `SwitchStrategyRoundRobin`               | Soft / HRT  | Round-Robin scheduling strategy (Default); allows 100% CPU utilization by tasks                                     |
+| `SwitchStrategySmoothWeightedRoundRobin` | Soft / HRT  | Smooth Weighted Round-Robin (SWRR); distributes CPU time proportionally to task weights and avoids execution bursts |
+| `SwitchStrategyRM`                       | HRT         | Rate-Monotonic (RM); prioritizes tasks based on their periodicity (rate)                                            |
+| `SwitchStrategyDM`                       | HRT         | Deadline-Monotonic (DM); prioritizes tasks based on their deadlines                                                 |
+| Custom                                   | Soft / HRT  | Custom algorithm implemented via the `ITaskSwitchStrategy` interface                                                |
 
 
 ### Task Privilege Separation
