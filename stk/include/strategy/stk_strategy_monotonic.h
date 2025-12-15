@@ -24,11 +24,13 @@ enum EMonotonicSwitchStrategyType
     MSS_TYPE_DEADLINE //!< Deadline-Monotonic (DM) type (shorter deadline means higher priority, higher priority task is served first)
 };
 
-/*! \class SwitchStrategyRoundRobin
-    \brief Rate Monotonic Scheduling with RMUB and WCRT checks.
+/*! \class SwitchStrategyMonotonic
+    \brief Monotonic scheduling strategy, Rate-Monotonic (RM) or Deadline-Monotonic (DM).
 
     Tasks are scheduled by fixed priority according to the selected monotonic policy (shorter execution time for RM,
-    shorter deadline for DM). Provides methods to check CPU schedulability using RMUB or Worst-Case Response Time (WCRT).
+    shorter deadline for DM).
+
+    \note Use SchedulabilityCheck to check CPU schedulability using Worst-Case Response Time (WCRT) analysis.
 */
 template <EMonotonicSwitchStrategyType _Type>
 class SwitchStrategyMonotonic : public ITaskSwitchStrategy
@@ -121,6 +123,16 @@ public:
 
     size_t GetSize() const { return m_tasks.GetSize(); }
 
+private:
+    IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling
+};
+
+/*! \class SchedulabilityCheck
+    \brief Worst-Case Response Time (WCRT) analysis and CPU load calculation.
+*/
+class SchedulabilityCheck
+{
+public:
     /*! \class TaskTiming
         \brief Period and execution time parameters used for WCRT analysis.
 
@@ -197,18 +209,25 @@ public:
 
     /*! \brief             Check if tasks can be scheduled using the Worst-Case Response Time (WCRT) analysis.
         \tparam _TaskCount Number of tasks to analyze. Must match the number of tasks added to the kernel.
+        \param strategy    Pointer to the implementation of scheduling strategy.
         \return            A SchedulabilityCheckResult containing WCRT values for tasks and the schedulability result.
      */
     template <uint32_t _TaskCount>
-    SchedulabilityCheckResult<_TaskCount> IsSchedulableWCRT()
+    static inline SchedulabilityCheckResult<_TaskCount> IsSchedulableWCRT(const ITaskSwitchStrategy *strategy)
     {
-        STK_ASSERT(m_tasks.GetSize() == _TaskCount);
+        STK_ASSERT(strategy != nullptr);
+        STK_ASSERT(strategy->GetFirst() != nullptr);
+
+        const IKernelTask::ListHeadType *ktasks = strategy->GetFirst()->GetHead();
+
+        STK_ASSERT(ktasks != nullptr);
+        STK_ASSERT(ktasks->GetSize() <= _TaskCount);
 
         SchedulabilityCheckResult<_TaskCount> ret;
         TaskTiming tasks[_TaskCount];
 
         // fill tasks timing
-        IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
+        IKernelTask *itr = (*ktasks->GetFirst()), * const start = itr;
         uint32_t idx = 0;
         do
         {
@@ -309,8 +328,6 @@ public:
     }
 
 private:
-    IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling
-
     //! Integer division with ceiling, equivalent to: (int32_t)ceil((float)x / y).
     static __stk_forceinline int32_t idiv_ceil(uint32_t x, uint32_t y)
     {

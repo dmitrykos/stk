@@ -480,7 +480,7 @@ public:
 
     IPlatform *GetPlatform() { return &m_platform; }
 
-    ITaskSwitchStrategy *GetSwitchStrategy() { return &m_strategy; }
+    const ITaskSwitchStrategy *GetSwitchStrategy() const { return &m_strategy; }
 
 protected:
     /*! \enum  EFsmState

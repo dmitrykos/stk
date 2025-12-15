@@ -455,7 +455,7 @@ public:
     /*! \brief     Get switch strategy instance.
         \return    Pointer to the ITaskSwitchStrategy concrete class instance.
     */
-    virtual ITaskSwitchStrategy *GetSwitchStrategy() = 0;
+    virtual const ITaskSwitchStrategy *GetSwitchStrategy() const = 0;
 };
 
 /*! \class IKernelService

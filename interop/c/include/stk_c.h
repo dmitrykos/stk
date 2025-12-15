@@ -101,6 +101,26 @@ stk_kernel_t *stk_kernel_create_hrt_static(void);
  */
 stk_kernel_t *stk_kernel_create_hrt_dynamic(void);
 
+/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyRM scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_static_rm(void);
+
+/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyRM scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_dynamic_rm(void);
+
+/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyDM scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_static_dm(void);
+
+/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyDM scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_dynamic_dm(void);
+
 /*==========================================================================
   Kernel control
  ==========================================================================*/
@@ -150,6 +170,12 @@ void stk_kernel_start(stk_kernel_t *k);
  *  \return true if scheduler has been started, false otherwise
  */
 bool stk_kernel_is_running(const stk_kernel_t *k);
+
+/*! \brief  Check if a task set is schedulable
+ *  \param  k Kernel handle
+ *  \return true if a task set is schedulable, false otherwise
+ */
+bool stk_kernel_is_schedulable(const stk_kernel_t *k);
 
 /*==========================================================================
   Task creation

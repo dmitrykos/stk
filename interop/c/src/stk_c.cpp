@@ -23,6 +23,10 @@ typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, Platform
 typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelDynamicSWRR;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticHrtRR;
 typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicHrtRR;
+typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelStaticHrtRM;
+typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelDynamicHrtRM;
+typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelStaticHrtDM;
+typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelDynamicHrtDM;
 
 inline void *operator new(std::size_t, void *ptr) noexcept
 {
@@ -94,7 +98,11 @@ public:
         StaticSWRR,
         DynamicSWRR,
         StaticHrtRR,
-        DynamicHrtRR
+        DynamicHrtRR,
+        StaticHrtRM,
+        DynamicHrtRM,
+        StaticHrtDM,
+        DynamicHrtDM
     };
 
     Type     active;
@@ -134,6 +142,18 @@ public:
         case Type::DynamicHrtRR:
             ptr = new (&dynamic_hrt_rr) KernelDynamicHrtRR();
             break;
+        case Type::StaticHrtRM:
+            ptr = new (&static_hrt_rm) KernelStaticHrtRM();
+            break;
+        case Type::DynamicHrtRM:
+            ptr = new (&dynamic_hrt_rm) KernelDynamicHrtRM();
+            break;
+        case Type::StaticHrtDM:
+            ptr = new (&static_hrt_dm) KernelStaticHrtDM();
+            break;
+        case Type::DynamicHrtDM:
+            ptr = new (&dynamic_hrt_dm) KernelDynamicHrtDM();
+            break;
         default:
             STK_ASSERT(false);
             break;
@@ -164,6 +184,18 @@ public:
         case Type::DynamicHrtRR:
             dynamic_hrt_rr.~KernelDynamicHrtRR();
             break;
+        case Type::StaticHrtRM:
+            static_hrt_rm.~KernelStaticHrtRM();
+            break;
+        case Type::DynamicHrtRM:
+            dynamic_hrt_rm.~KernelDynamicHrtRM();
+            break;
+        case Type::StaticHrtDM:
+            static_hrt_dm.~KernelStaticHrtDM();
+            break;
+        case Type::DynamicHrtDM:
+            dynamic_hrt_dm.~KernelDynamicHrtDM();
+            break;
         case Type::None:
             break;
         }
@@ -182,6 +214,10 @@ private:
         KernelDynamicSWRR dynamic_swrr;
         KernelStaticHrtRR static_hrt_rr;
         KernelDynamicHrtRR dynamic_hrt_rr;
+        KernelStaticHrtRM static_hrt_rm;
+        KernelDynamicHrtRM dynamic_hrt_rm;
+        KernelStaticHrtDM static_hrt_dm;
+        KernelDynamicHrtDM dynamic_hrt_dm;
     };
 };
 
@@ -293,6 +329,26 @@ stk_kernel_t *stk_kernel_create_hrt_dynamic()
     return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtRR));
 }
 
+stk_kernel_t *stk_kernel_create_hrt_static_rm()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtRM));
+}
+
+stk_kernel_t *stk_kernel_create_hrt_dynamic_rm()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtRM));
+}
+
+stk_kernel_t *stk_kernel_create_hrt_static_dm()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtDM));
+}
+
+stk_kernel_t *stk_kernel_create_hrt_dynamic_dm()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtDM));
+}
+
 void stk_kernel_destroy(stk_kernel_t *k)
 {
     STK_ASSERT(k);
@@ -319,6 +375,14 @@ bool stk_kernel_is_running(const stk_kernel_t *k)
 {
     STK_ASSERT(k);
     return reinterpret_cast<const stk::IKernel *>(k)->IsStarted();
+}
+
+bool stk_kernel_is_schedulable(const stk_kernel_t *k)
+{
+    STK_ASSERT(k);
+
+    return SchedulabilityCheck::IsSchedulableWCRT<STK_KERNEL_MAX_TASKS>(
+            reinterpret_cast<const stk::IKernel *>(k)->GetSwitchStrategy());
 }
 
 void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *task)
