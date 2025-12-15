@@ -257,7 +257,7 @@ static void DestroyKernel(const IKernel *kernel)
 
 static TaskWrapper *AllocateTask(stk_task_entry_t entry,
                                  void *arg,
-                                 uint32_t *stack,
+                                 size_t *stack,
                                  uint32_t stack_size,
                                  EAccessMode mode)
 {
@@ -421,7 +421,7 @@ void stk_kernel_add_task_hrt(stk_kernel_t *k,
 // ---------------------------------------------------------------------------
 stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
                                        void *arg,
-                                       uint32_t *stack,
+                                       size_t *stack,
                                        uint32_t stack_size)
 {
     STK_ASSERT(entry);
@@ -432,7 +432,7 @@ stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
 
 stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  void *arg,
-                                 uint32_t *stack,
+                                 size_t *stack,
                                  uint32_t stack_size)
 {
     STK_ASSERT(entry);
@@ -441,7 +441,7 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
     return reinterpret_cast<stk_task_t *>(AllocateTask(entry, arg, stack, stack_size, ACCESS_USER));
 }
 
-void stk_task_set_weight(stk_task_t *task, int32_t weight)
+void stk_task_set_weight(stk_task_t *task, uint32_t weight)
 {
     STK_ASSERT(task);
     STK_ASSERT(weight > 0);

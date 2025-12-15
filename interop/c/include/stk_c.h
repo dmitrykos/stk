@@ -184,25 +184,25 @@ bool stk_kernel_is_schedulable(const stk_kernel_t *k);
 /*! \brief  Create a privileged (kernel-mode) task
  *  \param  entry       Task entry function
  *  \param  arg         Argument passed to the entry function
- *  \param  stack       Pointer to the bottom of the stack (lowest address)
- *  \param  stack_size  Stack size in 32/64-bit words depending on platform
+ *  \param  stack       Pointer the array of size_t elements, i.e. 32/64-bit words depending on platform)
+ *  \param  stack_size  Number of elements in the stack array
  *  \return Task handle (statically allocated in static kernels, heap-allocated in dynamic)
  */
 stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
                                        void *arg,
-                                       uint32_t *stack,
+                                       size_t *stack,
                                        uint32_t stack_size);
 
 /*! \brief  Create a user-mode task
  *  \param  entry       Task entry function
  *  \param  arg         Argument passed to the entry function
- *  \param  stack       Pointer to the bottom of the stack
- *  \param  stack_size  Stack size in 32/64-bit words depending on platform
+ *  \param  stack       Pointer the array of size_t elements, i.e. 32/64-bit words depending on platform)
+ *  \param  stack_size  Number of elements in the stack array
  *  \return Task handle
  */
 stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  void *arg,
-                                 uint32_t *stack,
+                                 size_t *stack,
                                  uint32_t stack_size);
 
 /*! \brief Set weight for a task when using scheduler (non-HRT mode) with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
@@ -210,7 +210,7 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
  *  \param weight Weight of the task (must be non-zero, positive 24-bit number)
  *  \note  Weight must be set before a task is added to the kernel
  */
-void stk_task_set_weight(stk_task_t *task, int32_t weight);
+void stk_task_set_weight(stk_task_t *task, uint32_t weight);
 
 /*==========================================================================
   Runtime services (available inside tasks)
