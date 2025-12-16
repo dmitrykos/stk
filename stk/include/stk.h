@@ -252,7 +252,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             \param[in] platform: Platform driver instance.
             \param[in] ticks: Current ticks of the Kernel.
         */
-        void HrtOnSwitchedOut(IPlatform *platform)
+        void HrtOnSwitchedOut(IPlatform */*platform*/)
         {
             const int32_t duration = m_hrt[0].duration;
 

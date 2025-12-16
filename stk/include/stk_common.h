@@ -206,7 +206,7 @@ public:
     virtual int32_t GetHrtPeriodicity() const = 0;
 
     /*! \brief     Get HRT task deadline (max allowed task execution time).
-      \return      Deadline of the task in HRT ticks.
+      \return      Deadline of the task (ticks).
     */
     virtual int32_t GetHrtDeadline() const = 0;
 

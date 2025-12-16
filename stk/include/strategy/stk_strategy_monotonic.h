@@ -46,20 +46,18 @@ public:
             return;
         }
 
-        IKernelTask::ListEntryType *itr = m_tasks.GetFirst(), * const start = itr;
+        IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
 
         while (true)
         {
-            IKernelTask *cmp = (*itr);
-
             bool higher_priority;
             switch (_Type)
             {
             case MSS_TYPE_RATE:
-                higher_priority = (task->GetHrtPeriodicity() < cmp->GetHrtPeriodicity());
+                higher_priority = (task->GetHrtPeriodicity() < itr->GetHrtPeriodicity());
                 break;
             case MSS_TYPE_DEADLINE:
-                higher_priority = (task->GetHrtDeadline() < cmp->GetHrtDeadline());
+                higher_priority = (task->GetHrtDeadline() < itr->GetHrtDeadline());
                 break;
             default:
                 STK_ASSERT(false);
@@ -68,20 +66,18 @@ public:
 
             if (higher_priority)
             {
-                if (cmp == start)
+                if (itr == start)
                 {
                     m_tasks.LinkFront(task);
                     break;
                 }
 
-                m_tasks.Link(task, cmp, cmp->GetPrev());
+                m_tasks.Link(task, itr, itr->GetPrev());
                 break;
             }
 
-            itr = itr->GetNext();
-
             // end of the list
-            if (start == itr)
+            if ((itr = (*itr->GetNext())) == start)
             {
                 m_tasks.LinkBack(task);
                 break;
@@ -93,31 +89,32 @@ public:
 
     IKernelTask *GetNext(IKernelTask *current) const
     {
+        STK_ASSERT(current != nullptr);
+        STK_ASSERT(current->GetHead() == &m_tasks);
         STK_ASSERT(!m_tasks.IsEmpty());
 
-        IKernelTask::ListEntryType *itr = m_tasks.GetFirst();
-        IKernelTask *highest_ready = nullptr;
+        IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
+        IKernelTask *next = current;
 
-        // highest priority = first in sorted list (shortest period)
+        // highest priority = first in sorted list (shortest period (RM) or deadline (DM))
         do
         {
-            IKernelTask *task = (*itr);
-
-            if (!task->IsSleeping())
+            // skip tasks waiting for their execution time
+            if (!itr->IsSleeping())
             {
-                highest_ready = task;
-                break; // because list is sorted by priority
+                next = itr;
+                break; // list is sorted by priority
             }
         }
-        while ((itr = itr->GetNext()) != m_tasks.GetFirst());
+        while ((itr = (*itr->GetNext())) != start);
 
-        // if no task ready -> idle (or return current)
-        return (nullptr == highest_ready ? current : highest_ready);
+        return next;
     }
 
     IKernelTask *GetFirst() const
     {
         STK_ASSERT(m_tasks.GetSize() != 0);
+
         return (*m_tasks.GetFirst());
     }
 
@@ -232,13 +229,9 @@ public:
         do
         {
             STK_ASSERT(idx < _TaskCount);
-
-            tasks[idx] = { (uint32_t)itr->GetHrtPeriodicity(), (uint32_t)itr->GetHrtDeadline() };
-
-            idx++;
-            itr = (*itr->GetNext());
+            tasks[idx++] = { (uint32_t)itr->GetHrtPeriodicity(), (uint32_t)itr->GetHrtDeadline() };
         }
-        while (itr != start);
+        while ((itr = (*itr->GetNext())) != start);
         STK_ASSERT(idx == _TaskCount);
 
         // calculate CPU load

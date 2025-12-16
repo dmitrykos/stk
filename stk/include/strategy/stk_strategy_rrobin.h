@@ -30,13 +30,17 @@ public:
 
     IKernelTask *GetNext(IKernelTask *current) const
     {
+        STK_ASSERT(current != nullptr);
+        STK_ASSERT(current->GetHead() == &m_tasks);
         STK_ASSERT(!m_tasks.IsEmpty());
+
         return (*current->GetNext());
     }
 
     IKernelTask *GetFirst() const
     {
         STK_ASSERT(!m_tasks.IsEmpty());
+
         return (*m_tasks.GetFirst());
     }
 

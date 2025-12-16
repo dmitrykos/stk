@@ -71,25 +71,20 @@ public:
 
         IKernelTask *selected = nullptr;
         int32_t max_weight = -1;
-        IKernelTask::ListEntryType *itr = m_tasks.GetFirst(), * const start = itr;
+        IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
 
         do
         {
-            IKernelTask *task = (*itr);
+            itr->SetCurrentWeight(itr->GetCurrentWeight() + itr->GetWeight());
 
-            task->SetCurrentWeight(task->GetCurrentWeight() + task->GetWeight());
-
-            int32_t candidate_weight = task->GetCurrentWeight();
+            int32_t candidate_weight = itr->GetCurrentWeight();
             if (candidate_weight > max_weight)
             {
                 max_weight = candidate_weight;
-                selected = task;
+                selected = itr;
             }
-
-            itr = itr->GetNext();
         }
-        while (start != itr);
-
+        while ((itr = (*itr->GetNext())) != start);
         STK_ASSERT(selected != nullptr);
 
         selected->SetCurrentWeight(max_weight - m_total_weight);
@@ -100,6 +95,7 @@ public:
     IKernelTask *GetFirst() const
     {
         STK_ASSERT(!m_tasks.IsEmpty());
+
         return (*m_tasks.GetFirst());
     }
 
