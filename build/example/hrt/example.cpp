@@ -18,6 +18,8 @@ enum { TASK_STACK_SIZE = 1024 };
 enum { TASK_STACK_SIZE = 256 };
 #endif
 
+#define USE_EDF 1
+
 static uint8_t g_Led = 0;
 
 template <stk::EAccessMode _AccessMode>
@@ -158,7 +160,11 @@ void RunExample()
 
     enum { TASK_COUNT = 4 };
 
+#if USE_EDF
+    static Kernel<KERNEL_STATIC | KERNEL_HRT, TASK_COUNT, SwitchStrategyEDF, PlatformDefault> kernel;
+#else
     static Kernel<KERNEL_STATIC | KERNEL_HRT, TASK_COUNT, SwitchStrategyRM, PlatformDefault> kernel;
+#endif
     static PlatformEventHandler overrider;
 
     // assume that hardware LED tasks have highest priority
@@ -174,14 +180,16 @@ void RunExample()
 
 #define MSEC(MS) GetTicksFromMsec(MS, PERIODICITY_DEFAULT)
 
-    //                     periodicity      deadline    start delay
-    kernel.AddTask(&ctrl, MSEC(100), MSEC(200), MSEC(0));
-    kernel.AddTask(&hwt0, MSEC(10), MSEC(100), MSEC(0));
-    kernel.AddTask(&hwt1, MSEC(10), MSEC(100), MSEC(0));
-    kernel.AddTask(&hwt2, MSEC(10), MSEC(100), MSEC(0));
+    //                    periodicity  deadline   start delay
+    kernel.AddTask(&ctrl, MSEC(100),   MSEC(200), MSEC(0));
+    kernel.AddTask(&hwt0, MSEC(10),    MSEC(100), MSEC(0));
+    kernel.AddTask(&hwt1, MSEC(10),    MSEC(100), MSEC(0));
+    kernel.AddTask(&hwt2, MSEC(10),    MSEC(100), MSEC(0));
 
+#if !USE_EDF
     auto wcrt_sched = SchedulabilityCheck::IsSchedulableWCRT<TASK_COUNT>(kernel.GetSwitchStrategy());
     STK_ASSERT(wcrt_sched == true);
+#endif
 
     kernel.Start();
 

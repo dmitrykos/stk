@@ -68,7 +68,7 @@ TEST(SwitchStrategyMonotonic, GetNextEmpty)
 template <class _SwitchStrategy>
 static void TestPriorityNext()
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
     const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 

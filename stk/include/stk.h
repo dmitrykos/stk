@@ -15,6 +15,7 @@
 #include "strategy/stk_strategy_rrobin.h"
 #include "strategy/stk_strategy_swrrobin.h"
 #include "strategy/stk_strategy_monotonic.h"
+#include "strategy/stk_strategy_edf.h"
 
 /*! \file  stk.h
     \brief Contains core implementation (Kernel) of the task scheduler.
@@ -112,6 +113,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         int32_t GetHrtPeriodicity() const { return (_Mode & KERNEL_HRT ? m_hrt[0].periodicity : 0);  }
         int32_t GetHrtDeadline() const { return (_Mode & KERNEL_HRT ? m_hrt[0].deadline : 0);  }
+
+        int32_t GetHrtRelativeDeadline() const { return (_Mode & KERNEL_HRT ? m_time_sleep + m_hrt[0].deadline : INT32_MAX); }
 
     private:
         /*! \class SrtInfo

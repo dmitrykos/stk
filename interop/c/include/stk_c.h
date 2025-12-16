@@ -121,6 +121,16 @@ stk_kernel_t *stk_kernel_create_hrt_static_dm(void);
  */
 stk_kernel_t *stk_kernel_create_hrt_dynamic_dm(void);
 
+/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyEDF scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_static_edf(void);
+
+/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyEDF scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_hrt_dynamic_edf(void);
+
 /*==========================================================================
   Kernel control
  ==========================================================================*/
