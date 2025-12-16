@@ -64,7 +64,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 * Tasks must notify kernel when the work is done by using `Yield()`
 * Kernel enforces deadlines
 * Any violation fails the application deterministically (`ITask::OnDeadlineMissed` callback is called)
-* Dedicated HRT task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyRM`, `SwitchStrategyDM`)
+* Dedicated HRT task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyRM`, `SwitchStrategyDM`, `SwitchStrategyEDF`)
 
 > HRT use cases: motor control, power electronics, aerospace systems.
 
@@ -75,13 +75,14 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ### Built-in Scheduling Strategies
 
-| Strategy Name                            | Mode        | Description                                                                                                         |
-|------------------------------------------|-------------|---------------------------------------------------------------------------------------------------------------------|
-| `SwitchStrategyRoundRobin`               | Soft / HRT  | Round-Robin scheduling strategy (Default); allows 100% CPU utilization by tasks                                     |
-| `SwitchStrategySmoothWeightedRoundRobin` | Soft / HRT  | Smooth Weighted Round-Robin (SWRR); distributes CPU time proportionally to task weights and avoids execution bursts |
-| `SwitchStrategyRM`                       | HRT         | Rate-Monotonic (RM); prioritizes tasks based on their periodicity (rate)                                            |
-| `SwitchStrategyDM`                       | HRT         | Deadline-Monotonic (DM); prioritizes tasks based on their deadlines                                                 |
-| Custom                                   | Soft / HRT  | Custom algorithm implemented via the `ITaskSwitchStrategy` interface                                                |
+| Strategy Name                            | Mode        | Description                                                                                                                     |
+|------------------------------------------|-------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `SwitchStrategyRoundRobin`               | Soft / HRT  | Round-Robin scheduling strategy (Default). Allows 100% CPU utilization by tasks.                                                |
+| `SwitchStrategySmoothWeightedRoundRobin` | Soft / HRT  | Smooth Weighted Round-Robin (SWRR). Distributes CPU time proportionally to task weights and avoids execution bursts.            |
+| `SwitchStrategyRM`                       | HRT         | Rate-Monotonic (RM). Prioritizes tasks based on their periodicity (rate).                                                       |
+| `SwitchStrategyDM`                       | HRT         | Deadline-Monotonic (DM). Prioritizes tasks based on their deadlines.                                                            |
+| `SwitchStrategyEDF`                      | HRT         | Earliest Deadline First (EDF). Allows 100% CPU utilization by tasks with less context switches than `SwitchStrategyRoundRobin`. |
+| Custom                                   | Soft / HRT  | Custom algorithm implemented via the `ITaskSwitchStrategy` interface.                                                           |
 
 
 ### Task Privilege Separation

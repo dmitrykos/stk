@@ -27,6 +27,8 @@ typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyR
 typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelDynamicHrtRM;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelStaticHrtDM;
 typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelDynamicHrtDM;
+typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault> KernelStaticHrtEDF;
+typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault> KernelDynamicHrtEDF;
 
 inline void *operator new(std::size_t, void *ptr) noexcept
 {
@@ -102,7 +104,9 @@ public:
         StaticHrtRM,
         DynamicHrtRM,
         StaticHrtDM,
-        DynamicHrtDM
+        DynamicHrtDM,
+        StaticHrtEDF,
+        DynamicHrtEDF
     };
 
     Type     active;
@@ -154,6 +158,12 @@ public:
         case Type::DynamicHrtDM:
             ptr = new (&dynamic_hrt_dm) KernelDynamicHrtDM();
             break;
+        case Type::StaticHrtEDF:
+            ptr = new (&static_hrt_edf) KernelStaticHrtEDF();
+            break;
+        case Type::DynamicHrtEDF:
+            ptr = new (&dynamic_hrt_edf) KernelDynamicHrtEDF();
+            break;
         default:
             STK_ASSERT(false);
             break;
@@ -196,6 +206,12 @@ public:
         case Type::DynamicHrtDM:
             dynamic_hrt_dm.~KernelDynamicHrtDM();
             break;
+        case Type::StaticHrtEDF:
+            static_hrt_edf.~KernelStaticHrtEDF();
+            break;
+        case Type::DynamicHrtEDF:
+            dynamic_hrt_edf.~KernelDynamicHrtEDF();
+            break;
         case Type::None:
             break;
         }
@@ -218,6 +234,8 @@ private:
         KernelDynamicHrtRM dynamic_hrt_rm;
         KernelStaticHrtDM static_hrt_dm;
         KernelDynamicHrtDM dynamic_hrt_dm;
+        KernelStaticHrtEDF static_hrt_edf;
+        KernelDynamicHrtEDF dynamic_hrt_edf;
     };
 };
 
@@ -347,6 +365,16 @@ stk_kernel_t *stk_kernel_create_hrt_static_dm()
 stk_kernel_t *stk_kernel_create_hrt_dynamic_dm()
 {
     return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtDM));
+}
+
+stk_kernel_t *stk_kernel_create_hrt_static_edf()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtEDF));
+}
+
+stk_kernel_t *stk_kernel_create_hrt_dynamic_edf()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtEDF));
 }
 
 void stk_kernel_destroy(stk_kernel_t *k)
