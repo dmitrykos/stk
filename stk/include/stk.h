@@ -845,7 +845,7 @@ protected:
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = m_task_now, *prev = m_task_now, *sleep_end = NULL, *pending_end = NULL;
+        KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL, *pending_end = NULL;
 
         for (;;)
         {
@@ -890,6 +890,16 @@ protected:
                             itr  = NULL;
                             type = FSM_EVENT_EXIT;
                             break;
+                        }
+                        else
+                        {
+                            // if strategy failed providing next task (all are asleep, priority based) then
+                            // restart scheduling from the first task and keep iteration healthy
+                            if (itr == prev)
+                            {
+                                itr = static_cast<KernelTask *>(m_strategy.GetFirst());
+                                break;
+                            }
                         }
 
                         continue;

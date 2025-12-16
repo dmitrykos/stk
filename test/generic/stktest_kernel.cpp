@@ -537,9 +537,10 @@ TEST(Kernel, SingleTask)
     CHECK_EQUAL((Stack *)platform->m_stack_info[STACK_USER_TASK].stack, active);
 }
 
-TEST(Kernel, OnTaskExit)
+template <class _SwitchStrategy>
+static void TestTaskExit()
 {
-    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 2, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_PRIVILEGED> task1, task2;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
     Stack *&idle = platform->m_stack_idle, *&active = platform->m_stack_active;
@@ -569,6 +570,16 @@ TEST(Kernel, OnTaskExit)
 
     // Exit trap stack is provided for a long jumpt to the end of Kernel::Start()
     CHECK_EQUAL(platform->m_exit_trap, active);
+}
+
+TEST(Kernel, OnTaskExitRR)
+{
+    TestTaskExit<SwitchStrategyRR>();
+}
+
+TEST(Kernel, OnTaskExitSWRR)
+{
+    TestTaskExit<SwitchStrategySWRR>();
 }
 
 TEST(Kernel, OnTaskExitUnknownOrNull)
@@ -907,9 +918,10 @@ TEST(Kernel, HrtSkipSleepingNext)
     CHECK_EQUAL(0, task2.m_deadline_missed);
 }
 
-TEST(Kernel, HrtTaskExitDuringSleepState)
+template <class _SwitchStrategy>
+static void TestHrtTaskExitDuringSleepState()
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, SwitchStrategyRM, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 2, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
 
@@ -923,6 +935,16 @@ TEST(Kernel, HrtTaskExitDuringSleepState)
 
     platform->ProcessTick(); // removes first task
     platform->ProcessTick();
+}
+
+TEST(Kernel, HrtTaskExitDuringSleepStateRR)
+{
+    TestHrtTaskExitDuringSleepState<SwitchStrategyRR>();
+}
+
+TEST(Kernel, HrtTaskExitDuringSleepStateRM)
+{
+    TestHrtTaskExitDuringSleepState<SwitchStrategyRM>();
 }
 
 TEST(Kernel, HrtSleepingAwakeningStateChange)

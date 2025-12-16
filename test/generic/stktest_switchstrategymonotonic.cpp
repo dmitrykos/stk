@@ -65,7 +65,8 @@ TEST(SwitchStrategyMonotonic, GetNextEmpty)
     }
 }
 
-TEST(SwitchStrategyMonotonic, PriorityNextRM)
+template <class _SwitchStrategy>
+static void TestPriorityNext()
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
@@ -73,14 +74,13 @@ TEST(SwitchStrategyMonotonic, PriorityNextRM)
 
     kernel.Initialize();
 
-    // Smaller periodicity = higher priority (Rate-Monotonic)
     kernel.AddTask(&task1, 300, 300, 0);
     kernel.AddTask(&task3, 100, 100, 0);
     kernel.AddTask(&task2, 200, 200, 0);
 
     // Highest priority task must be selected first
     IKernelTask *next = strategy->GetFirst();
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority (smallest periodicity)");
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority");
 
     // GetNext must always return highest-priority READY task
     next = strategy->GetNext(next);
@@ -89,164 +89,92 @@ TEST(SwitchStrategyMonotonic, PriorityNextRM)
     // Remove highest priority
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext(strategy->GetFirst());
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
 
     // Remove next highest
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext(strategy->GetFirst());
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+}
+
+TEST(SwitchStrategyMonotonic, PriorityNextRM)
+{
+    TestPriorityNext<SwitchStrategyRM>();
 }
 
 TEST(SwitchStrategyMonotonic, PriorityNextDM)
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
+    TestPriorityNext<SwitchStrategyDM>();
+}
+
+template <class _SwitchStrategy>
+static void TestAlgorithm()
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
     const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
-    // Smaller deadline = higher priority (Deadline-Monotonic)
+    // --- Stage 1: Add first task -----------------------------------------
+
     kernel.AddTask(&task1, 300, 300, 0);
-    kernel.AddTask(&task3, 100, 100, 0);
-    kernel.AddTask(&task2, 200, 200, 0);
 
-    // Highest priority task must be selected first
     IKernelTask *next = strategy->GetFirst();
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority (shortest deadline)");
 
-    // GetNext must always return highest-priority READY task
+    // Single task -> always returned
+    for (int32_t i = 0; i < 5; i++)
+    {
+        next = strategy->GetNext(next);
+        CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
+    }
+
+    // --- Stage 2: Add second task ----------------------------------------
+
+    kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
+
     next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task must repeat (no round-robin)");
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
 
-    // Remove highest priority
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 3: Add third task -----------------------------------------
+
+    kernel.AddTask(&task3, 100, 100, 0); // highest priority
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
+
+    // --- Stage 4: Remove a task ------------------------------------------
+
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext(strategy->GetFirst());
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
 
-    // Remove next highest
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
+
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext(strategy->GetFirst());
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 
 TEST(SwitchStrategyMonotonic, AlgorithmRM)
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyRM, PlatformTestMock> kernel;
-    TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
-
-    kernel.Initialize();
-
-    // --- Stage 1: Add first task -----------------------------------------
-
-    // Smaller periodicity = higher priority (Rate-Monotonic)
-    kernel.AddTask(&task1, 300, 300, 0);
-
-    IKernelTask *next = strategy->GetFirst();
-
-    // Single task -> always returned
-    for (int32_t i = 0; i < 5; i++)
-    {
-        next = strategy->GetNext(next);
-        CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
-    }
-
-    // --- Stage 2: Add second task ----------------------------------------
-
-    kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
-
-    // --- Stage 3: Add third task -----------------------------------------
-
-    kernel.AddTask(&task3, 100, 100, 0); // highest priority
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
-
-    // --- Stage 4: Remove a task ------------------------------------------
-
-    kernel.RemoveTask(&task3);
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
-
-    kernel.RemoveTask(&task2);
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+    TestAlgorithm<SwitchStrategyRM>();
 }
 
 TEST(SwitchStrategyMonotonic, AlgorithmDM)
 {
-    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyDM, PlatformTestMock> kernel;
-    TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
-
-    kernel.Initialize();
-
-    // --- Stage 1: Add first task -----------------------------------------
-
-    // Smaller deadline = higher priority (Deadline-Monotonic)
-    kernel.AddTask(&task1, 300, 300, 0);
-
-    IKernelTask *next = strategy->GetFirst();
-
-    // Single task -> always returned
-    for (int32_t i = 0; i < 5; i++)
-    {
-        next = strategy->GetNext(next);
-        CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
-    }
-
-    // --- Stage 2: Add second task ----------------------------------------
-
-    kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
-
-    // --- Stage 3: Add third task -----------------------------------------
-
-    kernel.AddTask(&task3, 100, 100, 0); // highest priority
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
-
-    // --- Stage 4: Remove a task ------------------------------------------
-
-    kernel.RemoveTask(&task3);
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
-
-    kernel.RemoveTask(&task2);
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
+    TestAlgorithm<SwitchStrategyDM>();
 }
 
 TEST(SwitchStrategyMonotonic, FailedWCRT)
