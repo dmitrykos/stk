@@ -215,6 +215,10 @@ public:
     */
     virtual bool IsSleeping() const = 0;
 
+    /*! \brief     Get HRT task's relative deadline.
+      \return      Relative deadline of the task (ticks).
+    */
+    virtual int32_t GetHrtRelativeDeadline() const = 0;
 };
 
 /*! \class IPlatform
