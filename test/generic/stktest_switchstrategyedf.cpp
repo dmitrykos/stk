@@ -209,6 +209,89 @@ TEST(SwitchStrategyEDF, RelativeDeadlineEvolution)
     CHECK_EQUAL_TEXT(0, ktask->GetHrtRelativeDeadline(), "at deadline: relative deadline must be zero");
 }
 
+static struct EDFDynamicSchedulingContext
+{
+    EDFDynamicSchedulingContext()
+    {
+        counter  = 0;
+        checked  = 0;
+        platform = NULL;
+        task1    = NULL;
+        task2    = NULL;
+        task3    = NULL;
+    }
+
+    uint32_t counter, checked;
+    PlatformTestMock *platform;
+    TaskMock<ACCESS_USER> *task1, *task2, *task3;
+
+    void Process()
+    {
+        platform->ProcessTick();
+        ++counter;
+
+        // active task after this tick
+        Stack *active = platform->m_stack_active;
+
+        if (counter == 1)
+        {
+            CHECK_EQUAL_TEXT((size_t)task3->GetStack(), active->SP, "tick 0: task3 earliest deadline");
+            ++checked;
+            Yield();
+        }
+        else
+        if (counter == 3)
+        {
+            CHECK_EQUAL_TEXT((size_t)task2->GetStack(), active->SP, "tick 1: task2 earliest deadline");
+            ++checked;
+            Yield();
+        }
+        else
+        if (counter == 4)
+        {
+            CHECK_EQUAL_TEXT((size_t)task1->GetStack(), active->SP, "tick 3+: task1 earliest deadline");
+            ++checked;
+            Yield();
+        }
+    }
+}
+g_EDFDynamicSchedulingContext;
+
+static void g_EDFDynamicSchedulingContextProcess()
+{
+    g_EDFDynamicSchedulingContext.Process();
+}
+
+TEST(SwitchStrategyEDF, DynamicScheduling)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyEDF, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize();
+
+    // Add periodic tasks: (periodicity, deadline, start_delay)
+    kernel.AddTask(&task1, 4, 4, 0); // task1: period 5
+    kernel.AddTask(&task2, 3, 3, 0); // task2: period 3
+    kernel.AddTask(&task3, 2, 2, 0); // task3: period 2
+
+    kernel.Start();
+
+    g_EDFDynamicSchedulingContext.platform = platform;
+    g_EDFDynamicSchedulingContext.task1 = &task1;
+    g_EDFDynamicSchedulingContext.task2 = &task2;
+    g_EDFDynamicSchedulingContext.task3 = &task3;
+    g_RelaxCpuHandler = g_EDFDynamicSchedulingContextProcess;
+
+    // simulate ticks
+    g_EDFDynamicSchedulingContextProcess();
+
+    CHECK_EQUAL_TEXT(3, g_EDFDynamicSchedulingContext.checked, "all 3 tasks must be switched");
+    CHECK_FALSE(platform->m_hard_fault);
+    CHECK_EQUAL(0, task1.m_deadline_missed);
+    CHECK_EQUAL(0, task2.m_deadline_missed);
+    CHECK_EQUAL(0, task3.m_deadline_missed);
+}
 
 } // namespace stk
 } // namespace test

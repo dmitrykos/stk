@@ -997,5 +997,55 @@ TEST(Kernel, HrtSleepingAwakeningStateChange)
     CHECK_EQUAL(platform->m_stack_active->SP, (size_t)task.GetStack());
 }
 
+TEST(Kernel, HrtOnlyAPI)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    // Obtain kernel task
+    IKernelTask *ktask = kernel.GetSwitchStrategy()->GetFirst();
+    CHECK_TRUE_TEXT(ktask != nullptr, "Kernel task must exist");
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        ktask->GetHrtRelativeDeadline();
+        CHECK_TEXT(false, "HRT API can't be called in non-HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        ktask->GetHrtPeriodicity();
+        CHECK_TEXT(false, "HRT API can't be called in non-HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        ktask->GetHrtDeadline();
+        CHECK_TEXT(false, "HRT API can't be called in non-HRT mode");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 } // namespace stk
 } // namespace test

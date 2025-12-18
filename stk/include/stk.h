@@ -1065,10 +1065,7 @@ protected:
         (*idle)   = now->GetUserStack();
         (*active) = &m_sleep_trap[0].stack;
 
-        if (m_strategy.GetSize() != 0)
-            m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
-        else
-            m_task_now = NULL;
+        m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
 
         if (_Mode & KERNEL_HRT)
         {
