@@ -111,10 +111,27 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         int32_t GetWeight() const { return (_TyStrategy::WEIGHT_API ? m_user->GetWeight() : 1); }
         int32_t GetCurrentWeight() const { return (_TyStrategy::WEIGHT_API ? m_rt_weight[0] : 1); }
 
-        int32_t GetHrtPeriodicity() const { return (_Mode & KERNEL_HRT ? m_hrt[0].periodicity : 0);  }
-        int32_t GetHrtDeadline() const { return (_Mode & KERNEL_HRT ? m_hrt[0].deadline : 0);  }
+        int32_t GetHrtPeriodicity() const
+        {
+            STK_ASSERT(_Mode & KERNEL_HRT);
 
-        int32_t GetHrtRelativeDeadline() const { return (_Mode & KERNEL_HRT ? m_time_sleep + m_hrt[0].deadline : INT32_MAX); }
+            return m_hrt[0].periodicity;
+        }
+
+        int32_t GetHrtDeadline() const
+        {
+            STK_ASSERT(_Mode & KERNEL_HRT);
+
+            return m_hrt[0].deadline;
+        }
+
+        int32_t GetHrtRelativeDeadline() const
+        {
+            STK_ASSERT(_Mode & KERNEL_HRT);
+            STK_ASSERT(!IsSleeping());
+
+            return m_hrt[0].deadline - m_hrt[0].duration;
+        }
 
     private:
         /*! \class SrtInfo
@@ -123,10 +140,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         struct SrtInfo
         {
-            SrtInfo()
-            {
-                Clear();
-            }
+            SrtInfo() : add_task_req(NULL)
+            {}
 
             /*! \brief     Clear values.
             */
@@ -144,10 +159,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         struct HrtInfo
         {
-            HrtInfo()
-            {
-                Clear();
-            }
+            HrtInfo() : periodicity(0), deadline(0), duration(0), done(false)
+            {}
 
             /*! \brief     Clear values.
             */
@@ -156,11 +169,13 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 periodicity = 0;
                 deadline    = 0;
                 duration    = 0;
+                done        = false;
             }
 
             int32_t periodicity; //!< scheduling periodicity (ticks)
             int32_t deadline;    //!< work deadline (ticks)
             int32_t duration;    //!< current duration of the active state when work is being carried out by the task (ticks)
+            volatile bool done;  //!< true if task completed its work and called Yield()
         };
 
         /*! \brief     Release variables from info about previous task.
@@ -201,7 +216,10 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         {
             m_state |= STATE_REMOVE_PENDING;
 
-            // when task is existing we mark it as sleeping to prevent HRT schedulers misdetecting as not-sleeping/active task
+            // put this task into a sleeping one which will be switched out from scheduling
+            m_time_sleep = -INT32_MAX;
+
+            // mark it as done HRT task
             if (_Mode & KERNEL_HRT)
                 HrtOnWorkCompleted();
         }
@@ -245,10 +263,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             \note      Related to stk::KERNEL_HRT mode only.
             \param[in] ticks: Current ticks of the Kernel.
         */
-        void HrtOnSwitchedIn()
-        {
-            m_hrt[0].duration = 0;
-        }
+        void HrtOnSwitchedIn() {}
 
         /*! \brief     Called when task is switched out from the scheduling process.
             \note      Related to stk::KERNEL_HRT mode only.
@@ -262,7 +277,9 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             STK_ASSERT(duration >= 0);
 
             m_time_sleep = -(m_hrt[0].periodicity - duration);
+
             m_hrt[0].duration = 0;
+            m_hrt[0].done     = false;
         }
 
         /*! \brief     Hard-fail HRT task when it missed its deadline.
@@ -283,7 +300,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         /*! \brief     Called when task process called IKernelService::SwitchToNext to inform Kernel that work is completed.
             \note      Related to stk::KERNEL_HRT mode only.
         */
-        void HrtOnWorkCompleted() { m_time_sleep = -INT32_MAX; }
+        void HrtOnWorkCompleted() { m_hrt[0].done = true; }
 
         /*! \brief     Check if deadline missed.
             \note      Related to stk::KERNEL_HRT mode only.
@@ -610,6 +627,8 @@ protected:
     */
     __stk_attr_noinline void RequestAddTask(ITask *user_task)
     {
+        STK_ASSERT(_Mode & KERNEL_DYNAMIC);
+
         KernelTask *caller = FindTaskBySP(m_platform.GetCallerSP());
         STK_ASSERT(caller != NULL);
 
@@ -740,7 +759,10 @@ protected:
 
     void OnTaskSwitch(size_t caller_SP)
     {
-        OnTaskSleep(caller_SP, 1);
+        // yield with 2 ticks: 1 will be incremented on the next OnTick call by UpdateTasks
+        // and remaining 1 will cause a context switch by UpdateFsmState when strategy detects
+        // it as a sleeping test
+        OnTaskSleep(caller_SP, 2);
     }
 
     void OnTaskSleep(size_t caller_SP, int32_t ticks)
@@ -793,6 +815,24 @@ protected:
         {
             KernelTask *task = &m_task_storage[i];
 
+            if (_Mode & KERNEL_DYNAMIC)
+            {
+                // task is pending removal, wait until it is switched out
+                if (task->IsPendingRemoval())
+                {
+                    if ((task != m_task_now) ||
+                        ((m_strategy.GetSize() == 1) && (m_fsm_state == FSM_STATE_SLEEPING)))
+                    {
+                        RemoveTask(task);
+                        continue;
+                    }
+                }
+                else
+                // skip freed tasks
+                if (!task->IsBusy())
+                    continue;
+            }
+
             // advance by +1 millisecond
             if (task->IsSleeping())
             {
@@ -802,15 +842,11 @@ protected:
             // in HRT mode we trace how long task spent
             if (_Mode & KERNEL_HRT)
             {
-                // make sure task is valid
-                if (task->IsBusy())
-                {
-                    ++task->m_hrt[0].duration;
+                ++task->m_hrt[0].duration;
 
-                    // check if deadline is missed (HRT failure)
-                    if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
-                        task->HrtHardFailDeadline(&m_platform);
-                }
+                // check if deadline is missed (HRT failure)
+                if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
+                    task->HrtHardFailDeadline(&m_platform);
             }
         }
     }
@@ -848,73 +884,21 @@ protected:
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL, *pending_end = NULL;
+        KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL;
+
+        // check if no tasks left in Dynamic mode and exit
+        if (_Mode & KERNEL_DYNAMIC)
+        {
+            if (m_strategy.GetSize() == 0)
+            {
+                (*next) = NULL;
+                return FSM_EVENT_EXIT;
+            }
+        }
 
         for (;;)
         {
-            if (_Mode & KERNEL_DYNAMIC)
-            {
-                for (;;)
-                {
-                    itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
-
-                    // process pending task removal
-                    if (itr->IsPendingRemoval())
-                    {
-                        // we can't remove current task because task switching driver context is branchless
-                        // therefore make any other task as current, switch to it and then remove pending
-                        if ((itr == m_task_now) && (itr != pending_end))
-                        {
-                            // memorize as end to avoid endless loop if all entries are pending exit
-                            if (pending_end == NULL)
-                                pending_end = itr;
-
-                            if (_Mode & KERNEL_HRT)
-                            {
-                                // current task will not be switched out in StateSwitch because it is the last one
-                                // therefore make sure deadline is checked for this task
-                                if (m_strategy.GetSize() == 1)
-                                    itr->HrtOnSwitchedOut(&m_platform);
-                            }
-
-                            // move to the next
-                            prev = itr;
-                            continue;
-                        }
-
-                        RemoveTask(itr);
-
-                        // reset pending end to restore looping to the next non-pending
-                        pending_end = NULL;
-
-                        // check if no tasks left
-                        if (m_strategy.GetSize() == 0)
-                        {
-                            itr  = NULL;
-                            type = FSM_EVENT_EXIT;
-                            break;
-                        }
-                        else
-                        {
-                            // if strategy failed providing next task (all are asleep, priority based) then
-                            // restart scheduling from the first task and keep iteration healthy
-                            if (itr == prev)
-                            {
-                                itr = static_cast<KernelTask *>(m_strategy.GetFirst());
-                                break;
-                            }
-                        }
-
-                        continue;
-                    }
-
-                    break;
-                }
-            }
-            else
-            {
-                itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
-            }
+            itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
 
             // check if task is sleeping
             if ((itr != NULL) && itr->IsSleeping())
@@ -1024,8 +1008,11 @@ protected:
 
         if (_Mode & KERNEL_HRT)
         {
-            now->HrtOnSwitchedOut(&m_platform);
-            next->HrtOnSwitchedIn();
+            if (now->m_hrt[0].done)
+            {
+                now->HrtOnSwitchedOut(&m_platform);
+                next->HrtOnSwitchedIn();
+            }
         }
 
         return true; // switch context
@@ -1078,11 +1065,15 @@ protected:
         (*idle)   = now->GetUserStack();
         (*active) = &m_sleep_trap[0].stack;
 
-        m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
+        if (m_strategy.GetSize() != 0)
+            m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
+        else
+            m_task_now = NULL;
 
         if (_Mode & KERNEL_HRT)
         {
-            now->HrtOnSwitchedOut(&m_platform);
+            if (!now->IsPendingRemoval())
+                now->HrtOnSwitchedOut(&m_platform);
         }
 
         return true; // switch context
@@ -1180,7 +1171,7 @@ protected:
     const EFsmState m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
     //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE    FSM_EVENT_EXIT
         { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,   FSM_STATE_EXITING }, // FSM_STATE_SWITCHING
-        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_WAKING, FSM_STATE_NONE },    // FSM_STATE_SLEEPING
+        { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_WAKING, FSM_STATE_EXITING }, // FSM_STATE_SLEEPING
         { FSM_STATE_SWITCHING, FSM_STATE_SLEEPING, FSM_STATE_NONE,   FSM_STATE_EXITING }, // FSM_STATE_WAKING
         { FSM_STATE_NONE,      FSM_STATE_NONE,     FSM_STATE_NONE,   FSM_STATE_NONE }     // FSM_STATE_EXITING
     }; //!< FSM state table (Kernel implements table-based FSM)

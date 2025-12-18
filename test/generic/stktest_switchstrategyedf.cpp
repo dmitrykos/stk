@@ -160,5 +160,55 @@ TEST(SwitchStrategyEDF, Algorithm)
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 
+TEST(SwitchStrategyEDF, RelativeDeadlineEvolution)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, SwitchStrategyEDF, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+
+    kernel.Initialize();
+
+    // period = 10, deadline = 5, start_delay = 0
+    kernel.AddTask(&task, 10, 5, 0);
+
+    kernel.Start();
+
+    // Obtain kernel task
+    IKernelTask *ktask = kernel.GetSwitchStrategy()->GetFirst();
+    CHECK_TRUE_TEXT(ktask != nullptr, "Kernel task must exist");
+
+    // --- At release -------------------------------------------------------
+
+    // duration = 0
+    // relative_deadline = deadline
+    CHECK_EQUAL_TEXT(5, ktask->GetHrtRelativeDeadline(), "at release: relative deadline must equal deadline");
+
+    // --- Tick 1 -----------------------------------------------------------
+
+    platform->ProcessTick(); // duration = 1
+    CHECK_EQUAL_TEXT(4, ktask->GetHrtRelativeDeadline(), "after 1 tick: relative deadline must decrease by 1");
+
+    // --- Tick 2 -----------------------------------------------------------
+
+    platform->ProcessTick(); // duration = 2
+    CHECK_EQUAL_TEXT(3, ktask->GetHrtRelativeDeadline(), "after 2 ticks: relative deadline must decrease by 2");
+
+    // --- Tick 3 -----------------------------------------------------------
+
+    platform->ProcessTick(); // duration = 3
+    CHECK_EQUAL_TEXT(2, ktask->GetHrtRelativeDeadline(), "after 3 ticks: relative deadline must decrease by 3");
+
+    // --- Tick 4 -----------------------------------------------------------
+
+    platform->ProcessTick(); // duration = 4
+    CHECK_EQUAL_TEXT(1, ktask->GetHrtRelativeDeadline(), "after 4 ticks: relative deadline must be 1");
+
+    // --- Tick 5 (deadline boundary) --------------------------------------
+
+    platform->ProcessTick(); // duration = 5
+    CHECK_EQUAL_TEXT(0, ktask->GetHrtRelativeDeadline(), "at deadline: relative deadline must be zero");
+}
+
+
 } // namespace stk
 } // namespace test

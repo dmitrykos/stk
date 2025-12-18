@@ -303,8 +303,8 @@ namespace stk
         virtual size_t GetTid() const { return 0; }
         virtual int64_t GetTicks() const { return ticks; }
         virtual int32_t GetTickResolution() const { return resolution; }
-        virtual void Delay(uint32_t msec) const {}
-        virtual void Sleep(uint32_t msec) {}
+        virtual void Delay(uint32_t msec) const { (void)msec; }
+        virtual void Sleep(uint32_t msec) { (void)msec; }
         virtual void SwitchToNext() {}
     }
     s_KernelServiceMock;
