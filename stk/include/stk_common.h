@@ -19,7 +19,7 @@
 
 namespace stk {
 
-// Forward declaraions:
+// Forward declarations:
 class IKernelService;
 
 /*! \typedef RunFuncType

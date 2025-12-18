@@ -116,7 +116,7 @@ static struct Context : public PlatformContext
 
         m_csu         = 0;
         m_csu_nesting = 0;
-        m_overrider   = NULL;
+        m_overrider   = nullptr;
         m_started     = false;
         m_exiting     = false;
     }
@@ -169,6 +169,10 @@ void PlatformArmCortexM::ProcessTick()
 
 extern "C" void _STK_SYSTICK_HANDLER()
 {
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_RecordEnterISR();
+#endif
+
 #ifdef HAL_MODULE_ENABLED // STM32 HAL
     // make sure STM32 HAL get timing information as it depends on SysTick in delaying procedures
     HAL_IncTick();
@@ -181,10 +185,15 @@ extern "C" void _STK_SYSTICK_HANDLER()
     {
         // make sure SysTick is enabled by the Kernel::Start(), disable its start anywhere else
         STK_ASSERT(GetContext().m_started);
-        STK_ASSERT(GetContext().m_handler != NULL);
+        STK_ASSERT(GetContext().m_handler != nullptr);
 #endif
         GetContext().OnTick();
     }
+
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_RecordExitISR();
+    SEGGER_SYSVIEW_IsStarted();
+#endif
 }
 
 __stk_forceinline void SaveStackIdle()
@@ -279,6 +288,12 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
     STK_CORTEX_M_DISABLE_INTERRUPTS();
 
     SaveStackIdle();
+
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_OnTaskStopExec();
+    SEGGER_SYSVIEW_OnTaskStartExec((U32)GetContext().m_stack_active->SP);
+#endif
+
     LoadStackActive();
 
     STK_CORTEX_M_ENABLE_INTERRUPTS();
@@ -289,6 +304,10 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 __stk_forceinline void OnTaskRun()
 {
     // note: STK_CORTEX_M_DISABLE_INTERRUPTS() must be called prior calling this function
+
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_OnTaskStartExec((U32)GetContext().m_stack_active->SP);
+#endif
 
     LoadStackActive();
 
@@ -421,12 +440,12 @@ static void OnTaskExit()
 
 static void OnSchedulerSleep()
 {
-#if STK_SEGGER_SYSVIEW
-    SEGGER_SYSVIEW_OnIdle();
-#endif
-
     for (;;)
     {
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnIdle();
+    #endif
+
         SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk; // disable deep-sleep, go into a WAIT mode (sleep)
         __DSB();                            // ensure store takes effect (see ARM info)
 
@@ -454,6 +473,10 @@ void PlatformArmCortexM::Initialize(IEventHandler *event_handler, IKernelService
     Stack *exit_trap)
 {
     GetContext().Initialize(event_handler, service, exit_trap, resolution_us);
+
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_Init(SystemCoreClock, SystemCoreClock, nullptr, nullptr);
+#endif
 }
 
 void PlatformArmCortexM::Start()
@@ -496,7 +519,7 @@ bool PlatformArmCortexM::InitStack(EStackType stack_type, Stack *stack, IStackMe
         break; }
 
     case STACK_SLEEP_TRAP: {
-        PC = (size_t)(GetContext().m_overrider != NULL ? OnSchedulerSleepOverride : OnSchedulerSleep) & ~0x1UL;
+        PC = (size_t)(GetContext().m_overrider != nullptr ? OnSchedulerSleepOverride : OnSchedulerSleep) & ~0x1UL;
         LR = (size_t)STK_STACK_MEMORY_FILLER; // should not attempt to exit
         R0 = 0;
         break; }
@@ -547,6 +570,10 @@ void PlatformArmCortexM::Stop()
     // load context of the Exit trap
     STK_CORTEX_M_DISABLE_INTERRUPTS();
     OnTaskRun();
+
+#if STK_SEGGER_SYSVIEW
+    SEGGER_SYSVIEW_Stop();
+#endif
 }
 
 int32_t PlatformArmCortexM::GetTickResolution() const
@@ -566,7 +593,7 @@ void PlatformArmCortexM::SleepTicks(uint32_t ticks)
 
 void PlatformArmCortexM::ProcessHardFault()
 {
-    if ((GetContext().m_overrider == NULL) || !GetContext().m_overrider->OnHardFault())
+    if ((GetContext().m_overrider == nullptr) || !GetContext().m_overrider->OnHardFault())
     {
         exit(1);
     }

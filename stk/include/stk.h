@@ -601,6 +601,10 @@ protected:
         STK_ASSERT(task != NULL);
 
         m_strategy.AddTask(task);
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskCreate((U32)task->GetUserStack()->SP);
+    #endif
     }
 
     /*! \brief     Allocate new instance of KernelTask and add it into the HRT scheduling process.
@@ -619,6 +623,10 @@ protected:
         task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
 
         m_strategy.AddTask(task);
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskCreate((U32)task->GetUserStack()->SP);
+    #endif
     }
 
     /*! \brief     Request to add new task.
@@ -710,6 +718,10 @@ protected:
     {
         STK_ASSERT(task != NULL);
 
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskTerminate((U32)task->GetUserStack()->SP);
+    #endif
+
         m_strategy.RemoveTask(task);
         task->Unbind();
     }
@@ -717,6 +729,10 @@ protected:
     __stk_attr_noinline void OnStart(Stack **active)
     {
         STK_ASSERT(m_strategy.GetSize() != 0);
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_Start();
+    #endif
 
         m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
         STK_ASSERT(m_task_now != NULL);
@@ -1014,6 +1030,11 @@ protected:
                 next->HrtOnSwitchedIn();
             }
         }
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskStopReady((U32)now->GetUserStack()->SP, 0);
+        SEGGER_SYSVIEW_OnTaskStartReady((U32)next->GetUserStack()->SP);
+    #endif
 
         return true; // switch context
     }
