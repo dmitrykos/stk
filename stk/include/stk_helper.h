@@ -80,7 +80,7 @@ public:
     uint32_t GetStackSize() const { return _StackSize; }
     uint32_t GetStackSizeBytes() const { return _StackSize * sizeof(size_t); }
     EAccessMode GetAccessMode() const { return _AccessMode; }
-    virtual void OnDeadlineMissed(uint32_t duration) { STK_ASSERT(false); /* HRT is unsupported */ }
+    virtual void OnDeadlineMissed(uint32_t duration) { STK_ASSERT(false); /* HRT is unsupported */ (void)duration; }
     virtual int32_t GetWeight() const { return _Weight; }
 
 private:

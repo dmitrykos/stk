@@ -216,8 +216,15 @@ static struct SwitchToNextRelaxCpuContext
         {
             CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
         }
-        // ISR calls OnSysTick (task1 = active, task2 = idle)
+        else
+        // ISR calls OnSysTick (task1 = idle, task2 = active), SwitchToNext takes 2 ticks
         if (counter == 2)
+        {
+            CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
+        }
+        else
+        // ISR calls OnSysTick (task1 = active, task2 = idle)
+        if (counter == 3)
         {
             CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
         }
