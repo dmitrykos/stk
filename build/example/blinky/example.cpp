@@ -55,10 +55,11 @@ template <stk::EAccessMode _AccessMode>
 class MyTask : public stk::Task<TASK_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
+    const char *m_name;
 
 public:
-    MyTask(uint8_t task_id) : m_task_id(task_id)
-    { }
+    MyTask(uint8_t task_id, const char *name) : m_task_id(task_id), m_name(name)
+    {}
 
 #if 0
     stk::RunFuncType GetFunc() { return stk::forced_cast<stk::RunFuncType>(&MyTask::RunInner); }
@@ -66,6 +67,9 @@ public:
     stk::RunFuncType GetFunc() { return &Run; }
 #endif
     void *GetFuncUserData() { return this; }
+
+    size_t GetId() const  { return m_task_id; }
+    const char *GetName() const  { return m_name; }
 
 private:
     // thread function provided to scheduler by GetFunc()
@@ -117,8 +121,10 @@ void RunExample()
     // allocate scheduling kernel for 3 threads (tasks) with Round-robin scheduling strategy
     static Kernel<KERNEL_STATIC, 3, SwitchStrategyRoundRobin, PlatformDefault> kernel;
 
-    // note: using ACCESS_PRIVILEGED as some MCUs may not allow writing to GPIO from a user thread, such as i.MX RT1050 (Arm Cortex-M7)
-    static MyTask<ACCESS_PRIVILEGED> task1(0), task2(1), task3(2);
+    // note: using ACCESS_PRIVILEGED as Cortex-M3+ may not allow writing to GPIO from a less secure user thread
+    static MyTask<ACCESS_PRIVILEGED> task1(0, "LED-red");
+    static MyTask<ACCESS_PRIVILEGED> task2(1, "LED-grn");
+    static MyTask<ACCESS_PRIVILEGED> task3(2, "LED-blu");
 
     // init scheduling kernel
     kernel.Initialize();

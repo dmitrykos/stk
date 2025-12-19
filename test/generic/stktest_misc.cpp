@@ -52,6 +52,19 @@ TEST(UserTask, GetWeight)
     CHECK_EQUAL(10, taskw.GetWeight());
 }
 
+TEST(UserTask, GetIdAndName)
+{
+    TaskMock<ACCESS_USER> task;
+    TaskMockW<1, ACCESS_USER> taskw;
+
+    CHECK_EQUAL((size_t)&task, task.GetId());
+    CHECK_EQUAL((size_t)&taskw, taskw.GetId());
+
+    // expect NULL name by default
+    CHECK_EQUAL((const char *)NULL, task.GetTraceName());
+    CHECK_EQUAL((const char *)NULL, taskw.GetTraceName());
+}
+
 TEST(UserTask, TaskWUnsupportedHrt)
 {
     TaskMockW<10, ACCESS_USER> taskw;
