@@ -18,6 +18,10 @@
     \brief Contains compiler low-level definitions.
 */
 
+#if STK_SEGGER_SYSVIEW
+    #define STK_NEED_TASK_ID 1
+#endif
+
 /*! \def   __stk_forceinline
     \brief Inline function (function prefix).
 */

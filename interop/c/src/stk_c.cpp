@@ -47,8 +47,10 @@ public:
     RunFuncType GetFunc() { return m_func; }
     void *GetFuncUserData() { return m_user_data; }
     EAccessMode GetAccessMode() const { return m_mode; }
-    virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
-    virtual int32_t GetWeight() const { return m_weight; }
+    void OnDeadlineMissed(uint32_t duration) { (void)duration; }
+    int32_t GetWeight() const { return m_weight; }
+    size_t GetId() const  { return m_tid; }
+    const char *GetTraceName() const  { return m_tname; }
 
     // IStackMemory
     size_t *GetStack() const { return m_stack; }
@@ -70,6 +72,8 @@ public:
     }
 
     void SetWeight(int32_t weight) { m_weight = weight; }
+    void SetId(uint32_t tid) { m_tid = tid; }
+    void SetName(const char *tname) { m_tname = tname; }
 
 private:
     RunFuncType m_func;
@@ -78,6 +82,8 @@ private:
     size_t      m_stack_size;
     EAccessMode m_mode;
     int32_t     m_weight;
+    uint32_t    m_tid;
+    const char *m_tname;
 };
 
 struct TaskSlot
@@ -474,6 +480,18 @@ void stk_task_set_weight(stk_task_t *task, uint32_t weight)
     STK_ASSERT(task);
     STK_ASSERT(weight > 0);
     reinterpret_cast<TaskWrapper *>(task)->SetWeight(weight);
+}
+
+void stk_task_set_id(stk_task_t *task, uint32_t tid)
+{
+    STK_ASSERT(task);
+    reinterpret_cast<TaskWrapper *>(task)->SetId(tid);
+}
+
+void stk_task_set_name(stk_task_t *task, const char *tname)
+{
+    STK_ASSERT(task);
+    reinterpret_cast<TaskWrapper *>(task)->SetName(tname);
 }
 
 void stk_task_destroy(stk_task_t *task)

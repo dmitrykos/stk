@@ -291,7 +291,8 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 
 #if STK_SEGGER_SYSVIEW
     SEGGER_SYSVIEW_OnTaskStopExec();
-    SEGGER_SYSVIEW_OnTaskStartExec((U32)GetContext().m_stack_active->SP);
+    if (GetContext().m_stack_active->tid != SYS_TASK_ID_SLEEP)
+        SEGGER_SYSVIEW_OnTaskStartExec(GetContext().m_stack_active->tid);
 #endif
 
     LoadStackActive();
@@ -306,7 +307,7 @@ __stk_forceinline void OnTaskRun()
     // note: STK_CORTEX_M_DISABLE_INTERRUPTS() must be called prior calling this function
 
 #if STK_SEGGER_SYSVIEW
-    SEGGER_SYSVIEW_OnTaskStartExec((U32)GetContext().m_stack_active->SP);
+    SEGGER_SYSVIEW_OnTaskStartExec(GetContext().m_stack_active->tid);
 #endif
 
     LoadStackActive();
@@ -469,13 +470,20 @@ static void OnSchedulerExit()
     longjmp(GetContext().m_exit_buf, 0);
 }
 
+#if STK_SEGGER_SYSVIEW
+static void SendSysDesc()
+{
+    SEGGER_SYSVIEW_SendSysDesc("SuperTinyKernel (STK)");
+}
+#endif
+
 void PlatformArmCortexM::Initialize(IEventHandler *event_handler, IKernelService *service, uint32_t resolution_us,
     Stack *exit_trap)
 {
     GetContext().Initialize(event_handler, service, exit_trap, resolution_us);
 
 #if STK_SEGGER_SYSVIEW
-    SEGGER_SYSVIEW_Init(SystemCoreClock, SystemCoreClock, nullptr, nullptr);
+    SEGGER_SYSVIEW_Init(SystemCoreClock, SystemCoreClock, nullptr, SendSysDesc);
 #endif
 }
 

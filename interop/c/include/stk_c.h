@@ -222,6 +222,20 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
  */
 void stk_task_set_weight(stk_task_t *task, uint32_t weight);
 
+/*! \brief Set task id
+ *  \param task Task created with stk_task_create_*
+ *  \param tid  Task id
+ *  \note  For debugging purposes, can be omitted and return 0 if not used
+ */
+void stk_task_set_id(stk_task_t *task, uint32_t tid);
+
+/*! \brief Set task name
+ *  \param task Task created with stk_task_create_*
+ *  \param tid  Task name
+ *  \note  For debugging purposes, can be omitted and return NULL if not used
+ */
+void stk_task_set_name(stk_task_t *task, const char *tname);
+
 /*==========================================================================
   Runtime services (available inside tasks)
  ==========================================================================*/

@@ -61,6 +61,8 @@ public:
     EAccessMode GetAccessMode() const { return _AccessMode; }
     virtual void OnDeadlineMissed(uint32_t duration) { (void)duration; }
     virtual int32_t GetWeight() const { return 1; }
+    virtual size_t GetId() const  { return reinterpret_cast<size_t>(this); }
+    virtual const char *GetTraceName() const  { return NULL; }
 
 private:
     typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region
@@ -82,6 +84,8 @@ public:
     EAccessMode GetAccessMode() const { return _AccessMode; }
     virtual void OnDeadlineMissed(uint32_t duration) { STK_ASSERT(false); /* HRT is unsupported */ (void)duration; }
     virtual int32_t GetWeight() const { return _Weight; }
+    virtual size_t GetId() const  { return reinterpret_cast<size_t>(this); }
+    virtual const char *GetTraceName() const  { return NULL; }
 
 private:
     typename StackMemoryDef<_StackSize>::Type m_stack; //!< memory region

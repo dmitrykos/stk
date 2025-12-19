@@ -92,7 +92,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         /*! \brief Default initializer.
         */
         explicit KernelTask() : m_user(NULL), m_stack(), m_state(STATE_NONE), m_time_sleep(0),
-            m_srt(), m_hrt(), m_rt_weight() {}
+            m_srt(), m_hrt(), m_rt_weight()
+        {}
 
         ITask *GetUserTask() { return m_user; }
 
@@ -182,6 +183,14 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void Bind(_TyPlatform *platform, ITask *user_task)
         {
+            // set access mode for this stack
+            m_stack.mode = user_task->GetAccessMode();
+
+            // set task id for tracking purpose
+        #if STK_NEED_TASK_ID
+            m_stack.tid = user_task->GetId();
+        #endif
+
             // init stack of the user task
             if (!platform->InitStack(STACK_USER_TASK, &m_stack, user_task, user_task))
             {
@@ -190,9 +199,6 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
             // bind user task
             m_user = user_task;
-
-            // set access mode for this stack
-            m_stack.mode = user_task->GetAccessMode();
         }
 
         /*! \brief     Release variables from info about previous task.
@@ -493,6 +499,17 @@ public:
          // stacks of the traps must be re-initilized on every subsequent Start
         InitTraps();
 
+        // start tracing
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_Start();
+        for (int32_t i = 0; i < TASKS_MAX; ++i)
+        {
+            KernelTask *task = &m_task_storage[i];
+            if (task->IsBusy())
+                SendTaskTraceInfo(task);
+        }
+    #endif
+
         m_platform.Start();
     }
 
@@ -538,6 +555,9 @@ protected:
 
             TrapStackMemory wrapper(&sleep.memory);
             sleep.stack.mode = ACCESS_PRIVILEGED;
+        #if STK_NEED_TASK_ID
+            sleep.stack.tid  = SYS_TASK_ID_SLEEP;
+        #endif
 
             m_platform.InitStack(STACK_SLEEP_TRAP, &sleep.stack, &wrapper, NULL);
         }
@@ -549,6 +569,9 @@ protected:
 
             TrapStackMemory wrapper(&exit.memory);
             exit.stack.mode = ACCESS_PRIVILEGED;
+        #if STK_NEED_TASK_ID
+            exit.stack.tid  = SYS_TASK_ID_EXIT;
+        #endif
 
             m_platform.InitStack(STACK_EXIT_TRAP, &exit.stack, &wrapper, NULL);
         }
@@ -591,6 +614,21 @@ protected:
         return new_task;
     }
 
+    /*! \brief     Add kernel task to the scheduling strategy.
+        \param[in] task: Pointer to the kernel task.
+    */
+    void AddKernelTask(KernelTask *task)
+    {
+    #if STK_SEGGER_SYSVIEW
+        // start tracing new task
+        SEGGER_SYSVIEW_OnTaskCreate(task->GetUserStack()->tid);
+        if (IsStarted())
+            SendTaskTraceInfo(task);
+    #endif
+
+        m_strategy.AddTask(task);
+    }
+
     /*! \brief     Allocate new instance of KernelTask and add it into the scheduling process.
         \param[in] user_task: User task for which kernel task object is allocated.
         \return    Kernel task.
@@ -600,11 +638,7 @@ protected:
         KernelTask *task = AllocateNewTask(user_task);
         STK_ASSERT(task != NULL);
 
-        m_strategy.AddTask(task);
-
-    #if STK_SEGGER_SYSVIEW
-        SEGGER_SYSVIEW_OnTaskCreate((U32)task->GetUserStack()->SP);
-    #endif
+        AddKernelTask(task);
     }
 
     /*! \brief     Allocate new instance of KernelTask and add it into the HRT scheduling process.
@@ -622,11 +656,7 @@ protected:
 
         task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
 
-        m_strategy.AddTask(task);
-
-    #if STK_SEGGER_SYSVIEW
-        SEGGER_SYSVIEW_OnTaskCreate((U32)task->GetUserStack()->SP);
-    #endif
+        AddKernelTask(task);
     }
 
     /*! \brief     Request to add new task.
@@ -719,7 +749,7 @@ protected:
         STK_ASSERT(task != NULL);
 
     #if STK_SEGGER_SYSVIEW
-        SEGGER_SYSVIEW_OnTaskTerminate((U32)task->GetUserStack()->SP);
+        SEGGER_SYSVIEW_OnTaskTerminate(task->GetUserStack()->tid);
     #endif
 
         m_strategy.RemoveTask(task);
@@ -730,9 +760,6 @@ protected:
     {
         STK_ASSERT(m_strategy.GetSize() != 0);
 
-    #if STK_SEGGER_SYSVIEW
-        SEGGER_SYSVIEW_Start();
-    #endif
 
         m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
         STK_ASSERT(m_task_now != NULL);
@@ -820,12 +847,12 @@ protected:
     void UpdateTasks()
     {
         UpdateTaskRequest();
-        UpdateTaskTiming();
+        UpdateTaskState();
     }
 
-    /*! \brief     Update task timers (sleep, duration of HRT task).
+    /*! \brief     Update task state (removal, sleep, duration of HRT task).
     */
-    void UpdateTaskTiming()
+    void UpdateTaskState()
     {
         for (int32_t i = 0; i < TASKS_MAX; ++i)
         {
@@ -1032,8 +1059,8 @@ protected:
         }
 
     #if STK_SEGGER_SYSVIEW
-        SEGGER_SYSVIEW_OnTaskStopReady((U32)now->GetUserStack()->SP, 0);
-        SEGGER_SYSVIEW_OnTaskStartReady((U32)next->GetUserStack()->SP);
+        SEGGER_SYSVIEW_OnTaskStopReady(now->GetUserStack()->tid, TRACE_EVENT_SWITCH);
+        SEGGER_SYSVIEW_OnTaskStartReady(next->GetUserStack()->tid);
     #endif
 
         return true; // switch context
@@ -1061,6 +1088,10 @@ protected:
 
         m_task_now = next;
 
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskStartReady(next->GetUserStack()->tid);
+    #endif
+
         if (_Mode & KERNEL_HRT)
         {
             next->HrtOnSwitchedIn();
@@ -1087,6 +1118,10 @@ protected:
         (*active) = &m_sleep_trap[0].stack;
 
         m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskStopReady(now->GetUserStack()->tid, TRACE_EVENT_SLEEP);
+    #endif
 
         if (_Mode & KERNEL_HRT)
         {
@@ -1139,6 +1174,26 @@ protected:
     /*! \brief     Schedule processing of the add task request.
     */
     void ScheduleAddTask() { m_request |= REQUEST_ADD_TASK; }
+
+#if STK_SEGGER_SYSVIEW
+    /*! \brief      Send task trace info.
+        \param[in]  task: Pointer to the kernel task.
+    */
+    void SendTaskTraceInfo(KernelTask *task)
+    {
+        STK_ASSERT(task->IsBusy());
+
+        SEGGER_SYSVIEW_TASKINFO info =
+        {
+            .TaskID    = task->GetUserStack()->tid,
+            .sName     = task->GetUserTask()->GetTraceName(),
+            .Prio      = 0,
+            .StackBase = reinterpret_cast<U32>(task->GetUserTask()->GetStack()),
+            .StackSize = task->GetUserTask()->GetStackSizeBytes(),
+        };
+        SEGGER_SYSVIEW_SendTaskInfo(&info);
+    }
+#endif
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
     STK_STATIC_ASSERT_N(TASKS_MAX, TASKS_MAX > 0);

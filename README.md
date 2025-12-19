@@ -29,23 +29,24 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ## Key Features
 
-| Feature                               | Description                                                                                   |
-|---------------------------------------|-----------------------------------------------------------------------------------------------|
-| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling      |
-| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring                                              |
-| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                 |
-| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                      |
-| Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces                         |
-| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                         |
-| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                          |
-| Critical section API                  | Basic synchronization primitive                                                               |
-| Tiny footprint                        | Minimal code unrelated to scheduling                                                          |
-| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                      |
-| C++ and C API                         | Can be used easily in C++ and C projects                                                      |
-| Easy porting                          | Requires very small BSP surface                                                               |
-| Development mode (x86)                | Run the same threaded application on Windows                                                  |
-| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                            |
-| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M  |
+| Feature                               | Description                                                                                  |
+|---------------------------------------|----------------------------------------------------------------------------------------------|
+| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling     |
+| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring                                             |
+| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                |
+| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                     |
+| Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces                        |
+| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                        |
+| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                         |
+| Critical section API                  | Basic synchronization primitive                                                              |
+| Tiny footprint                        | Minimal code unrelated to scheduling                                                         |
+| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                     |
+| C++ and C API                         | Can be used easily in C++ and C projects                                                     |
+| Easy porting                          | Requires very small BSP surface                                                              |
+| Traceable                             | Scheduling is fully traceable with SEGGER SystemView GUI application                         |
+| Development mode (x86)                | Run the same threaded application on Windows                                                 |
+| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                           |
+| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M |
 
 ---
 
@@ -209,6 +210,16 @@ No other libraries required.
 ## Dedicated C interface
 
 For easier integration with C projects STK provides dedicated C interface, see [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) folder.
+
+---
+
+## Tracebale by SEGGER SystemView
+
+Scheduling process is fully traceable with [SEGGER SystemView](https://www.segger.com/products/development-tools/systemview) GUI application.
+
+There is a ready to use Blinky example with tracing enabled: `build\example\project\eclipse\stm\blinky-stm32f407g-disc1-segger`
+
+![SEGGER SystemView](docs/img/SEGGER_SystemView_STK_tasks_screenshot.png)
 
 ---
 

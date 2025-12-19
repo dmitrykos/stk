@@ -67,6 +67,25 @@ enum EConsts
     STACK_SIZE_MIN       = STK_STACK_SIZE_MIN //!< Stack memory size of the Exit trap (see: StackMemoryDef, StackMemoryWrapper).
 };
 
+/*! \enum  ESystemTaskId
+    \brief System task id.
+*/
+enum ESystemTaskId
+{
+    SYS_TASK_ID_SLEEP = 0xFFFFFFFF, //!< Sleep trap.
+    SYS_TASK_ID_EXIT  = 0xFFFFFFFE  //!< Exit trap.
+};
+
+/*! \enum  ETraceEventId
+    \brief Trace event id for tracing tasks suspension and resume with debugging tools (SEGGER SysView and etc.).
+*/
+enum ETraceEventId
+{
+    TRACE_EVENT_UNKNOWN = 0,
+    TRACE_EVENT_SWITCH  = 1000 + 1,
+    TRACE_EVENT_SLEEP   = 1000 + 2
+};
+
 /*! \class StackMemoryDef
     \brief Stack memory type definition.
     \note  This descriptor provides an encapsulated type only on basis of which you can declare
@@ -94,6 +113,9 @@ struct Stack
 {
     size_t      SP;   //!< Stack Pointer (SP) register
     EAccessMode mode; //!< access mode
+#if STK_NEED_TASK_ID
+    uint32_t    tid;  //!< task id (see \a STK_SEGGER_SYSVIEW)
+#endif
 };
 
 /*! \class IStackMemory
@@ -154,6 +176,18 @@ public:
         \see       SwitchStrategySmoothWeightedRoundRobin, IKernelTask::GetWeight
     */
     virtual int32_t GetWeight() const = 0;
+
+    /*! \brief     Get task Id set by application.
+        \return    Task Id.
+        \note      For debugging purposes, can be omitted and return 0 if not used.
+    */
+    virtual size_t GetId() const = 0;
+
+    /*! \brief     Get task trace name set by application.
+        \return    Task name.
+        \note      For debugging purposes, can be omitted and return NULL if not used.
+    */
+    virtual const char *GetTraceName() const = 0;
 };
 
 /*! \class IKernelTask
