@@ -213,7 +213,7 @@ For easier integration with C projects STK provides dedicated C interface, see [
 
 ---
 
-## Tracebale by SEGGER SystemView
+## Traceable by SEGGER SystemView
 
 Scheduling process is fully traceable with [SEGGER SystemView](https://www.segger.com/products/development-tools/systemview) GUI application.
 
