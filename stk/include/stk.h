@@ -220,14 +220,15 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void ScheduleRemoval()
         {
-            m_state |= STATE_REMOVE_PENDING;
-
-            // put this task into a sleeping one which will be switched out from scheduling
+            // make this task sleeping to switch it out from scheduling process
             m_time_sleep = -INT32_MAX;
 
             // mark it as done HRT task
             if (_Mode & KERNEL_HRT)
                 HrtOnWorkCompleted();
+
+            // mark it as pending for removal
+            m_state |= STATE_REMOVE_PENDING;
         }
 
         /*! \brief     Check if task is pending removal.
@@ -858,38 +859,37 @@ protected:
         {
             KernelTask *task = &m_task_storage[i];
 
-            if (_Mode & KERNEL_DYNAMIC)
-            {
-                // task is pending removal, wait until it is switched out
-                if (task->IsPendingRemoval())
-                {
-                    if ((task != m_task_now) ||
-                        ((m_strategy.GetSize() == 1) && (m_fsm_state == FSM_STATE_SLEEPING)))
-                    {
-                        RemoveTask(task);
-                        continue;
-                    }
-                }
-                else
-                // skip freed tasks
-                if (!task->IsBusy())
-                    continue;
-            }
-
             // advance by +1 millisecond
             if (task->IsSleeping())
             {
+                if (_Mode & KERNEL_DYNAMIC)
+                {
+                    // task is pending removal, wait until it is switched out
+                    if (task->IsPendingRemoval())
+                    {
+                        if ((task != m_task_now) ||
+                            ((m_strategy.GetSize() == 1) && (m_fsm_state == FSM_STATE_SLEEPING)))
+                        {
+                            RemoveTask(task);
+                            continue;
+                        }
+                    }
+                }
+
                 ++task->m_time_sleep;
             }
             else
-            // in HRT mode we trace how long task spent
             if (_Mode & KERNEL_HRT)
             {
-                ++task->m_hrt[0].duration;
+                // in HRT mode we trace how long task spent in active state (doing some work)
+                if (task->IsBusy())
+                {
+                    ++task->m_hrt[0].duration;
 
-                // check if deadline is missed (HRT failure)
-                if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
-                    task->HrtHardFailDeadline(&m_platform);
+                    // check if deadline is missed (HRT failure)
+                    if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
+                        task->HrtHardFailDeadline(&m_platform);
+                }
             }
         }
     }
@@ -930,43 +930,41 @@ protected:
         KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL;
 
         // check if no tasks left in Dynamic mode and exit
-        if (_Mode & KERNEL_DYNAMIC)
+        if ((_Mode & KERNEL_DYNAMIC) && (m_strategy.GetSize() == 0))
         {
-            if (m_strategy.GetSize() == 0)
-            {
-                (*next) = NULL;
-                return FSM_EVENT_EXIT;
-            }
+            type = FSM_EVENT_EXIT;
         }
-
-        for (;;)
+        else
         {
-            itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
-
-            // check if task is sleeping
-            if ((itr != NULL) && itr->IsSleeping())
+            for (;;)
             {
-                // if iterated back to self then all tasks are sleeping and kernel should enter a sleep mode
-                if (itr == sleep_end)
+                itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
+
+                // check if task is sleeping
+                if ((itr != NULL) && itr->IsSleeping())
                 {
-                    itr  = NULL;
-                    type = FSM_EVENT_SLEEP;
-                    break;
+                    // if iterated back to self then all tasks are sleeping and kernel should enter a sleep mode
+                    if (itr == sleep_end)
+                    {
+                        itr  = NULL;
+                        type = FSM_EVENT_SLEEP;
+                        break;
+                    }
+
+                    // memorize as end to avoid endless loop if all entries are sleeping
+                    if (sleep_end == NULL)
+                        sleep_end = itr;
+
+                    prev = itr;
+                    continue;
                 }
 
-                // memorize as end to avoid endless loop if all entries are sleeping
-                if (sleep_end == NULL)
-                    sleep_end = itr;
+                // if was sleeping send wake event first
+                if (m_fsm_state == FSM_STATE_SLEEPING)
+                    type = FSM_EVENT_WAKE;
 
-                prev = itr;
-                continue;
+                break;
             }
-
-            // if was sleeping send wake event first
-            if (m_fsm_state == FSM_STATE_SLEEPING)
-                type = FSM_EVENT_WAKE;
-
-            break;
         }
 
         (*next) = itr;

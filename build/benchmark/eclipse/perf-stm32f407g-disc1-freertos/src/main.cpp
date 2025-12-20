@@ -14,8 +14,8 @@
 
 static StackType_t g_TaskStack[_STK_BENCH_TASK_MAX + 1][_STK_BENCH_STACK_SIZE] = {};
 static StaticTask_t g_Task[_STK_BENCH_TASK_MAX + 1] = {};
-static TaskHandle_t g_TaskHandle[_STK_BENCH_TASK_MAX + 1] = {};
-static volatile int64_t g_Ticks = 0;
+static volatile TaskHandle_t g_TaskHandle[_STK_BENCH_TASK_MAX + 1] = {};
+static volatile uint32_t g_Ticks = 0;
 static volatile bool g_Enable = false;
 
 extern "C" void SysTick_Handler()

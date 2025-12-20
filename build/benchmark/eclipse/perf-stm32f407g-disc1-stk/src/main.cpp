@@ -14,7 +14,7 @@
 using namespace stk;
 
 static Kernel<KERNEL_DYNAMIC, _STK_BENCH_TASK_MAX + 1, SwitchStrategyRoundRobin, PlatformDefault> g_Kernel;
-static volatile int64_t g_Ticks = 0;
+static volatile uint32_t g_Ticks = 0;
 static volatile bool g_Enable = false;
 
 extern "C" void SysTick_Handler()
@@ -70,7 +70,7 @@ private:
     {
         while (g_Ticks < _STK_BENCH_WINDOW + 2)
         {
-            g_KernelService->Sleep(_STK_BENCH_WINDOW + 2);
+            stk::Sleep(_STK_BENCH_WINDOW + 2);
         }
 
     wait:
