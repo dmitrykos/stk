@@ -42,7 +42,7 @@ DOXYFILE_ENCODING      = UTF-8
 # title of most generated pages and in a few other places.
 # The default value is: My Project.
 
-PROJECT_NAME           = "SuperTinyKernel: Minimalistic thread scheduling kernel for Embedded systems."
+PROJECT_NAME           = "SuperTinyKernel (STK)"
 
 # The PROJECT_NUMBER tag can be used to enter a project or revision number. This
 # could be handy for archiving the generated documentation or if some version
@@ -54,14 +54,14 @@ PROJECT_NUMBER         = 1.1.3
 # for a project that appears at the top of each page and should give viewer a
 # quick idea about the purpose of the project. Keep the description short.
 
-PROJECT_BRIEF          = "Copyright (c) 2025 Neutron Code Limited <stk@neutroncode.com>, License: MIT License, see LICENSE for a full text."
+PROJECT_BRIEF          = "Lightweight, preemptive, deterministic thread scheduling kernel for Embedded Systems. MIT Open Source License."
 
 # With the PROJECT_LOGO tag one can specify a logo or an icon that is included
 # in the documentation. The maximum height of the logo should not exceed 55
 # pixels and the maximum width should not exceed 200 pixels. Doxygen will copy
 # the logo to the output directory.
 
-PROJECT_LOGO           = docs/img/stk_logo_200px.png
+PROJECT_LOGO           = docs/img/stk_logo_50px.png
 
 # The OUTPUT_DIRECTORY tag is used to specify the (relative or absolute) path
 # into which the generated documentation will be written. If a relative path is

@@ -611,22 +611,21 @@ STK's C++ OOP design allows easy extension of its functionality, for example you
 
 ## License
 
-STK is released under the **MIT License**. 
+STK is released under the **MIT Open Source License**. 
 
-You may freely use it in:
+You may freely use it in projects of any type:
 * commercial
 * closed-source
 * open-source
 * academic
-
-projects.
+* etc
 
 ---
 
-## Additional Services
+## Extended technical support
 
 Contact `stk@neutroncode.com` for additional requests and services:
 
-* Dedicated license (warranty of title, perpetual usage rights)
+* Warranty of Title (if your commercial project requires it)
 * Integration and consulting
-* Technical support
+* Dedicated technical support
