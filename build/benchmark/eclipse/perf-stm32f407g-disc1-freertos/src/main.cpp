@@ -8,9 +8,11 @@
  */
 
 #include "cmsis_device.h"
+#include "perf.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "perf.h"
+
+#define SLEEP_GRANULARITY (_STK_BENCH_WINDOW / portTICK_PERIOD_MS + 2)
 
 static StackType_t g_TaskStack[_STK_BENCH_TASK_MAX + 1][_STK_BENCH_STACK_SIZE] = {};
 static StaticTask_t g_Task[_STK_BENCH_TASK_MAX + 1] = {};
@@ -49,6 +51,16 @@ extern "C" void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuf
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
 }
 
+// Use the same sleep function as in STK to make CPU consumption by a sleep routine comparable
+extern "C" void vApplicationIdleHook(void)
+{
+    SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk; // disable deep-sleep, go into a WAIT mode (sleep)
+    __DSB();                            // ensure store takes effect (see ARM info)
+
+    __WFI();                            // enter sleep mode
+    __ISB();
+}
+
 static void BenchTask(void *pvParameter)
 {
     uint32_t index = (uint32_t)pvParameter;
@@ -73,7 +85,7 @@ static void BenchEnd(void *pvParameter)
 
     while (g_Ticks < _STK_BENCH_WINDOW + 2)
     {
-        vTaskDelay(_STK_BENCH_WINDOW / portTICK_PERIOD_MS + 2);
+        vTaskDelay(SLEEP_GRANULARITY);
     }
 
 wait:
