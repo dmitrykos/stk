@@ -3,7 +3,7 @@ name: Code Coverage - Generic
 on:
   push:
     branches: [ "main" ]
-  pull_request:
+  pull_request_target:
     branches: [ "main" ]
   
 env:
@@ -12,13 +12,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      repository-projects: write
 
     steps:   
     - name: Install LCOV
       run: sudo apt install -y lcov
 
-    - name: Checkout      
+    - name: Checkout
       uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Generate Code Coverage
       run: ./coverage.sh -s . -b ${{github.workspace}}/cov-build -o ${{github.workspace}}/cov-report -f ${{github.workspace}}/cov-build/coverage.info

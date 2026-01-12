@@ -8,6 +8,7 @@ Minimalistic C++/C Thread Scheduler for Embedded Systems.
 [![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/dmitrykos/stk/blob/main/LICENSE)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/dmitrykos/stk/cmake-test-generic-stm32.yml)](https://github.com/dmitrykos/stk/actions)
 [![Test Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/dmitrykos/stk)
+[![membrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/dmitrykos/stk)
 
 ---
 

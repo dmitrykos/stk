@@ -1,6 +1,8 @@
 /Debug/
 Debug
 Release
+build/
+build-*/
 .settings
 .idea
 doxydoc
