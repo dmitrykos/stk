@@ -43,7 +43,7 @@ TEST(SwitchStrategyMonotonic, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -70,7 +70,7 @@ static void TestPriorityNext()
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -114,7 +114,7 @@ static void TestAlgorithm()
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 

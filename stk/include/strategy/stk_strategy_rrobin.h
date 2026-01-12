@@ -22,32 +22,112 @@ namespace stk {
 class SwitchStrategyRoundRobin : public ITaskSwitchStrategy
 {
 public:
-    enum { WEIGHT_API = 0 };
-
-    void AddTask(IKernelTask *task) { m_tasks.LinkBack(task); }
-
-    void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }
-
-    IKernelTask *GetNext(IKernelTask *current) const
+    enum EConfig
     {
-        STK_ASSERT(current != nullptr);
-        STK_ASSERT(current->GetHead() == &m_tasks);
-        STK_ASSERT(!m_tasks.IsEmpty());
+        WEIGHT_API      = 0, // strategy does not need Weight API of the kernel task
+        SLEEP_EVENT_API = 1  // strategy needs OnTaskSleep/OnTaskWake events
+    };
 
-        return (*current->GetNext());
+    SwitchStrategyRoundRobin() : m_tasks(), m_sleep(), m_next(nullptr)
+    {}
+
+    void AddTask(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(task->GetHead() == nullptr);
+
+        // first added is the next
+        if (GetSize() == 0)
+            m_next = task;
+
+        m_tasks.LinkBack(task);
+    }
+
+    void RemoveTask(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(GetSize() != 0);
+        STK_ASSERT((task->GetHead() == &m_tasks) || (task->GetHead() == &m_sleep));
+
+        // unlink from tasks and update next
+        if (task->GetHead() == &m_tasks)
+        {
+            if (task == m_next)
+                m_next = (*task->GetNext());
+
+            m_tasks.Unlink(task);
+        }
+        else
+        // unlink from sleeping list if was sleeping
+        if (task->GetHead() == &m_sleep)
+        {
+            m_sleep.Unlink(task);
+        }
+
+        if (GetSize() == 0)
+            m_next = nullptr;
+    }
+
+    IKernelTask *GetNext(IKernelTask *current)
+    {
+        IKernelTask *ret = m_next;
+
+        if (ret != nullptr)
+            m_next = (*ret->GetNext());
+
+        return ret;
     }
 
     IKernelTask *GetFirst() const
     {
-        STK_ASSERT(!m_tasks.IsEmpty());
+        STK_ASSERT(GetSize() != 0);
 
-        return (*m_tasks.GetFirst());
+        if (!m_tasks.IsEmpty())
+            return (*m_tasks.GetFirst());
+        else
+            return (*m_sleep.GetFirst());
     }
 
-    size_t GetSize() const { return m_tasks.GetSize(); }
+    size_t GetSize() const
+    {
+        return m_tasks.GetSize() + m_sleep.GetSize();
+    }
+
+    void OnTaskSleep(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(task->IsSleeping());
+        STK_ASSERT(task->GetHead() == &m_tasks);
+
+        // update next
+        if (m_tasks.GetSize() == 1)
+            m_next = nullptr;
+        else
+        if (task == m_next)
+            m_next = (*task->GetNext());
+
+        m_tasks.Unlink(task);
+        m_sleep.LinkBack(task);
+    }
+
+    void OnTaskWake(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(!task->IsSleeping());
+        STK_ASSERT(task->GetHead() == &m_sleep);
+
+        m_sleep.Unlink(task);
+        m_tasks.LinkBack(task);
+
+        // update next
+        if (m_next == nullptr)
+            m_next = task;
+    }
 
 protected:
-    IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling
+    IKernelTask::ListHeadType m_tasks; //!< runnable tasks
+    IKernelTask::ListHeadType m_sleep; //!< sleeping tasks
+    mutable IKernelTask      *m_next;  //!< next task to schedule
 };
 
 /*! \typedef SwitchStrategyRR

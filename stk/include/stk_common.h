@@ -399,9 +399,10 @@ public:
 
 /*! \class ITaskSwitchStrategy
     \brief Interface for a task switching strategy implementation.
-    \note  Strategy and Iterator design patterns.
+    \note Combines Strategy and minimal Iterator design patterns.
 
-    Inherit this interface by your concrete implementation of the task switching strategy.
+    Concrete classes inheriting this interface define how the kernel selects
+    the next task to run (round-robin, EDF, rate/deadline-monotonic, etc.).
 */
 class ITaskSwitchStrategy
 {
@@ -425,13 +426,28 @@ public:
     /*! \brief     Get next linked task.
         \param[in] current: Pointer to the current task.
         \return    Pointer to the next task.
-        \note      Some implementations may return NULL that denotes the end of the iteration.
+        \note      Some implementations may return NULL that denotes the end of the iteration
+                   when no runnable tasks are available, in this case kernel will enter into
+                   a FSM_STATE_SLEEPING state.
     */
-    virtual IKernelTask *GetNext(IKernelTask *current) const = 0;
+    virtual IKernelTask *GetNext(IKernelTask *current) = 0;
 
-    /*! \brief     Get number of tasks.
+    /*! \brief     Get number of tasks currently managed by this strategy.
+        \return    Total number of tasks in the set (runnable and idle).
     */
     virtual size_t GetSize() const = 0;
+
+    /*! \brief     Notification that a task has entered sleep/blocked state.
+        \param[in] task: Pointer to the sleeping task,
+        \note      Implementations shall remove the task from runnable set here.
+    */
+    virtual void OnTaskSleep(IKernelTask *task) = 0;
+
+    /*! \brief     Notification that a task is becoming runnable again.
+        \param[in] task: Pointer to the waking task
+        \note      Implementations shall re-insert the task into the runnable set here.
+    */
+    virtual void OnTaskWake(IKernelTask *task) = 0;
 };
 
 /*! \class IKernel
@@ -493,7 +509,7 @@ public:
     /*! \brief     Get switch strategy instance.
         \return    Pointer to the ITaskSwitchStrategy concrete class instance.
     */
-    virtual const ITaskSwitchStrategy *GetSwitchStrategy() const = 0;
+    virtual ITaskSwitchStrategy *GetSwitchStrategy() = 0;
 };
 
 /*! \class IKernelService

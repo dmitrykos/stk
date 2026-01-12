@@ -36,67 +36,75 @@ template <EMonotonicSwitchStrategyType _Type>
 class SwitchStrategyMonotonic : public ITaskSwitchStrategy
 {
 public:
-    enum { WEIGHT_API = 0 };
+    enum EConfig
+    {
+        WEIGHT_API      = 0, // strategy does not need Weight API of the kernel task
+        SLEEP_EVENT_API = 0  // strategy does not support OnTaskSleep/OnTaskWake events
+    };
 
     void AddTask(IKernelTask *task)
     {
         if (m_tasks.IsEmpty())
         {
             m_tasks.LinkFront(task);
-            return;
         }
-
-        IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
-
-        while (true)
+        else
         {
-            bool higher_priority;
-            switch (_Type)
-            {
-            case MSS_TYPE_RATE:
-                higher_priority = (task->GetHrtPeriodicity() < itr->GetHrtPeriodicity());
-                break;
-            case MSS_TYPE_DEADLINE:
-                higher_priority = (task->GetHrtDeadline() < itr->GetHrtDeadline());
-                break;
-            default:
-                STK_ASSERT(false);
-                break;
-            }
+            IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
 
-            if (higher_priority)
+            for (;;)
             {
-                if (itr == start)
+                bool higher_priority;
+                switch (_Type)
                 {
-                    m_tasks.LinkFront(task);
+                case MSS_TYPE_RATE:
+                    higher_priority = (task->GetHrtPeriodicity() < itr->GetHrtPeriodicity());
+                    break;
+                case MSS_TYPE_DEADLINE:
+                    higher_priority = (task->GetHrtDeadline() < itr->GetHrtDeadline());
+                    break;
+                default:
+                    STK_ASSERT(false);
                     break;
                 }
 
-                m_tasks.Link(task, itr, itr->GetPrev());
-                break;
-            }
+                if (higher_priority)
+                {
+                    if (itr == start)
+                    {
+                        m_tasks.LinkFront(task);
+                        break;
+                    }
 
-            // end of the list
-            if ((itr = (*itr->GetNext())) == start)
-            {
-                m_tasks.LinkBack(task);
-                break;
+                    m_tasks.Link(task, itr, itr->GetPrev());
+                    break;
+                }
+
+                // end of the list
+                if ((itr = (*itr->GetNext())) == start)
+                {
+                    m_tasks.LinkBack(task);
+                    break;
+                }
             }
         }
     }
 
-    void RemoveTask(IKernelTask *task) { m_tasks.Unlink(task); }
-
-    IKernelTask *GetNext(IKernelTask *current) const
+    void RemoveTask(IKernelTask *task)
     {
-        STK_ASSERT(current != nullptr);
-        STK_ASSERT(current->GetHead() == &m_tasks);
+        m_tasks.Unlink(task);
+    }
+
+    IKernelTask *GetNext(IKernelTask */*current*/)
+    {
         STK_ASSERT(!m_tasks.IsEmpty());
 
         IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
-        IKernelTask *next = current;
+        IKernelTask *next = NULL;
 
-        // highest priority = first in sorted list (shortest period (RM) or deadline (DM))
+        // highest priority = first in sorted list (shortest period (RM) or deadline (DM)), thus
+        // we always iterate from the start of the list and skip higher priority tasks when they
+        // gave up processing by sleeping
         do
         {
             // skip tasks waiting for their execution time
@@ -118,7 +126,22 @@ public:
         return (*m_tasks.GetFirst());
     }
 
-    size_t GetSize() const { return m_tasks.GetSize(); }
+    size_t GetSize() const
+    {
+        return m_tasks.GetSize();
+    }
+
+    void OnTaskSleep(IKernelTask */*task*/)
+    {
+        // Sleep API unsupported, RM keeps sorted non-volatile list
+        STK_ASSERT(false);
+    }
+
+    void OnTaskWake(IKernelTask */*task*/)
+    {
+        // Sleep API unsupported, RM keeps sorted non-volatile list
+        STK_ASSERT(false);
+    }
 
 private:
     IKernelTask::ListHeadType m_tasks; //!< tasks for scheduling

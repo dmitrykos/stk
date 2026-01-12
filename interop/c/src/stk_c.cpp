@@ -416,7 +416,7 @@ bool stk_kernel_is_schedulable(const stk_kernel_t *k)
     STK_ASSERT(k);
 
     return SchedulabilityCheck::IsSchedulableWCRT<STK_KERNEL_MAX_TASKS>(
-            reinterpret_cast<const stk::IKernel *>(k)->GetSwitchStrategy());
+            reinterpret_cast<stk::IKernel *>(const_cast<stk_kernel_t *>(k))->GetSwitchStrategy());
 }
 
 void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *task)
