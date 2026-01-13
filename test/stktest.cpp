@@ -25,7 +25,10 @@ extern void STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)
 	if (g_TestContext.IsExpectingAssert())
 	{
     #if CPPUTEST_HAVE_EXCEPTIONS
-		throw TestAssertPassed();
+	    if (g_TestContext.IsRethrowingAssertException())
+	        throw TestAssertPassed();
+	    else
+	        return;
     #else
 		return;
     #endif

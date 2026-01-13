@@ -75,8 +75,9 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         enum EStateFlags
         {
-            STATE_NONE           = 0,       //!< none
-            STATE_REMOVE_PENDING = (1 << 0) //!< task signaled that it exited
+            STATE_NONE           = 0,        //!< none
+            STATE_REMOVE_PENDING = (1 << 0), //!< task signaled that it exited
+            STATE_SLEEP_PENDING  = (1 << 1)  //!< task signaled that it wants to sleep
         };
 
     public:
@@ -221,7 +222,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         void ScheduleRemoval()
         {
             // make this task sleeping to switch it out from scheduling process
-            m_time_sleep = -INT32_MAX;
+            ScheduleSleep(INT32_MAX);
 
             // mark it as done HRT task
             if (_Mode & KERNEL_HRT)
@@ -263,7 +264,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             m_hrt[0].periodicity = periodicity_tc;
             m_hrt[0].deadline    = deadline_tc;
 
-            m_time_sleep = -start_delay_tc;
+            if (start_delay_tc > 0)
+                ScheduleSleep(start_delay_tc);
         }
 
         /*! \brief     Called when task is switched into the scheduling process.
@@ -283,7 +285,9 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
             STK_ASSERT(duration >= 0);
 
-            m_time_sleep = -(m_hrt[0].periodicity - duration);
+            int32_t sleep = m_hrt[0].periodicity - duration;
+            if (sleep > 0)
+                ScheduleSleep(sleep);
 
             m_hrt[0].duration = 0;
             m_hrt[0].done     = false;
@@ -314,13 +318,30 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         bool HrtIsDeadlineMissed(int32_t duration) const { return (duration > m_hrt[0].deadline); }
 
-        ITask    *m_user;       //!< user task
-        Stack     m_stack;      //!< stack descriptor
-        uint32_t  m_state;      //!< state flags
-        int32_t   m_time_sleep; //!< time to sleep (ticks)
-        SrtInfo   m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
-        HrtInfo   m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
-        int32_t   m_rt_weight[_TyStrategy::WEIGHT_API ? 1 : 0];       //!< current (run-time) weight, see SwitchStrategySmoothWeightedRoundRobin
+        /*! \brief     Schedule task to sleep.
+            \param[in] ticks: Number of ticks to sleep.
+        */
+        void ScheduleSleep(int32_t ticks)
+        {
+            STK_ASSERT(ticks > 0);
+
+            // set state first as kernel checks it when task IsSleeping
+            if (_TyStrategy::SLEEP_EVENT_API)
+            {
+                if (m_time_sleep >= 0)
+                    m_state |= STATE_SLEEP_PENDING;
+            }
+
+            m_time_sleep = -ticks;
+        }
+
+        ITask            *m_user;       //!< user task
+        Stack             m_stack;      //!< stack descriptor
+        volatile uint32_t m_state;      //!< state flags
+        volatile int32_t  m_time_sleep; //!< time to sleep (ticks)
+        SrtInfo           m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
+        HrtInfo           m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        int32_t           m_rt_weight[_TyStrategy::WEIGHT_API ? 1 : 0];       //!< current (run-time) weight, see SwitchStrategySmoothWeightedRoundRobin
     };
 
     /*! \class KernelService
@@ -518,7 +539,7 @@ public:
 
     IPlatform *GetPlatform() { return &m_platform; }
 
-    const ITaskSwitchStrategy *GetSwitchStrategy() const { return &m_strategy; }
+    ITaskSwitchStrategy *GetSwitchStrategy() { return &m_strategy; }
 
 protected:
     /*! \enum  EFsmState
@@ -723,6 +744,8 @@ protected:
     */
     __stk_attr_noinline KernelTask *FindTaskBySP(size_t SP)
     {
+        STK_ASSERT(m_task_now != NULL);
+
         if (m_task_now->IsMemoryOfSP(SP))
             return m_task_now;
 
@@ -761,36 +784,52 @@ protected:
     {
         STK_ASSERT(m_strategy.GetSize() != 0);
 
-
-        m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
-        STK_ASSERT(m_task_now != NULL);
-
-        // init FSM start state
-        m_fsm_state = FSM_STATE_SWITCHING;
-
-        // in HRT mode all tasks can have delayed start therefore get correct one
-        if (_Mode & KERNEL_HRT)
+        // iterate tasks and generate OnTaskSleep for a strategy for all initially sleeping tasks
+        if (_TyStrategy::SLEEP_EVENT_API)
         {
+            for (int32_t i = 0; i < TASKS_MAX; ++i)
+            {
+                KernelTask *task = &m_task_storage[i];
+
+                if (task->IsSleeping())
+                {
+                    if (task->m_state & KernelTask::STATE_SLEEP_PENDING)
+                    {
+                        task->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
+
+                        // notify strategy that task is sleeping
+                        m_strategy.OnTaskSleep(task);
+                    }
+                }
+            }
+        }
+
+        // get initial state and first task
+        {
+            m_fsm_state = FSM_STATE_SWITCHING;
+
             KernelTask *next = NULL;
             m_fsm_state = GetNewFsmState(&next);
 
             // expecting only SLEEPING or SWITCHING states
             STK_ASSERT((m_fsm_state == FSM_STATE_SLEEPING) || (m_fsm_state == FSM_STATE_SWITCHING));
-        }
 
-        if (m_fsm_state == FSM_STATE_SWITCHING)
-        {
-            (*active) = m_task_now->GetUserStack();
-
-            if (_Mode & KERNEL_HRT)
+            if (m_fsm_state == FSM_STATE_SWITCHING)
             {
-                m_task_now->HrtOnSwitchedIn();
+                m_task_now = next;
+
+                (*active) = next->GetUserStack();
+
+                if (_Mode & KERNEL_HRT)
+                    next->HrtOnSwitchedIn();
             }
-        }
-        else
-        if (m_fsm_state == FSM_STATE_SLEEPING)
-        {
-            (*active) = &m_sleep_trap[0].stack;
+            else
+            if (m_fsm_state == FSM_STATE_SLEEPING)
+            {
+                m_task_now = static_cast<KernelTask *>(m_strategy.GetFirst());
+
+                (*active) = &m_sleep_trap[0].stack;
+            }
         }
     }
 
@@ -819,7 +858,7 @@ protected:
             task->HrtOnWorkCompleted();
         }
 
-        task->m_time_sleep -= ticks;
+        task->ScheduleSleep(ticks);
 
         while (task->IsSleeping())
         {
@@ -859,9 +898,20 @@ protected:
         {
             KernelTask *task = &m_task_storage[i];
 
-            // advance by +1 millisecond
             if (task->IsSleeping())
             {
+                // deliver sleep event to strategy
+                if (_TyStrategy::SLEEP_EVENT_API)
+                {
+                    if (task->m_state & KernelTask::STATE_SLEEP_PENDING)
+                    {
+                        task->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
+
+                        // notify strategy that task is sleeping
+                        m_strategy.OnTaskSleep(task);
+                    }
+                }
+
                 if (_Mode & KERNEL_DYNAMIC)
                 {
                     // task is pending removal, wait until it is switched out
@@ -876,7 +926,16 @@ protected:
                     }
                 }
 
+                // advance sleep time by a tick
                 ++task->m_time_sleep;
+
+                // deliver sleep event to strategy
+                if (_TyStrategy::SLEEP_EVENT_API)
+                {
+                    // notify strategy that task woke up
+                    if (task->m_time_sleep == 0)
+                        m_strategy.OnTaskWake(task);
+                }
             }
             else
             if (_Mode & KERNEL_HRT)
@@ -927,7 +986,7 @@ protected:
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL;
+        KernelTask *itr = NULL, *prev = m_task_now;
 
         // check if no tasks left in Dynamic mode and exit
         if ((_Mode & KERNEL_DYNAMIC) && (m_strategy.GetSize() == 0))
@@ -940,23 +999,16 @@ protected:
             {
                 itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
 
-                // check if task is sleeping
-                if ((itr != NULL) && itr->IsSleeping())
+                // sleep-aware strategy returns NULL if no active tasks available, start sleeping
+                if (itr == NULL)
                 {
-                    // if iterated back to self then all tasks are sleeping and kernel should enter a sleep mode
-                    if (itr == sleep_end)
-                    {
-                        itr  = NULL;
-                        type = FSM_EVENT_SLEEP;
-                        break;
-                    }
-
-                    // memorize as end to avoid endless loop if all entries are sleeping
-                    if (sleep_end == NULL)
-                        sleep_end = itr;
-
-                    prev = itr;
-                    continue;
+                    itr  = NULL;
+                    type = FSM_EVENT_SLEEP;
+                    break;
+                }
+                else
+                {
+                    STK_ASSERT(!itr->IsSleeping());
                 }
 
                 // if was sleeping send wake event first

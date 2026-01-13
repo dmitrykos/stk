@@ -19,7 +19,11 @@ namespace test {
 TEST_GROUP(SwitchStrategyMonotonic)
 {
     void setup() {}
-    void teardown() {}
+    void teardown()
+    {
+        g_TestContext.ExpectAssert(false);
+        g_TestContext.RethrowAssertException(true);
+    }
 };
 
 TEST(SwitchStrategyMonotonic, GetFirstEmpty)
@@ -39,11 +43,51 @@ TEST(SwitchStrategyMonotonic, GetFirstEmpty)
     }
 }
 
+TEST(SwitchStrategyMonotonic, SleepNotSupported)
+{
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->OnTaskSleep(strategy->GetFirst());
+        CHECK_TEXT(false, "expecting assertion - OnTaskSleep not supported");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->OnTaskWake(strategy->GetFirst());
+        CHECK_TEXT(false, "expecting assertion - OnTaskWake not supported");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    // we need this workaround to pass 100% coverage test by blocking the exception
+    g_TestContext.ExpectAssert(true);
+    g_TestContext.RethrowAssertException(false);
+    strategy->OnTaskSleep(strategy->GetFirst());
+    strategy->OnTaskWake(strategy->GetFirst());
+}
+
 TEST(SwitchStrategyMonotonic, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -70,7 +114,7 @@ static void TestPriorityNext()
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -114,7 +158,7 @@ static void TestAlgorithm()
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 

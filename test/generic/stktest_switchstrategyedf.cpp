@@ -43,33 +43,23 @@ TEST(SwitchStrategyEDF, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyEDF, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
     kernel.AddTask(&task1);
-    IKernelTask *ktask = strategy->GetFirst();
     kernel.RemoveTask(&task1);
     CHECK_EQUAL(0, strategy->GetSize());
 
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        strategy->GetNext(ktask);
-        CHECK_TEXT(false, "expecting assertion when empty");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    // expect to return NULL which puts core into a sleep mode, current is ignored by this strategy
+    CHECK_EQUAL(0, strategy->GetNext(NULL));
 }
 
 TEST(SwitchStrategyEDF, PriorityNext)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyEDF, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -105,7 +95,7 @@ TEST(SwitchStrategyEDF, Algorithm)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyEDF, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
@@ -164,7 +154,7 @@ TEST(SwitchStrategyEDF, RelativeDeadlineEvolution)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, SwitchStrategyEDF, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task;
-    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
 
     kernel.Initialize();
 
@@ -240,14 +230,14 @@ static struct EDFDynamicSchedulingContext
             Yield();
         }
         else
-        if (counter == 3)
+        if (counter == 2)
         {
             CHECK_EQUAL_TEXT((size_t)task2->GetStack(), active->SP, "tick 1: task2 earliest deadline");
             ++checked;
             Yield();
         }
         else
-        if (counter == 4)
+        if (counter == 3)
         {
             CHECK_EQUAL_TEXT((size_t)task1->GetStack(), active->SP, "tick 3+: task1 earliest deadline");
             ++checked;
@@ -266,7 +256,7 @@ TEST(SwitchStrategyEDF, DynamicScheduling)
 {
     Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 3, SwitchStrategyEDF, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
-    PlatformTestMock *platform = (PlatformTestMock *)kernel.GetPlatform();
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
 
     kernel.Initialize();
 

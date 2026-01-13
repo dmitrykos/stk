@@ -30,7 +30,7 @@ public:
         DEFAULT_FAILURE_EXIT_CODE = 1 //!< default exit code for exit() to denote failure of the test
     };
 
-    TestContext() : m_expect_assert(false)
+    TestContext() : m_expect_assert(false), m_rethrow_assert(true)
     { }
 
     /*! \brief     Start expecting assertion for the test case.
@@ -41,6 +41,15 @@ public:
     /*! \brief     Check if test case is expecting assertion.
     */
     bool IsExpectingAssert() const { return m_expect_assert; }
+
+    /*! \brief     Re-throw assert's exception for the test case.
+        \param[in] expect: True to rethrow otherwise False.
+    */
+    void RethrowAssertException(bool rethrow) { m_rethrow_assert = rethrow; }
+
+    /*! \brief     Check if exception must be thrown if assertion is hit.
+    */
+    bool IsRethrowingAssertException() const { return m_rethrow_assert; }
 
     /*! \brief     Show text string as prologue before tests start.
     */
@@ -74,6 +83,7 @@ public:
 private:
     static TestContext m_instance; //!< global instance of the TestContext
     bool m_expect_assert;          //!< assert expectation flag
+    bool m_rethrow_assert;         //!< rethrow assert's exception
 };
 
 /*! \var   g_TestContext

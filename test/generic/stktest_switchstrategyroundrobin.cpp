@@ -13,7 +13,7 @@ namespace stk {
 namespace test {
 
 // ============================================================================ //
-// ============================ SwitchStrategyRoundRobin ====================== //
+// ============================ SwitchStrategyRR ====================== //
 // ============================================================================ //
 
 TEST_GROUP(SwitchStrategyRoundRobin)
@@ -24,7 +24,7 @@ TEST_GROUP(SwitchStrategyRoundRobin)
 
 TEST(SwitchStrategyRoundRobin, GetFirstEmpty)
 {
-    SwitchStrategyRoundRobin rr;
+    SwitchStrategyRR rr;
 
     try
     {
@@ -41,73 +41,62 @@ TEST(SwitchStrategyRoundRobin, GetFirstEmpty)
 
 TEST(SwitchStrategyRoundRobin, GetNextEmpty)
 {
-    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
 
     kernel.AddTask(&task1);
-    IKernelTask *ktask = strategy->GetFirst();
     kernel.RemoveTask(&task1);
     CHECK_EQUAL(0, strategy->GetSize());
 
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        strategy->GetNext(ktask);
-        CHECK_TEXT(false, "expecting assertion when empty");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    // expect to return NULL which puts core into a sleep mode, current is ignored by this strategy
+    CHECK_EQUAL(0, strategy->GetNext(NULL));
 }
 
 TEST(SwitchStrategyRoundRobin, EndlessNext)
 {
     Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     kernel.Initialize();
     kernel.AddTask(&task1);
-
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
-
-    IKernelTask *next = strategy->GetFirst();
-    CHECK_TEXT(strategy->GetNext(next) == next, "Expecting the same next task1 (endless looping)");
-
     kernel.AddTask(&task2);
-
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
-
     kernel.AddTask(&task3);
 
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
+    IKernelTask *first = strategy->GetFirst();
+    CHECK_EQUAL_TEXT(&task1, first->GetUserTask(), "Expecting the first task1");
 
-    next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1 (endless looping)");
+    IKernelTask *next = strategy->GetNext(NULL);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1");
 
-    IKernelTask *ktask1 = next;
-    next = strategy->GetNext(ktask1);
+    next = strategy->GetNext(first);
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2");
 
-    kernel.RemoveTask(&task1);
-
     next = strategy->GetNext(next);
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3");
 
     next = strategy->GetNext(next);
-    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2 (endless looping)");
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1 again (endless looping)");
+
+    next = strategy->GetNext(first);
+    CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Expecting the next task2 again (endless looping)");
+
+    kernel.RemoveTask(&task2);
+
+    next = strategy->GetNext(NULL);
+    CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Expecting the next task3 again (endless looping)");
+
+    next = strategy->GetNext(next);
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Expecting the next task1 again (endless looping)");
 }
 
 TEST(SwitchStrategyRoundRobin, Algorithm)
 {
     // Create kernel with 3 tasks
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
 
     kernel.Initialize();
@@ -115,14 +104,14 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
     // Add tasks
     kernel.AddTask(&task1);
 
-    const ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
     IKernelTask *next = strategy->GetFirst();
 
     // --- Stage 1: 1 task only ---------------------------------------------
 
     // Always returns the same task
-    for (int i = 0; i < 5; i++)
+    for (int32_t i = 0; i < 5; i++)
     {
         next = strategy->GetNext(next);
         CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
@@ -132,9 +121,10 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
 
     kernel.AddTask(&task2);
 
+    next = strategy->GetNext(next); // should still return task1 as task2 will be scheduled after this call
+    CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should be task1");
     next = strategy->GetNext(next); // should return task2
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Next task should be task2");
-
     next = strategy->GetNext(next); // should wrap around to task1
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should wrap to task1");
 

@@ -46,10 +46,19 @@ namespace stk {
 class SwitchStrategySmoothWeightedRoundRobin : public ITaskSwitchStrategy
 {
 public:
-    enum { WEIGHT_API = 1 };
+    enum EConfig
+    {
+        WEIGHT_API      = 1, // strategy is using Weight API of the kernel task
+        SLEEP_EVENT_API = 1  // strategy needs OnTaskSleep/OnTaskWake events
+    };
+
+    SwitchStrategySmoothWeightedRoundRobin() : m_tasks(), m_sleep(), m_total_weight(0)
+    {}
 
     void AddTask(IKernelTask *task)
     {
+        STK_ASSERT(task != nullptr);
+
         int32_t weight = task->GetWeight();
         STK_ASSERT((weight > 0) && (weight <= 0x7FFFFF)); // must not be negative, max 24-bit number
 
@@ -61,16 +70,27 @@ public:
 
     void RemoveTask(IKernelTask *task)
     {
-        m_total_weight -= task->GetWeight();
-        m_tasks.Unlink(task);
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(task->GetHead() == &m_tasks || task->GetHead() == &m_sleep);
+
+        if (task->GetHead() == &m_tasks)
+        {
+            m_total_weight -= task->GetWeight();
+            m_tasks.Unlink(task);
+        }
+        else
+        {
+            m_sleep.Unlink(task);
+        }
     }
 
-    IKernelTask *GetNext(IKernelTask */*current*/) const
+    IKernelTask *GetNext(IKernelTask */*current*/)
     {
-        STK_ASSERT(!m_tasks.IsEmpty());
+        if (m_tasks.IsEmpty())
+            return NULL;
 
         IKernelTask *selected = nullptr;
-        int32_t max_weight = -1;
+        int32_t max_weight = INT32_MIN;
         IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
 
         do
@@ -85,6 +105,7 @@ public:
             }
         }
         while ((itr = (*itr->GetNext())) != start);
+
         STK_ASSERT(selected != nullptr);
 
         selected->SetCurrentWeight(max_weight - m_total_weight);
@@ -94,16 +115,47 @@ public:
 
     IKernelTask *GetFirst() const
     {
-        STK_ASSERT(!m_tasks.IsEmpty());
+        STK_ASSERT(GetSize() != 0);
 
-        return (*m_tasks.GetFirst());
+        if (!m_tasks.IsEmpty())
+            return (*m_tasks.GetFirst());
+        else
+            return (*m_sleep.GetFirst());
     }
 
-    size_t GetSize() const { return m_tasks.GetSize(); }
+    size_t GetSize() const
+    {
+        return m_tasks.GetSize() + m_sleep.GetSize();
+    }
+
+    void OnTaskSleep(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(task->IsSleeping());
+        STK_ASSERT(task->GetHead() == &m_tasks);
+
+        m_total_weight -= task->GetWeight();
+
+        m_tasks.Unlink(task);
+        m_sleep.LinkBack(task);
+    }
+
+    void OnTaskWake(IKernelTask *task)
+    {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(!task->IsSleeping());
+        STK_ASSERT(task->GetHead() == &m_sleep);
+
+        m_sleep.Unlink(task);
+        m_tasks.LinkBack(task);
+
+        m_total_weight += task->GetWeight();
+    }
 
 private:
-    IKernelTask::ListHeadType m_tasks;            //!< tasks for scheduling
-    int32_t                   m_total_weight = 0; //!< sum of all task weights
+    IKernelTask::ListHeadType m_tasks;        //!< runnable tasks
+    IKernelTask::ListHeadType m_sleep;        //!< sleeping tasks
+    int32_t                   m_total_weight; //!< total weight
 };
 
 /*! \typedef SwitchStrategySWRR
