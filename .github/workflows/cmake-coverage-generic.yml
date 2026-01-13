@@ -3,38 +3,92 @@ name: Code Coverage - Generic
 on:
   push:
     branches: [ "main" ]
+
+  pull_request:
+    branches: [ "main" ]
+
   pull_request_target:
     branches: [ "main" ]
-  
+
 env:
   PASS_THRESHOLD: 100
 
 jobs:
-  build:
+  # ------------------------------------------------------------
+  # 0) Detect docs-only PRs
+  # ------------------------------------------------------------
+  changes:
     runs-on: ubuntu-22.04
+    outputs:
+      run_coverage: ${{ steps.filter.outputs.run_coverage }}
+    steps:
+      - name: Detect changed files
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*'
+              - '!.github/**'
+              - '!build/**'
+              - '!deps/**'
+              - '!docs/**'
+              - '!**/*.md'
+            run_coverage:
+              - 'code'
+
+  # ------------------------------------------------------------
+  # 1) Build & generate coverage
+  # ------------------------------------------------------------
+  coverage-build:
+    needs: changes
+    if: needs.changes.outputs.run_coverage == 'true'
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install LCOV
+        run: sudo apt install -y lcov
+
+      - name: Checkout PR code
+        uses: actions/checkout@v3
+
+      - name: Generate Code Coverage
+        run: |
+          ./coverage.sh \
+            -s . \
+            -b ${{ github.workspace }}/cov-build \
+            -o ${{ github.workspace }}/cov-report \
+            -f ${{ github.workspace }}/cov-build/coverage.info
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov-info
+          path: ${{ github.workspace }}/cov-build/coverage.info
+
+  # ------------------------------------------------------------
+  # 2) Comment coverage on PR
+  # ------------------------------------------------------------
+  coverage-report:
+    needs: changes
+    if: github.event_name == 'pull_request_target' && needs.changes.outputs.run_coverage == 'true'
+    runs-on: ubuntu-22.04
+
     permissions:
       contents: write
       pull-requests: write
-      issues: write
-      repository-projects: write
 
-    steps:   
-    - name: Install LCOV
-      run: sudo apt install -y lcov
+    steps:
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lcov-info
+          path: ./coverage
 
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        ref: ${{ github.event.pull_request.head.sha || github.sha }}
-    
-    - name: Generate Code Coverage
-      run: ./coverage.sh -s . -b ${{github.workspace}}/cov-build -o ${{github.workspace}}/cov-report -f ${{github.workspace}}/cov-build/coverage.info
-      
-    - name: Report Code Coverage with Pass Threshold - ${{env.PASS_THRESHOLD}}%
-      uses: zgosalvez/github-actions-report-lcov@v4
-      with:
-        coverage-files: ${{github.workspace}}/cov-build/coverage.info
-        minimum-coverage: ${{env.PASS_THRESHOLD}}
-        artifact-name: code-coverage-report
-        github-token: ${{secrets.GITHUB_TOKEN}}
-        working-directory: ./
+      - name: Report Code Coverage (${{ env.PASS_THRESHOLD }}%)
+        uses: zgosalvez/github-actions-report-lcov@v4
+        with:
+          coverage-files: ./coverage/coverage.info
+          minimum-coverage: ${{ env.PASS_THRESHOLD }}
+          artifact-name: code-coverage-report
+          github-token: ${{ secrets.GITHUB_TOKEN }}
