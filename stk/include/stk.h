@@ -986,11 +986,7 @@ protected:
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
         EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = NULL, *prev = m_task_now, *sleep_end = NULL;
-
-        // clear warning about unused variable
-        if (_TyStrategy::SLEEP_EVENT_API)
-            (void)sleep_end;
+        KernelTask *itr = NULL, *prev = m_task_now;
 
         // check if no tasks left in Dynamic mode and exit
         if ((_Mode & KERNEL_DYNAMIC) && (m_strategy.GetSize() == 0))
@@ -1003,44 +999,16 @@ protected:
             {
                 itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
 
-                if (_TyStrategy::SLEEP_EVENT_API)
+                // sleep-aware strategy returns NULL if no active tasks available, start sleeping
+                if (itr == NULL)
                 {
-                    // sleep-aware strategy returns NULL if no active tasks available, start sleeping
-                    if (itr == NULL)
-                    {
-                        itr  = NULL;
-                        type = FSM_EVENT_SLEEP;
-                        break;
-                    }
+                    itr  = NULL;
+                    type = FSM_EVENT_SLEEP;
+                    break;
                 }
                 else
                 {
-                    // sleep-aware strategy returns NULL if no active tasks available, start sleeping
-                    if (itr == NULL)
-                    {
-                        itr  = NULL;
-                        type = FSM_EVENT_SLEEP;
-                        break;
-                    }
-                    else
-                    // check if task is sleeping
-                    if (itr->IsSleeping())
-                    {
-                        // if iterated back to self then all tasks are sleeping and kernel should enter a sleep mode
-                        if (itr == sleep_end)
-                        {
-                            itr  = NULL;
-                            type = FSM_EVENT_SLEEP;
-                            break;
-                        }
-
-                        // memorize as end to avoid endless loop if all entries are sleeping
-                        if (sleep_end == NULL)
-                            sleep_end = itr;
-
-                        prev = itr;
-                        continue;
-                    }
+                    STK_ASSERT(!itr->IsSleeping());
                 }
 
                 // if was sleeping send wake event first

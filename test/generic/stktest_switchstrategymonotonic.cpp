@@ -39,6 +39,40 @@ TEST(SwitchStrategyMonotonic, GetFirstEmpty)
     }
 }
 
+TEST(SwitchStrategyMonotonic, SleepNotSupported)
+{
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->OnTaskSleep(strategy->GetFirst());
+        CHECK_TEXT(false, "expecting assertion - OnTaskSleep not supported");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        strategy->OnTaskWake(strategy->GetFirst());
+        CHECK_TEXT(false, "expecting assertion - OnTaskWake not supported");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 TEST(SwitchStrategyMonotonic, GetNextEmpty)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRM, PlatformTestMock> kernel;
