@@ -3,10 +3,8 @@ name: Code Coverage - Generic
 on:
   push:
     branches: [ "main" ]
-
   pull_request:
     branches: [ "main" ]
-
   pull_request_target:
     branches: [ "main" ]
 
@@ -22,6 +20,11 @@ jobs:
     outputs:
       run_coverage: ${{ steps.filter.outputs.run_coverage }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # full clone for paths-filter
+
       - name: Detect changed files
         uses: dorny/paths-filter@v3
         id: filter
@@ -44,13 +47,37 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run_coverage == 'true'
     runs-on: ubuntu-22.04
-
     steps:
-      - name: Install LCOV
-        run: sudo apt install -y lcov
-
       - name: Checkout PR code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # -----------------------------
+      # Cache LCOV
+      # -----------------------------
+      - name: Cache LCOV
+        uses: actions/cache@v3
+        id: lcov-cache
+        with:
+          path: /usr/bin/lcov
+          key: lcov-${{ runner.os }}-v1
+
+      - name: Install LCOV (if cache missed)
+        if: steps.lcov-cache.outputs.cache-hit != 'true'
+        run: sudo apt update && sudo apt install -y lcov
+
+      # -----------------------------
+      # Cache coverage build based on source files
+      # -----------------------------
+      - name: Cache coverage build
+        uses: actions/cache@v3
+        id: coverage-build-cache
+        with:
+          path: cov-build
+          key: coverage-build-${{ runner.os }}-${{ hashFiles('**/*.cpp', '**/*.c', '**/*.h') }}
+          restore-keys: |
+            coverage-build-${{ runner.os }}-
 
       - name: Generate Code Coverage
         run: |
@@ -70,14 +97,12 @@ jobs:
   # 2) Comment coverage on PR
   # ------------------------------------------------------------
   coverage-report:
-    needs: changes
+    needs: coverage-build
     if: github.event_name == 'pull_request_target' && needs.changes.outputs.run_coverage == 'true'
     runs-on: ubuntu-22.04
-
     permissions:
       contents: write
       pull-requests: write
-
     steps:
       - name: Download coverage artifact
         uses: actions/download-artifact@v4
