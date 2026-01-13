@@ -28,7 +28,7 @@ public:
         SLEEP_EVENT_API = 1  // strategy needs OnTaskSleep/OnTaskWake events
     };
 
-    SwitchStrategyRoundRobin() : m_tasks(), m_sleep(), m_next(nullptr)
+    SwitchStrategyRoundRobin() : m_tasks(), m_sleep(), m_prev(nullptr)
     {}
 
     void AddTask(IKernelTask *task)
@@ -36,11 +36,13 @@ public:
         STK_ASSERT(task != nullptr);
         STK_ASSERT(task->GetHead() == nullptr);
 
-        // first added is the next
-        if (GetSize() == 0)
-            m_next = task;
+        bool is_tail = (m_prev == m_tasks.GetLast());
 
         m_tasks.LinkBack(task);
+
+        // if pointer was pointing to the tail, become a tail
+        if (is_tail)
+            m_prev = task;
     }
 
     void RemoveTask(IKernelTask *task)
@@ -52,10 +54,14 @@ public:
         // unlink from tasks and update next
         if (task->GetHead() == &m_tasks)
         {
-            if (task == m_next)
-                m_next = (*task->GetNext());
+            IKernelTask *next = (*task->GetNext());
 
             m_tasks.Unlink(task);
+
+            if (next != task)
+                m_prev = (*next->GetPrev());
+            else
+                m_prev = nullptr;
         }
         else
         // unlink from sleeping list if was sleeping
@@ -65,15 +71,18 @@ public:
         }
 
         if (GetSize() == 0)
-            m_next = nullptr;
+            m_prev = nullptr;
     }
 
     IKernelTask *GetNext(IKernelTask *current)
     {
-        IKernelTask *ret = m_next;
+        IKernelTask *ret = m_prev;
 
         if (ret != nullptr)
-            m_next = (*ret->GetNext());
+        {
+            ret    = (*ret->GetNext());
+            m_prev = ret;
+        }
 
         return ret;
     }
@@ -99,15 +108,16 @@ public:
         STK_ASSERT(task->IsSleeping());
         STK_ASSERT(task->GetHead() == &m_tasks);
 
-        // update next
-        if (m_tasks.GetSize() == 1)
-            m_next = nullptr;
-        else
-        if (task == m_next)
-            m_next = (*task->GetNext());
+        IKernelTask *next = (*task->GetNext());
 
         m_tasks.Unlink(task);
         m_sleep.LinkBack(task);
+
+        // update pointer
+        if (next != task)
+            m_prev = (*next->GetPrev());
+        else
+            m_prev = nullptr;
     }
 
     void OnTaskWake(IKernelTask *task)
@@ -119,15 +129,15 @@ public:
         m_sleep.Unlink(task);
         m_tasks.LinkBack(task);
 
-        // update next
-        if (m_next == nullptr)
-            m_next = task;
+        // update pointer
+        if (m_prev == nullptr)
+            m_prev = task;
     }
 
 protected:
     IKernelTask::ListHeadType m_tasks; //!< runnable tasks
     IKernelTask::ListHeadType m_sleep; //!< sleeping tasks
-    mutable IKernelTask      *m_next;  //!< next task to schedule
+    IKernelTask              *m_prev;  //!< pointer to the previous task
 };
 
 /*! \typedef SwitchStrategyRR

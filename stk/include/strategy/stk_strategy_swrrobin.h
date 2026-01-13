@@ -134,10 +134,10 @@ public:
         STK_ASSERT(task->IsSleeping());
         STK_ASSERT(task->GetHead() == &m_tasks);
 
-        m_total_weight -= task->GetWeight();
-
         m_tasks.Unlink(task);
+
         m_sleep.LinkBack(task);
+        m_total_weight -= task->GetWeight();
     }
 
     void OnTaskWake(IKernelTask *task)
@@ -147,8 +147,12 @@ public:
         STK_ASSERT(task->GetHead() == &m_sleep);
 
         m_sleep.Unlink(task);
-        m_tasks.LinkBack(task);
 
+        // boost priority of the previously sleeping task, this resembles to a RR pattern
+        // with tasks having equal weights
+        task->SetCurrentWeight(m_total_weight);
+
+        m_tasks.LinkBack(task);
         m_total_weight += task->GetWeight();
     }
 
