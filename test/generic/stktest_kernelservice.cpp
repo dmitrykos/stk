@@ -318,9 +318,10 @@ static void SleepRelaxCpu()
     g_SleepRelaxCpuContext.Process();
 }
 
-TEST(KernelService, Sleep)
+template <class _SwitchStrategy>
+static void TestTaskSleep()
 {
-    Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    Kernel<KERNEL_STATIC, 2, _SwitchStrategy, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
     Stack *&active = platform->m_stack_active;
@@ -353,6 +354,16 @@ TEST(KernelService, Sleep)
     CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting task2 after next tick");
 
     g_RelaxCpuHandler = NULL;
+}
+
+TEST(KernelService, SleepRR)
+{
+    TestTaskSleep<SwitchStrategyRR>();
+}
+
+TEST(KernelService, SleepSWRR)
+{
+    TestTaskSleep<SwitchStrategySWRR>();
 }
 
 static struct SleepAllAndWakeRelaxCpuContext

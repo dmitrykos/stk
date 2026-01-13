@@ -19,7 +19,11 @@ namespace test {
 TEST_GROUP(SwitchStrategyMonotonic)
 {
     void setup() {}
-    void teardown() {}
+    void teardown()
+    {
+        g_TestContext.ExpectAssert(false);
+        g_TestContext.RethrowAssertException(true);
+    }
 };
 
 TEST(SwitchStrategyMonotonic, GetFirstEmpty)
@@ -71,6 +75,12 @@ TEST(SwitchStrategyMonotonic, SleepNotSupported)
         CHECK(true);
         g_TestContext.ExpectAssert(false);
     }
+
+    // we need this workaround to pass 100% coverage test by blocking the exception
+    g_TestContext.ExpectAssert(true);
+    g_TestContext.RethrowAssertException(false);
+    strategy->OnTaskSleep(strategy->GetFirst());
+    strategy->OnTaskWake(strategy->GetFirst());
 }
 
 TEST(SwitchStrategyMonotonic, GetNextEmpty)

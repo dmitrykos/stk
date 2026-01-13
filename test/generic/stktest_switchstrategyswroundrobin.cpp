@@ -24,7 +24,7 @@ TEST_GROUP(SwitchStrategySWRoundRobin)
 
 TEST(SwitchStrategySWRoundRobin, GetFirstEmpty)
 {
-    SwitchStrategySmoothWeightedRoundRobin rr;
+    SwitchStrategySWRR rr;
 
     try
     {
@@ -41,7 +41,7 @@ TEST(SwitchStrategySWRoundRobin, GetFirstEmpty)
 
 TEST(SwitchStrategySWRoundRobin, GetNextEmpty)
 {
-    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategySmoothWeightedRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategySWRR, PlatformTestMock> kernel;
     TaskMockW<1, ACCESS_USER> task1;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
@@ -57,7 +57,7 @@ TEST(SwitchStrategySWRoundRobin, GetNextEmpty)
 
 TEST(SwitchStrategySWRoundRobin, EndlessNext)
 {
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategySmoothWeightedRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategySWRR, PlatformTestMock> kernel;
     TaskMockW<1, ACCESS_USER> task1, task2, task3;
 
     kernel.Initialize();
@@ -128,7 +128,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
 
 TEST(SwitchStrategySWRoundRobin, Algorithm)
 {
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategySmoothWeightedRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategySWRR, PlatformTestMock> kernel;
     TaskMockW<1, ACCESS_USER> task1; // weight 1
     TaskMockW<2, ACCESS_USER> task2; // weight 2
     TaskMockW<3, ACCESS_USER> task3; // weight 3
