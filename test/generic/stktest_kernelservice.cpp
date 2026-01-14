@@ -211,22 +211,22 @@ static struct SwitchToNextRelaxCpuContext
             CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
         }
         else
-        // ISR calls OnSysTick (task1 = active, task2 = active but in the end of the scheduling list)
+        // ISR calls OnSysTick (task1 = idle, task2 = active)
         if (counter == 1)
         {
-            CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
+            CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
         }
         else
-        // ISR calls OnSysTick (task1 = active, task2 = idle), SwitchToNext caused task2 to become idle, SwitchToNext takes 2 ticks
+        // ISR calls OnSysTick (task1 = active, task2 = idle)
         if (counter == 2)
         {
             CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
         }
         else
-        // ISR calls OnSysTick (task1 = active, task2 = idle)
+        // ISR calls OnSysTick (task1 = idle, task2 = active)
         if (counter == 3)
         {
-            CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
+            CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
         }
 
         ++counter;
@@ -244,7 +244,7 @@ TEST(KernelService, SwitchToNext)
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
-    Stack *&idle = platform->m_stack_idle, *&active = platform->m_stack_active;
+    Stack *&active = platform->m_stack_active;
 
     kernel.Initialize();
     kernel.AddTask(&task1);
@@ -267,16 +267,16 @@ TEST(KernelService, SwitchToNext)
     Yield();
     CHECK_EQUAL(1, platform->m_switch_to_next_nr);
 
-    // task1 is still active
-    CHECK_EQUAL(active->SP, (size_t)task1.GetStack());
+    // task2 is active again
+    CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
-    // task2 calls SwitchToNext (due to context switch it became idle task)
-    platform->EventTaskSwitch(idle->SP);
+    // task2 calls SwitchToNext
+    platform->EventTaskSwitch(active->SP);
 
     // task1 calls SwitchToNext (task1 = active, task2 = idle)
     platform->EventTaskSwitch(active->SP + 1); // add shift to test IsMemoryOfSP
 
-    // after a switch task 2 remains active
+    // after a switch task 2 is active again
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = NULL;
@@ -285,6 +285,11 @@ TEST(KernelService, SwitchToNext)
 static struct SleepRelaxCpuContext
 {
     SleepRelaxCpuContext()
+    {
+        Clear();
+    }
+
+    void Clear()
     {
         counter  = 0;
         platform = NULL;
@@ -302,10 +307,16 @@ static struct SleepRelaxCpuContext
 
         platform->ProcessTick();
 
-        // ISR calls OnSysTick (task1 = active, task2 = idle (sleeping))
-        if ((counter == 0) || (counter == 1))
+        // ISR calls OnSysTick (task1 = active, task2 = idle)
+        if (counter == 0)
         {
             CHECK_EQUAL_TEXT(active->SP, (size_t)task1->GetStack(), "sleep: expecting task1");
+        }
+        else
+        // ISR calls OnSysTick (task1 = idle, task2 = active)
+        if (counter == 1)
+        {
+            CHECK_EQUAL_TEXT(active->SP, (size_t)task2->GetStack(), "sleep: expecting task2");
         }
 
         ++counter;
@@ -339,6 +350,7 @@ static void TestTaskSleep()
     CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting task2");
 
     g_RelaxCpuHandler = SleepRelaxCpu;
+    g_SleepRelaxCpuContext.Clear();
     g_SleepRelaxCpuContext.platform = platform;
     g_SleepRelaxCpuContext.task1    = &task1;
     g_SleepRelaxCpuContext.task2    = &task2;
@@ -346,12 +358,12 @@ static void TestTaskSleep()
     // task2 calls Sleep to become idle
     Sleep(2);
 
-    // task2 is in the end of the scheduler's list
-    CHECK_EQUAL_TEXT(active->SP, (size_t)task1.GetStack(), "expecting task1 after sleep");
+    // task2 slept 2 ticks and became active again when became a tail of previously active task1
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting task2 after sleep");
 
     // ISR calls OnSysTick (task1 = active, task2 = idle)
     platform->ProcessTick();
-    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting task2 after next tick");
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task1.GetStack(), "expecting task1 after next tick");
 
     g_RelaxCpuHandler = NULL;
 }

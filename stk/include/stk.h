@@ -894,24 +894,25 @@ protected:
     */
     void UpdateTaskState()
     {
+        // deliver sleep event to strategy
+        // note: only currently scheduled task can be pending to sleep
+        if (_TyStrategy::SLEEP_EVENT_API && (m_task_now != NULL))
+        {
+            if (m_task_now->m_state & KernelTask::STATE_SLEEP_PENDING)
+            {
+                m_task_now->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
+
+                // notify strategy that task is sleeping
+                m_strategy.OnTaskSleep(m_task_now);
+            }
+        }
+
         for (int32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
 
             if (task->IsSleeping())
             {
-                // deliver sleep event to strategy
-                if (_TyStrategy::SLEEP_EVENT_API)
-                {
-                    if (task->m_state & KernelTask::STATE_SLEEP_PENDING)
-                    {
-                        task->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
-
-                        // notify strategy that task is sleeping
-                        m_strategy.OnTaskSleep(task);
-                    }
-                }
-
                 if (_Mode & KERNEL_DYNAMIC)
                 {
                     // task is pending removal, wait until it is switched out
