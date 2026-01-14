@@ -189,6 +189,11 @@ static struct SwitchToNextRelaxCpuContext
 {
     SwitchToNextRelaxCpuContext()
     {
+        Clear();
+    }
+
+    void Clear()
+    {
         counter  = 0;
         platform = NULL;
         task1    = NULL;
@@ -259,6 +264,7 @@ TEST(KernelService, SwitchToNext)
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = SwitchToNextRelaxCpu;
+    g_SwitchToNextRelaxCpuContext.Clear();
     g_SwitchToNextRelaxCpuContext.platform = platform;
     g_SwitchToNextRelaxCpuContext.task1    = &task1;
     g_SwitchToNextRelaxCpuContext.task2    = &task2;
@@ -280,6 +286,45 @@ TEST(KernelService, SwitchToNext)
     CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
 
     g_RelaxCpuHandler = NULL;
+}
+
+TEST(KernelService, SwitchToNextActiveTaskOnly)
+{
+    Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is scheduled first by RR
+    CHECK_EQUAL(active->SP, (size_t)task1.GetStack());
+
+    // ISR calls OnSysTick (task1 = idle, task2 = active)
+    platform->ProcessTick();
+    CHECK_EQUAL(active->SP, (size_t)task2.GetStack());
+
+    g_RelaxCpuHandler = SwitchToNextRelaxCpu;
+    g_SwitchToNextRelaxCpuContext.Clear();
+    g_SwitchToNextRelaxCpuContext.platform = platform;
+    g_SwitchToNextRelaxCpuContext.task1    = &task1;
+    g_SwitchToNextRelaxCpuContext.task2    = &task2;
+
+    // kernel does not allow to switch not currently active task
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        platform->EventTaskSwitch(platform->m_stack_idle->SP + 1); // add shift to test IsMemoryOfSP
+        CHECK_TEXT(false, "expecting assertion when switching inactive task");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
 
 static struct SleepRelaxCpuContext
