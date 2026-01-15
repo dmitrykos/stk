@@ -119,7 +119,7 @@ void RunExample()
     InitLeds();
 
     // allocate scheduling kernel for 3 threads (tasks) with Round-robin scheduling strategy
-    static Kernel<KERNEL_STATIC, 3, SwitchStrategyFP31, PlatformDefault> kernel;
+    static Kernel<KERNEL_STATIC, 3, SwitchStrategyRR, PlatformDefault> kernel;
 
     // note: using ACCESS_PRIVILEGED as Cortex-M3+ may not allow writing to GPIO from a less secure user thread
     static MyTask<ACCESS_PRIVILEGED> task1(0, "LED-red");

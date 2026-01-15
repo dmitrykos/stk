@@ -91,6 +91,16 @@ stk_kernel_t *stk_kernel_create_static_swrr(void);
  */
 stk_kernel_t *stk_kernel_create_dynamic_swrr(void);
 
+/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategyFixedPriority scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails)
+ */
+stk_kernel_t *stk_kernel_create_static_fp(void);
+
+/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategyFixedPriority scheduling strategy
+ *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
+ */
+stk_kernel_t *stk_kernel_create_dynamic_fp(void);
+
 /*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyRoundRobin scheduling strategy
  *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
  */
@@ -221,6 +231,13 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
  *  \note  Weight must be set before a task is added to the kernel
  */
 void stk_task_set_weight(stk_task_t *task, uint32_t weight);
+
+/*! \brief Set priority for a task when using scheduler (non-HRT mode) with SwitchStrategyFixedPriority scheduling strategy
+ *  \param task     Task created with stk_task_create_*
+ *  \param priority Priority value of the task (0 is lowest, 31 is highest)
+ *  \note  Priority must be set before a task is added to the kernel
+ */
+void stk_task_set_priority(stk_task_t *task, uint8_t priority);
 
 /*! \brief Set task id
  *  \param task Task created with stk_task_create_*
