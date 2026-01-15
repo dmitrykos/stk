@@ -153,5 +153,89 @@ TEST(SwitchStrategyFixedPriority, Algorithm)
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Next task should wrap to task3");
 }
 
+static struct PrioritySleepRelaxCpuContext
+{
+    PrioritySleepRelaxCpuContext()
+    {
+        Clear();
+    }
+
+    void Clear()
+    {
+        counter  = 0;
+        platform = NULL;
+        task1    = NULL;
+        task2    = NULL;
+    }
+
+    uint32_t          counter;
+    PlatformTestMock *platform;
+    ITask            *task1, *task2;
+
+    void Process()
+    {
+        Stack *&active = platform->m_stack_active;
+
+        platform->ProcessTick();
+
+        // ISR calls OnSysTick (task1 = active, task2 = idle (sleeping))
+        if (counter == 0)
+        {
+            CHECK_EQUAL_TEXT(active->SP, (size_t)task1->GetStack(), "sleep: expecting low-priority task1");
+        }
+        else
+        // ISR calls OnSysTick (task1 = idle (lower priority), task2 = active (higher priority))
+        if (counter == 1)
+        {
+            CHECK_EQUAL_TEXT(active->SP, (size_t)task2->GetStack(), "sleep: expecting high-priority task2");
+        }
+
+        ++counter;
+    }
+}
+g_PrioritySleepRelaxCpuContext;
+
+static void PrioritySleepRelaxCpu()
+{
+    g_PrioritySleepRelaxCpuContext.Process();
+}
+
+TEST(SwitchStrategyFixedPriority, Priority)
+{
+    Kernel<KERNEL_STATIC, 2, SwitchStrategyFixedPriority<5>, PlatformTestMock> kernel;
+    TaskMockW<1, ACCESS_USER> task1; // low priority
+    TaskMockW<2, ACCESS_USER> task2; // high priority
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting high-priority task2 on start");
+
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting task2");
+
+    g_RelaxCpuHandler = PrioritySleepRelaxCpu;
+    g_PrioritySleepRelaxCpuContext.Clear();
+    g_PrioritySleepRelaxCpuContext.platform = platform;
+    g_PrioritySleepRelaxCpuContext.task1    = &task1;
+    g_PrioritySleepRelaxCpuContext.task2    = &task2;
+
+    // task2 calls Sleep to become idle
+    Sleep(2);
+
+    // task2 is active again
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting high-priority task2 again after it slept");
+
+    // ISR calls OnSysTick, higher priority task2 is scheduled
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT(active->SP, (size_t)task2.GetStack(), "expecting high-priority task2 again");
+
+    g_RelaxCpuHandler = NULL;
+}
+
 } // namespace stk
 } // namespace test
