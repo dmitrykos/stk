@@ -600,7 +600,7 @@ TEST(Kernel, OnTaskExitSWRR)
 
 TEST(Kernel, OnTaskExitFP31)
 {
-    TestTaskExit<SwitchStrategyFP31>();
+    TestTaskExit<SwitchStrategyFP32>();
 }
 
 TEST(Kernel, OnTaskExitUnknownOrNull)

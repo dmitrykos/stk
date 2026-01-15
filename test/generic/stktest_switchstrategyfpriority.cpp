@@ -24,7 +24,7 @@ TEST_GROUP(SwitchStrategyFixedPriority)
 
 TEST(SwitchStrategyFixedPriority, GetFirstEmpty)
 {
-    SwitchStrategyFP31 rr;
+    SwitchStrategyFP32 rr;
 
     try
     {
@@ -41,7 +41,7 @@ TEST(SwitchStrategyFixedPriority, GetFirstEmpty)
 
 TEST(SwitchStrategyFixedPriority, GetNextEmpty)
 {
-    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyFP31, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyFP32, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
@@ -57,7 +57,7 @@ TEST(SwitchStrategyFixedPriority, GetNextEmpty)
 
 TEST(SwitchStrategyFixedPriority, EndlessNext)
 {
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP31, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP32, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
@@ -96,7 +96,7 @@ TEST(SwitchStrategyFixedPriority, EndlessNext)
 TEST(SwitchStrategyFixedPriority, Algorithm)
 {
     // Create kernel with 3 tasks
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP31, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP32, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
 
     kernel.Initialize();

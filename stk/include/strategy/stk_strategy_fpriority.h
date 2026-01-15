@@ -17,8 +17,11 @@ namespace stk {
 /*! \class SwitchStrategyFixedPriority
     \brief Fixed-priority preemptive scheduling with round-robin within same priority.
 
-    Higher priority tasks always preempt lower ones.
-    Tasks of equal priority are scheduled in round-robin fashion.
+    * Higher priority tasks always preempt lower ones.
+    * Tasks of equal priority are scheduled in round-robin fashion.
+    * Higher numeric value means higher priority.
+    * 0 is the lowest priority.
+    * MAX_PRIORITIES - 1 is the highest priority.
 */
 template <uint8_t MAX_PRIORITIES>
 class SwitchStrategyFixedPriority : public ITaskSwitchStrategy
@@ -30,9 +33,19 @@ public:
         SLEEP_EVENT_API = 1  // uses OnTaskSleep/OnTaskWake
     };
 
+    /*! \enum  EPriority
+        \brief Task priority.
+    */
+    enum EPriority
+    {
+        PRIORITY_HIGHEST = MAX_PRIORITIES - 1,
+        PRIORITY_NORMAL  = MAX_PRIORITIES / 2,
+        PRIORITY_LOWEST  = 0
+    };
+
     SwitchStrategyFixedPriority() : m_tasks(), m_sleep(), m_ready_bitmap(0), m_prev()
     {
-        STK_STATIC_ASSERT(MAX_PRIORITIES <= 31 && "MAX_PRIORITIES exceeds 32-bit bitmap width");
+        STK_STATIC_ASSERT(MAX_PRIORITIES <= 32 && "MAX_PRIORITIES exceeds 32-bit bitmap width");
     }
 
     void AddTask(IKernelTask *task)
@@ -175,10 +188,10 @@ private:
     IKernelTask              *m_prev[MAX_PRIORITIES];  //!< round-robin cursor per priority
 };
 
-/*! \typedef SwitchStrategyFP31
-    \brief   Shortcut for SwitchStrategyFixedPriority<31>.
+/*! \typedef SwitchStrategyFP32
+    \brief   Shortcut for SwitchStrategyFixedPriority<32>.
 */
-typedef SwitchStrategyFixedPriority<31> SwitchStrategyFP31;
+typedef SwitchStrategyFixedPriority<32> SwitchStrategyFP32;
 
 } // namespace stk
 
