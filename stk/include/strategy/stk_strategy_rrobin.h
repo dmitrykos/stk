@@ -51,27 +51,22 @@ public:
         STK_ASSERT(GetSize() != 0);
         STK_ASSERT((task->GetHead() == &m_tasks) || (task->GetHead() == &m_sleep));
 
-        // unlink from tasks and update next
         if (task->GetHead() == &m_tasks)
         {
             IKernelTask *next = (*task->GetNext());
 
             m_tasks.Unlink(task);
 
+            // update pointer
             if (next != task)
                 m_prev = (*next->GetPrev());
             else
                 m_prev = nullptr;
         }
         else
-        // unlink from sleeping list if was sleeping
-        if (task->GetHead() == &m_sleep)
         {
             m_sleep.Unlink(task);
         }
-
-        if (GetSize() == 0)
-            m_prev = nullptr;
     }
 
     IKernelTask *GetNext(IKernelTask *current)

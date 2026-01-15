@@ -423,6 +423,11 @@ TEST(KernelService, SleepSWRR)
     TestTaskSleep<SwitchStrategySWRR>();
 }
 
+TEST(KernelService, SleepFP31)
+{
+    TestTaskSleep<SwitchStrategyFP31>();
+}
+
 static struct SleepAllAndWakeRelaxCpuContext
 {
     SleepAllAndWakeRelaxCpuContext()

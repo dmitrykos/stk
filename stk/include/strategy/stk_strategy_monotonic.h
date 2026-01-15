@@ -44,6 +44,9 @@ public:
 
     void AddTask(IKernelTask *task)
     {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(task->GetHead() == nullptr);
+
         if (m_tasks.IsEmpty())
         {
             m_tasks.LinkFront(task);
@@ -92,6 +95,10 @@ public:
 
     void RemoveTask(IKernelTask *task)
     {
+        STK_ASSERT(task != nullptr);
+        STK_ASSERT(GetSize() != 0);
+        STK_ASSERT(task->GetHead() == &m_tasks);
+
         m_tasks.Unlink(task);
     }
 
@@ -100,7 +107,7 @@ public:
         STK_ASSERT(!m_tasks.IsEmpty());
 
         IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
-        IKernelTask *next = NULL;
+        IKernelTask *next = nullptr;
 
         // highest priority = first in sorted list (shortest period (RM) or deadline (DM)), thus
         // we always iterate from the start of the list and skip higher priority tasks when they
@@ -116,6 +123,7 @@ public:
         }
         while ((itr = (*itr->GetNext())) != start);
 
+        // if nullptr returned (all tasks are sleeping) then idle
         return next;
     }
 

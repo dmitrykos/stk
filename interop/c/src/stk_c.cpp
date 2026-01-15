@@ -21,6 +21,8 @@ typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDe
 typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicRR;
 typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelStaticSWRR;
 typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelDynamicSWRR;
+typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP31, PlatformDefault> KernelStaticFP;
+typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP31, PlatformDefault> KernelDynamicFP;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticHrtRR;
 typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicHrtRR;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelStaticHrtRM;
@@ -105,6 +107,8 @@ public:
         DynamicRR,
         StaticSWRR,
         DynamicSWRR,
+        StaticFP,
+        DynamicFP,
         StaticHrtRR,
         DynamicHrtRR,
         StaticHrtRM,
@@ -145,6 +149,12 @@ public:
             break;
         case Type::DynamicSWRR:
             ptr = new (&dynamic_swrr) KernelDynamicSWRR();
+            break;
+        case Type::StaticFP:
+            ptr = new (&static_fp) KernelStaticFP();
+            break;
+        case Type::DynamicFP:
+            ptr = new (&dynamic_fp) KernelDynamicFP();
             break;
         case Type::StaticHrtRR:
             ptr = new (&static_hrt_rr) KernelStaticHrtRR();
@@ -194,6 +204,12 @@ public:
         case Type::DynamicSWRR:
             dynamic_swrr.~KernelDynamicSWRR();
             break;
+        case Type::StaticFP:
+            static_fp.~KernelStaticFP();
+            break;
+        case Type::DynamicFP:
+            dynamic_fp.~KernelDynamicFP();
+            break;
         case Type::StaticHrtRR:
             static_hrt_rr.~KernelStaticHrtRR();
             break;
@@ -234,6 +250,8 @@ private:
         KernelDynamicRR dynamic_rr;
         KernelStaticSWRR static_swrr;
         KernelDynamicSWRR dynamic_swrr;
+        KernelStaticFP static_fp;
+        KernelDynamicFP dynamic_fp;
         KernelStaticHrtRR static_hrt_rr;
         KernelDynamicHrtRR dynamic_hrt_rr;
         KernelStaticHrtRM static_hrt_rm;
@@ -256,7 +274,7 @@ static IKernel *AllocateKernel(KernelWrapper::Type type)
 {
     for (uint32_t i = 0; i < STK_CPU_COUNT; ++i)
     {
-        if (KernelWrapper::Type::None == s_Kernel[i].active)
+        if (s_Kernel[i].active == KernelWrapper::Type::None)
             return s_Kernel[i].Create(type);
     }
 
@@ -268,7 +286,7 @@ static void DestroyKernel(const IKernel *kernel)
 {
     for (uint32_t i = 0; i < STK_CPU_COUNT; ++i)
     {
-        if ((KernelWrapper::Type::None != s_Kernel[i].active) &&
+        if ((s_Kernel[i].active != KernelWrapper::Type::None) &&
             (kernel == s_Kernel[i].ptr))
         {
             s_Kernel[i].Destroy();
@@ -341,6 +359,16 @@ stk_kernel_t *stk_kernel_create_static_swrr()
 stk_kernel_t *stk_kernel_create_dynamic_swrr()
 {
     return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicSWRR));
+}
+
+stk_kernel_t *stk_kernel_create_static_fp()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticFP));
+}
+
+stk_kernel_t *stk_kernel_create_dynamic_fp()
+{
+    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicFP));
 }
 
 stk_kernel_t *stk_kernel_create_hrt_static()
@@ -478,8 +506,14 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
 void stk_task_set_weight(stk_task_t *task, uint32_t weight)
 {
     STK_ASSERT(task);
-    STK_ASSERT(weight > 0);
+    STK_ASSERT(weight != 0);
     reinterpret_cast<TaskWrapper *>(task)->SetWeight(weight);
+}
+
+void stk_task_set_priority(stk_task_t *task, uint8_t priority)
+{
+    STK_ASSERT(priority <= 31);
+    stk_task_set_weight(task, priority);
 }
 
 void stk_task_set_id(stk_task_t *task, uint32_t tid)
