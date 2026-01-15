@@ -13,18 +13,18 @@ namespace stk {
 namespace test {
 
 // ============================================================================ //
-// ============================ SwitchStrategyRR ====================== //
+// ========================== SwitchStrategyFixedPriority ===================== //
 // ============================================================================ //
 
-TEST_GROUP(SwitchStrategyRoundRobin)
+TEST_GROUP(SwitchStrategyFixedPriority)
 {
     void setup() {}
     void teardown() {}
 };
 
-TEST(SwitchStrategyRoundRobin, GetFirstEmpty)
+TEST(SwitchStrategyFixedPriority, GetFirstEmpty)
 {
-    SwitchStrategyRR rr;
+    SwitchStrategyFP31 rr;
 
     try
     {
@@ -39,9 +39,9 @@ TEST(SwitchStrategyRoundRobin, GetFirstEmpty)
     }
 }
 
-TEST(SwitchStrategyRoundRobin, GetNextEmpty)
+TEST(SwitchStrategyFixedPriority, GetNextEmpty)
 {
-    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyFP31, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
@@ -55,9 +55,9 @@ TEST(SwitchStrategyRoundRobin, GetNextEmpty)
     CHECK_EQUAL(0, strategy->GetNext(NULL));
 }
 
-TEST(SwitchStrategyRoundRobin, EndlessNext)
+TEST(SwitchStrategyFixedPriority, EndlessNext)
 {
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRoundRobin, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP31, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
 
@@ -93,10 +93,10 @@ TEST(SwitchStrategyRoundRobin, EndlessNext)
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "expecting next task1 again (endless looping)");
 }
 
-TEST(SwitchStrategyRoundRobin, Algorithm)
+TEST(SwitchStrategyFixedPriority, Algorithm)
 {
     // Create kernel with 3 tasks
-    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyFP31, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2, task3;
 
     kernel.Initialize();

@@ -176,6 +176,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyedf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/test/generic/stktest_switchstrategyfpriority.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategyfpriority.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/test/generic/stktest_switchstrategymonotonic.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/generic/stktest_switchstrategymonotonic.cpp</locationURI>
@@ -624,6 +629,11 @@
 			<name>deps/stk/include/strategy/stk_strategy_edf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/strategy/stk_strategy_edf.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/strategy/stk_strategy_fpriority.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/stk/include/strategy/stk_strategy_fpriority.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/strategy/stk_strategy_monotonic.h</name>

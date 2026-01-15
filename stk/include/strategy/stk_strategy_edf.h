@@ -42,20 +42,16 @@ public:
         STK_ASSERT(GetSize() != 0);
         STK_ASSERT((task->GetHead() == &m_tasks) || (task->GetHead() == &m_sleep));
 
-        // update next
         if (task->GetHead() == &m_tasks)
             m_tasks.Unlink(task);
         else
-        // unlink from sleeping list if was sleeping
-        if (task->GetHead() == &m_sleep)
             m_sleep.Unlink(task);
     }
 
     IKernelTask *GetNext(IKernelTask */*current*/)
     {
-        // all tasks are sleeping
         if (m_tasks.IsEmpty())
-            return NULL;
+            return nullptr; // idle
 
         IKernelTask *itr = (*m_tasks.GetFirst()), * const start = itr;
         IKernelTask *earliest = itr;

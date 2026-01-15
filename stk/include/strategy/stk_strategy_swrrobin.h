@@ -87,7 +87,7 @@ public:
     IKernelTask *GetNext(IKernelTask */*current*/)
     {
         if (m_tasks.IsEmpty())
-            return NULL;
+            return nullptr; // idle
 
         IKernelTask *selected = nullptr;
         int32_t max_weight = INT32_MIN;
@@ -135,9 +135,9 @@ public:
         STK_ASSERT(task->GetHead() == &m_tasks);
 
         m_tasks.Unlink(task);
+        m_total_weight -= task->GetWeight();
 
         m_sleep.LinkBack(task);
-        m_total_weight -= task->GetWeight();
     }
 
     void OnTaskWake(IKernelTask *task)
