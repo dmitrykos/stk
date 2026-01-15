@@ -21,8 +21,8 @@ typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDe
 typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicRR;
 typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelStaticSWRR;
 typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelDynamicSWRR;
-typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP31, PlatformDefault> KernelStaticFP;
-typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP31, PlatformDefault> KernelDynamicFP;
+typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault> KernelStaticFP;
+typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault> KernelDynamicFP;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticHrtRR;
 typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicHrtRR;
 typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelStaticHrtRM;
