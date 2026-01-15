@@ -598,6 +598,11 @@ TEST(Kernel, OnTaskExitSWRR)
     TestTaskExit<SwitchStrategySWRR>();
 }
 
+TEST(Kernel, OnTaskExitFP31)
+{
+    TestTaskExit<SwitchStrategyFP31>();
+}
+
 TEST(Kernel, OnTaskExitUnknownOrNull)
 {
     Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
