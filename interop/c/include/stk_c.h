@@ -15,14 +15,14 @@
 #include <stdbool.h>
 #include <assert.h>
 
-/*! \file  stk_c.h
-    \brief C interface for C++ STK
+/*! \file   stk_c.h
+    \brief  C language binding/interface for SuperTinyKernel (STK).
 
-    This file provides functions for using STK in a C project.
+    This header provides a pure C API to create, configure and run STK kernel
+    from C code.
 
-    \defgroup c_interface C interface for C++ STK
-    \brief    Functions for using STK in C projects.
-
+    \defgroup c_api STK C API
+    \brief    Pure C interface for C++ API of SuperTinyKernel (STK).
     @{
 */
 
@@ -30,327 +30,355 @@
 extern "C" {
 #endif
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Configuration macros (can be overridden before including this file)
+// ─────────────────────────────────────────────────────────────────────────────
+
 /*! \def   STK_KERNEL_MAX_TASKS
-    \brief Define your own STK_KERNEL_MAX_TASKS if more than 8 tasks needed per kernel instance (default: 4 tasks)
+    \brief Maximum number of tasks per kernel instance (default: 4).
+    \note  Increase this value if you need more tasks.
+           Has direct impact on RAM and FLASH usage.
 */
 #ifndef STK_KERNEL_MAX_TASKS
     #define STK_KERNEL_MAX_TASKS 4
 #endif
 
 /*! \def   STK_CPU_COUNT
-    \brief Define your own STK_CPU_COUNT if you need one kernel instance per CPU core (default: 1 CPU core)
+    \brief Number of kernel instances / CPU cores supported (default: 1)
+    \note  Each core usually gets its own independent kernel instance.
 */
 #ifndef STK_CPU_COUNT
     #define STK_CPU_COUNT 1
 #endif
 
-/*! \def   STK_C_ASSERT
-    \brief Wrapper for assert()
-    \note  Do not use assert() directly, use this definition instead
+/*! \def STK_C_ASSERT
+    \brief Assertion macro used inside STK C bindings
 */
 #define STK_C_ASSERT(e) assert(e)
 
-/*! \brief Opaque handle to a kernel instance */
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/*! \brief Opaque handle to a kernel instance.
+*/
 typedef struct stk_kernel_t stk_kernel_t;
 
-/*! \brief Opaque handle to a task instance */
-typedef struct stk_task_t stk_task_t;
+/*! \brief Opaque handle to a task instance.
+*/
+typedef struct stk_task_t   stk_task_t;
 
-/*! \brief Default tick periodicity (1 ms = 1000 µs) */
-#define STK_PERIODICITY_DEFAULT (1000U) /*!< microseconds */
+/*! \brief Default tick period (1 ms).
+*/
+#define STK_PERIODICITY_DEFAULT  (1000U) /*!< in microseconds */
 
-/*! \brief Task/thread entry function prototype
- *
- *  The function is called once when the task starts.
- *  In Static mode it must never return.
- *  In Dynamic mode it may return to terminate the task.
- */
+/*! \brief     Task entry point function type
+    \param[in] arg: User-supplied argument (may be NULL)
+    \note      If \a KERNEL_STATIC, the function must never return.
+               If \a KERNEL_DYNAMIC, it may return and then task will be considered as finished.
+*/
 typedef void (*stk_task_entry_t)(void *arg);
 
-/*==========================================================================
-  Kernel creation
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Kernel factory functions
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategyRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails)
- */
+/*! \brief Create static kernel – Round Robin.
+    \note  Kernel uses \a KERNEL_STATIC mode.
+*/
 stk_kernel_t *stk_kernel_create_static(void);
 
-/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategyRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic kernel – Round Robin.
+    \note  Kernel uses \a KERNEL_DYNAMIC mode.
+*/
 stk_kernel_t *stk_kernel_create_dynamic(void);
 
-/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails)
- */
+/*! \brief Create static kernel – Smooth Weighted Round Robin.
+    \note  Kernel uses \a KERNEL_STATIC mode.
+*/
 stk_kernel_t *stk_kernel_create_static_swrr(void);
 
-/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic kernel – Smooth Weighted Round Robin.
+    \note  Kernel uses \a KERNEL_DYNAMIC mode.
+*/
 stk_kernel_t *stk_kernel_create_dynamic_swrr(void);
 
-/*! \brief  Create a Static (compile-time fixed) non-HRT kernel with SwitchStrategyFixedPriority scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails)
- */
+/*! \brief Create static kernel – Fixed Priority.
+    \note  Kernel uses \a KERNEL_STATIC mode.
+*/
 stk_kernel_t *stk_kernel_create_static_fp(void);
 
-/*! \brief  Create a Dynamic (tasks can be added/removed at runtime) non-HRT kernel with SwitchStrategyFixedPriority scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic kernel – Fixed Priority.
+    \note  Kernel uses \a KERNEL_DYNAMIC mode.
+*/
 stk_kernel_t *stk_kernel_create_dynamic_fp(void);
 
-/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+// ───── Hard Real-Time (HRT) variants ────────────────────────────────────────
+
+/*! \brief Create static HRT kernel – Round Robin.
+    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode.
+*/
 stk_kernel_t *stk_kernel_create_hrt_static(void);
 
-/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyRoundRobin scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic HRT kernel – Round Robin.
+    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode.
+*/
 stk_kernel_t *stk_kernel_create_hrt_dynamic(void);
 
-/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyRM scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create static HRT kernel – Rate Monotonic.
+    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (RM).
+*/
 stk_kernel_t *stk_kernel_create_hrt_static_rm(void);
 
-/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyRM scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic HRT kernel – Rate Monotonic.
+    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (RM).
+*/
 stk_kernel_t *stk_kernel_create_hrt_dynamic_rm(void);
 
-/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyDM scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create static HRT kernel – Deadline Monotonic.
+    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (DM).
+*/
 stk_kernel_t *stk_kernel_create_hrt_static_dm(void);
 
-/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyDM scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic HRT kernel – Deadline Monotonic.
+    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (DM).
+*/
 stk_kernel_t *stk_kernel_create_hrt_dynamic_dm(void);
 
-/*! \brief  Create a Static Hard Real-Time (HRT) kernel with SwitchStrategyEDF scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create static HRT kernel – Earliest Deadline First.
+    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (EDF).
+*/
 stk_kernel_t *stk_kernel_create_hrt_static_edf(void);
 
-/*! \brief  Create a Dynamic Hard Real-Time (HRT) kernel with SwitchStrategyEDF scheduling strategy
- *  \return Pointer to kernel instance (statically allocated, never fails if number of instances does not exceed STK_CPU_COUNT)
- */
+/*! \brief Create dynamic HRT kernel – Earliest Deadline First.
+    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (EDF).
+*/
 stk_kernel_t *stk_kernel_create_hrt_dynamic_edf(void);
 
-/*==========================================================================
-  Kernel control
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Kernel control
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief Initialize the kernel with the desired tick period
- *  \param k              Kernel handle
- *  \param tick_period_us Tick period in microseconds (e.g. 1000 = 1 ms)
- *  \note  Must be called once before adding tasks or starting the scheduler
- */
+/*! \brief                     Initialize kernel with given tick period.
+    \param[in] k:              Kernel handle.
+    \param[in] tick_period_us: System tick period in microseconds (usually 100–10000).
+    \note                      Must be called exactly once before adding tasks or starting scheduler.
+*/
 void stk_kernel_init(stk_kernel_t *k, uint32_t tick_period_us);
 
-/*! \brief Add a task to the scheduler (non-HRT mode)
- *  \param k     Kernel handle
- *  \param task  Task created with stk_task_create_*
- *  \note  In static kernels this must be called before stk_kernel_start()
- */
+/*! \brief     Add task to non-HRT kernel (static or dynamic).
+    \param[in] k:    Kernel handle.
+    \param[in] task: Task handle created with one of stk_task_create_* functions.
+    \note      For static kernels this must be done before stk_kernel_start().
+*/
 void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *task);
 
-/*! \brief Add a task with Hard Real-Time parameters (HRT kernels only)
- *  \param k                 Kernel handle
- *  \param task              Task created with stk_task_create_*
- *  \param periodicity_ticks Task period in ticks
- *  \param deadline_ticks    Maximum allowed execution time per period (ticks)
- *  \param start_delay_ticks Initial delay before first activation (ticks, ≥0)
- */
+/*! \brief     Add task with HRT timing parameters (HRT kernels only).
+    \param[in] k:                 Kernel handle.
+    \param[in] task:              Task handle.
+    \param[in] periodicity_ticks: Period in ticks.
+    \param[in] deadline_ticks:    Relative deadline in ticks.
+    \param[in] start_delay_ticks: Initial offset / phase in ticks (>= 0).
+    \note      Must be called after stk_kernel_init() and before stk_kernel_start().
+*/
 void stk_kernel_add_task_hrt(stk_kernel_t *k,
                              stk_task_t *task,
                              int32_t periodicity_ticks,
                              int32_t deadline_ticks,
                              int32_t start_delay_ticks);
 
-/*! \brief Remove a task from scheduling (Dynamic kernels only)
- *  \param k     Kernel handle
- *  \param task  Task to remove
- *  \note  The task must have exited (returned from its entry function)
- */
+/*! \brief     Remove finished task from dynamic kernel.
+    \param[in] k:    Kernel handle.
+    \param[in] task: Task that has already returned from its entry function.
+    \note      Only valid in dynamic kernels. Task must have exited (returned from entry function).
+*/
 void stk_kernel_remove_task(stk_kernel_t *k, stk_task_t *task);
 
-/*! \brief Start the scheduler
- *  \param k Kernel handle
- *  \note  Never returns (transfers control to the tasks)
- */
+/*! \brief     Start the scheduler - never returns.
+    \param[in] k: Kernel handle.
+    \note      Transfers control to the scheduler and a first ready task. May return if all tasks are
+               finished and kernel is dynamic.
+*/
 void stk_kernel_start(stk_kernel_t *k);
 
-/*! \brief  Check if the scheduler is running
- *  \param  k Kernel handle
- *  \return true if scheduler has been started, false otherwise
- */
+/*! \brief     Check whether scheduler is currently running.
+    \param[in] k: Kernel handle.
+    \return    True if stk_kernel_start() has been called, False otherwise.
+*/
 bool stk_kernel_is_running(const stk_kernel_t *k);
 
-/*! \brief  Check if a task set is schedulable
- *  \param  k Kernel handle
- *  \return true if a task set is schedulable, false otherwise
- */
+/*! \brief     Test whether currently configured task set is schedulable.
+    \param[in] k: Kernel handle.
+    \return    True if task set passes schedulability test, False otherwise.
+    \note      Only meaningful for HRT RM/DM kernels.
+*/
 bool stk_kernel_is_schedulable(const stk_kernel_t *k);
 
-/*==========================================================================
-  Task creation
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Task creation
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Create a privileged (kernel-mode) task
- *  \param  entry       Task entry function
- *  \param  arg         Argument passed to the entry function
- *  \param  stack       Pointer the array of size_t elements, i.e. 32/64-bit words depending on platform)
- *  \param  stack_size  Number of elements in the stack array
- *  \return Task handle (statically allocated in static kernels, heap-allocated in dynamic)
- */
+/*! \brief     Create privileged-mode (kernel-mode) task.
+    \param[in] entry:      Task entry function.
+    \param[in] arg:        Argument passed to entry function.
+    \param[in] stack:      Pointer to stack buffer (array of size_t).
+    \param[in] stack_size: Number of elements (words) in the stack buffer.
+    \return    Task handle (static storage in static kernels, heap in dynamic).
+*/
 stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
                                        void *arg,
                                        size_t *stack,
                                        uint32_t stack_size);
 
-/*! \brief  Create a user-mode task
- *  \param  entry       Task entry function
- *  \param  arg         Argument passed to the entry function
- *  \param  stack       Pointer the array of size_t elements, i.e. 32/64-bit words depending on platform)
- *  \param  stack_size  Number of elements in the stack array
- *  \return Task handle
- */
+/*! \brief     Create user-mode task.
+    \param[in] entry:      Task entry function.
+    \param[in] arg:        Argument passed to entry function.
+    \param[in] stack:      Pointer to stack buffer (array of size_t).
+    \param[in] stack_size: Number of elements (words) in the stack buffer.
+    \return    Task handle.
+*/
 stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  void *arg,
                                  size_t *stack,
                                  uint32_t stack_size);
 
-/*! \brief Set weight for a task when using scheduler (non-HRT mode) with SwitchStrategySmoothWeightedRoundRobin scheduling strategy
- *  \param task   Task created with stk_task_create_*
- *  \param weight Weight of the task (must be non-zero, positive 24-bit number)
- *  \note  Weight must be set before a task is added to the kernel
- */
+/*! \brief     Set task weight (used only by Smooth Weighted Round Robin).
+    \param[in] task:   Task handle.
+    \param[in] weight: Positive weight value (recommended 1–16777215).
+    \note      Must be called before adding task to kernel.
+    \see       SwitchStrategySmoothWeightedRoundRobin.
+*/
 void stk_task_set_weight(stk_task_t *task, uint32_t weight);
 
-/*! \brief Set priority for a task when using scheduler (non-HRT mode) with SwitchStrategyFixedPriority scheduling strategy
- *  \param task     Task created with stk_task_create_*
- *  \param priority Priority value of the task (0 is lowest, 31 is highest)
- *  \note  Priority must be set before a task is added to the kernel
- */
+/*! \brief     Set task priority (used only by Fixed Priority scheduler).
+    \param[in] task:     Task handle.
+    \param[in] priority: Priority level [0 = lowest … 31 = highest].
+    \note      Must be called before adding task to kernel.
+*/
 void stk_task_set_priority(stk_task_t *task, uint8_t priority);
 
-/*! \brief Set task id
- *  \param task Task created with stk_task_create_*
- *  \param tid  Task id
- *  \note  For debugging purposes, can be omitted and return 0 if not used
- */
+/*! \brief     Assign application-defined task ID (for tracing/debugging).
+    \param[in] task: Task handle.
+    \param[in] tid:  Arbitrary 32-bit task identifier.
+*/
 void stk_task_set_id(stk_task_t *task, uint32_t tid);
 
-/*! \brief Set task name
- *  \param task Task created with stk_task_create_*
- *  \param tid  Task name
- *  \note  For debugging purposes, can be omitted and return NULL if not used
- */
+/*! \brief     Assign human-readable task name (for tracing/debugging).
+    \param[in] task:  Task handle.
+    \param[in] tname: Null-terminated string (may be NULL).
+*/
 void stk_task_set_name(stk_task_t *task, const char *tname);
 
-/*==========================================================================
-  Runtime services (available inside tasks)
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Services available from inside tasks
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Get thread Id.
-*   \return Thread Id.
+/*! \brief  Returns current task/thread ID (the value set by stk_task_set_id).
+    \return Task identifier (0 if not set).
 */
 size_t stk_tid(void);
 
-/*! \brief  Get number of ticks elapsed since since kernel start
- *  \return Ticks
- */
+/*! \brief  Returns number of ticks elapsed since kernel start.
+    \return Tick count (monotonically increasing).
+*/
 int64_t stk_ticks(void);
 
-/*! \brief  Get number of microseconds in one tick.
- *  \note   Tick is a periodicity of the system timer expressed in microseconds.
- *  \return Microseconds in one tick.
+/*! \brief  Returns how many microseconds correspond to one kernel tick.
+    \return Tick resolution in microseconds.
 */
 int32_t stk_tick_resolution(void);
 
-/*! \brief  Get current time in milliseconds since kernel start
- *  \return Time in milliseconds
- */
+/*! \brief  Returns current time in milliseconds since kernel start.
+    \return Time in milliseconds.
+*/
 int64_t stk_time_now_ms(void);
 
-/*! \brief Busy-wait delay
- *  \param ms Number of milliseconds to wait
- *  \note  Other tasks continue to run during the delay
- */
+/*! \brief     Busy-wait delay (other tasks continue to run).
+    \param[in] ms: Milliseconds to delay.
+*/
 void stk_delay_ms(uint32_t ms);
 
-/*! \brief Put current task to sleep (non-HRT mode only)
- *  \param ms Number of milliseconds to sleep
- *  \note  The CPU may enter low-power mode if all tasks are sleeping
- */
+/*! \brief     Put current task to sleep (non-HRT kernels only).
+    \param[in] ms: Milliseconds to sleep.
+    \note      CPU may enter low-power mode if all tasks are sleeping.
+*/
 void stk_sleep_ms(uint32_t ms);
 
-/*! \brief Yield the CPU to the next ready task
- *  \note  Useful for cooperative scheduling
- */
+/*! \brief Voluntarily give up CPU to another ready task (cooperative yield).
+*/
 void stk_yield(void);
 
-/*==========================================================================
-  Cleanup (dynamic kernels only)
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic cleanup
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief Destroy a dynamically created kernel (Dynamic mode only)
- *  \param k Kernel handle (must not be running, i.e. all tasks are exited)
- */
+/*! \brief     Destroy dynamic kernel instance (only when not running).
+    \param[in] k: Kernel handle.
+    \note      Kernel must not be running (all tasks must have exited or been removed).
+               Only valid for kernels created with dynamic factory functions.
+*/
 void stk_kernel_destroy(stk_kernel_t *k);
 
-/*! \brief Destroy a task object created with stk_task_create_* (Dynamic mode only)
- *  \param task Task handle
- */
+/*! \brief     Destroy dynamically created task object.
+    \param[in] task: Task handle.
+    \note      Only valid for tasks created with dynamic creation functions.
+               Task must no longer be scheduled (must have exited or been removed).
+*/
 void stk_task_destroy(stk_task_t *task);
 
-/*==========================================================================
-  Thread-Local Storage (TLS) API
- ==========================================================================*/
+// ─────────────────────────────────────────────────────────────────────────────
+// Thread-Local Storage (very simple / one pointer per task)
+// ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Get raw TLS pointer (platform-specific slot)
- *  \return void * - pointer stored in a thread-local storage
- */
+/*! \brief  Get thread-local pointer (platform-specific slot).
+    \return Pointer previously stored with stk_tls_set() (NULL if never set).
+*/
 void *stk_tls_get(void);
 
-/*! \brief Set raw TLS pointer
- *  \param ptr - value to store in TLS
- */
+/*! \brief     Set thread-local pointer.
+    \param[in] ptr: Pointer value to store for the current task/thread.
+*/
 void stk_tls_set(void *ptr);
 
-/*! \brief Helper macro to get typed TLS pointer (recommended)
- *
- * Example:
- *   typedef struct { int id; } my_tls_t;
- *   my_tls_t *tls = STK_TLS_GET(my_tls_t);
- */
+/*! \brief Typed helper for getting TLS value.
+    \note  Expands to ((type *)stk_tls_get())
+*/
 #define STK_TLS_GET(type) ((type *)stk_tls_get())
 
-/*! \brief Helper macro to set typed TLS pointer
- *
- * Example:
- *   static my_tls_t tls_data = { .id = 123 };
- *   STK_TLS_SET(&tls_data);
- */
+/*! \brief Typed helper for setting TLS value.
+    \note  Expands to stk_tls_set((void *)(ptr))
+*/
 #define STK_TLS_SET(ptr) stk_tls_set((void *)(ptr))
 
-/*==========================================================================
-  Critical Section API
- ==========================================================================*/
+/*! \example
+    \code
+    typedef struct {
+        int task_counter;
+        void *user_context;
+    } my_task_local_t;
 
-/*! \brief Enter critical section (disable context switching on a caller's CPU core)
- *  \note  Can be nested.
- */
+    // In task code:
+    static my_task_local_t my_data = { .task_counter = 0 };
+    STK_TLS_SET(&my_data);
+
+    // Later in the same task:
+    my_task_local_t *tls = STK_TLS_GET(my_task_local_t);
+    tls->task_counter++;
+    \endcode
+*/
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Critical section (interrupt / preemption protection)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/*! \brief Enter critical section — disable context switches on current core.
+    \note  Supports nesting (number of enter calls must match number of exit calls).
+*/
 void stk_enter_critical_section(void);
 
-/*! \brief Exit critical section (re-enable context switching on a caller's CPU core)
- *  \note  Must match stk_enter_critical_section()
- */
+/*! \brief Leave critical section — re-enable context switches.
+    \note  Must be called once for each previous stk_enter_critical_section().
+*/
 void stk_exit_critical_section(void);
 
 #ifdef __cplusplus
