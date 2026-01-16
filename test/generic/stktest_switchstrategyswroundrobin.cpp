@@ -52,7 +52,7 @@ TEST(SwitchStrategySWRoundRobin, GetNextEmpty)
     CHECK_EQUAL(0, strategy->GetSize());
 
     // expect to return NULL which puts core into a sleep mode, current is ignored by this strategy
-    CHECK_EQUAL(0, strategy->GetNext(NULL));
+    CHECK_EQUAL(0, strategy->GetNext());
 }
 
 TEST(SwitchStrategySWRoundRobin, EndlessNext)
@@ -72,7 +72,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     // The scheduler must ALWAYS return task1
     for (int32_t i = 0; i < 10; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
     }
 
@@ -85,7 +85,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     bool seen2 = false;
     for (int i = 0; i < 10; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         if (next->GetUserTask() == &task1) seen1 = true;
         if (next->GetUserTask() == &task2) seen2 = true;
     }
@@ -100,7 +100,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     bool seen3 = false;
     for (int32_t i = 0; i < 20; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         if (next->GetUserTask() == &task1) seen1 = true;
         if (next->GetUserTask() == &task2) seen2 = true;
         if (next->GetUserTask() == &task3) seen3 = true;
@@ -117,7 +117,7 @@ TEST(SwitchStrategySWRoundRobin, EndlessNext)
     seen2 = seen3 = false;
     for (int32_t i = 0; i < 10; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         if (next->GetUserTask() == &task2) seen2 = true;
         if (next->GetUserTask() == &task3) seen3 = true;
         CHECK_TEXT(next->GetUserTask() != &task1, "Task1 must not be selected after removal");
@@ -148,7 +148,7 @@ TEST(SwitchStrategySWRoundRobin, Algorithm)
     const int32_t steps = 120; // increased steps for better statistical stability
     for (int32_t i = 0; i < steps; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
 
         if (next->GetUserTask() == &task1) ++count1;
         else if (next->GetUserTask() == &task2) ++count2;
@@ -189,11 +189,11 @@ TEST(SwitchStrategySWRoundRobin, Algorithm)
     count1 = count2 = 0;
 
     // advance next once to avoid stuck reference (optional)
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
 
     for (int32_t i = 0; i < steps; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
 
         if      (next->GetUserTask() == &task1) ++count1;
         else if (next->GetUserTask() == &task2) ++count2;

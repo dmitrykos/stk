@@ -78,10 +78,11 @@ void RunExample()
     // 3 tasks kernel with 3 priorities
     static Kernel<KERNEL_STATIC, 3, SwitchStrategyFP32, PlatformDefault> kernel;
 
-    // RED is lowest priority (0), and BLUE is highest (2):
+    // RED has lowest priority, and BLUE has highest:
     // - BLUE gets more CPU time and will blink very often
     // - GRREN blinks less often than BLUE
     // - RED is least blinking as it gets gets the least CPU time
+    // note: if you set the same priority for tasks LEDs of these tasks will blink equally
     static LedTask<SwitchStrategyFP32::PRIORITY_LOWEST, ACCESS_PRIVILEGED> task_red(Led::RED);
     static LedTask<SwitchStrategyFP32::PRIORITY_NORMAL, ACCESS_PRIVILEGED> task_green(Led::GREEN);
     static LedTask<SwitchStrategyFP32::PRIORITY_HIGHEST, ACCESS_PRIVILEGED> task_blue(Led::BLUE);

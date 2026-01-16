@@ -92,14 +92,13 @@ TEST(SwitchStrategyMonotonic, GetNextEmpty)
     kernel.Initialize();
 
     kernel.AddTask(&task1);
-    IKernelTask *ktask = strategy->GetFirst();
     kernel.RemoveTask(&task1);
     CHECK_EQUAL(0, strategy->GetSize());
 
     try
     {
         g_TestContext.ExpectAssert(true);
-        strategy->GetNext(ktask);
+        strategy->GetNext();
         CHECK_TEXT(false, "expecting assertion when empty");
     }
     catch (TestAssertPassed &pass)
@@ -127,19 +126,19 @@ static void TestPriorityNext()
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 must be selected as highest priority");
 
     // GetNext must always return highest-priority READY task
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task must repeat (no round-robin)");
 
     // Remove highest priority
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
 
     // Remove next highest
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 
@@ -171,7 +170,7 @@ static void TestAlgorithm()
     // Single task -> always returned
     for (int32_t i = 0; i < 5; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
     }
 
@@ -179,35 +178,35 @@ static void TestAlgorithm()
 
     kernel.AddTask(&task2, 200, 200, 0); // higher priority than task1
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Higher priority task2 should preempt task1");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Highest priority task always runs");
 
     // --- Stage 3: Add third task -----------------------------------------
 
     kernel.AddTask(&task3, 100, 100, 0); // highest priority
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task3 should run first");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Highest priority task always runs");
 
     // --- Stage 4: Remove a task ------------------------------------------
 
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes highest priority after task3 removal");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains highest priority");
 
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 

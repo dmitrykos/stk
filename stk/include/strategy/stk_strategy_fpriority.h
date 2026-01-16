@@ -77,7 +77,7 @@ public:
             RemoveReady(task);
     }
 
-    IKernelTask *GetNext(IKernelTask */*current*/)
+    IKernelTask *GetNext()
     {
         if (m_ready_bitmap == 0)
             return nullptr; // idle

@@ -52,7 +52,7 @@ TEST(SwitchStrategyEDF, GetNextEmpty)
     CHECK_EQUAL(0, strategy->GetSize());
 
     // expect to return NULL which puts core into a sleep mode, current is ignored by this strategy
-    CHECK_EQUAL(0, strategy->GetNext(NULL));
+    CHECK_EQUAL(0, strategy->GetNext());
 }
 
 TEST(SwitchStrategyEDF, PriorityNext)
@@ -69,25 +69,24 @@ TEST(SwitchStrategyEDF, PriorityNext)
     kernel.AddTask(&task3, 100, 100, 0); // earliest deadline
 
     // EDF must select the task with the earliest relative deadline
-    IKernelTask *current = strategy->GetFirst();
-    IKernelTask *next = strategy->GetNext(current);
+    IKernelTask *next = strategy->GetNext();
 
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "EDF must select task with earliest relative deadline");
 
     // Repeated GetNext must still select the same task
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "EDF must continue selecting earliest-deadline task");
 
     // Remove earliest-deadline task
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "after removal, task2 has earliest relative deadline");
 
     // Remove next earliest
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "only remaining task must be selected");
 }
 
@@ -108,7 +107,7 @@ TEST(SwitchStrategyEDF, Algorithm)
     // Single task -> always returned
     for (int32_t i = 0; i < 5; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "single task must always be selected");
     }
 
@@ -117,36 +116,36 @@ TEST(SwitchStrategyEDF, Algorithm)
     kernel.AddTask(&task2, 200, 200, 0); // earlier deadline than task1
 
     // EDF must pick the task with earliest relative deadline
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 with earlier deadline should preempt task1");
 
     // Still highest-priority task keeps running until removed or asleep
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 remains earliest-deadline task");
 
     // --- Stage 3: Add third task -----------------------------------------
 
     kernel.AddTask(&task3, 100, 100, 0); // earliest deadline
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 with earliest deadline should run first");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "task3 continues to run as earliest-deadline task");
 
     // --- Stage 4: Remove tasks -------------------------------------------
 
     kernel.RemoveTask(&task3);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 becomes earliest-deadline after task3 removal");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "task2 continues as earliest-deadline task");
 
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(strategy->GetFirst());
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "task1 remains as only task");
 }
 

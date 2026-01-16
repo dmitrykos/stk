@@ -439,13 +439,11 @@ public:
     virtual IKernelTask *GetFirst() const = 0;
 
     /*! \brief     Get next linked task.
-        \param[in] current: Pointer to the current task.
-        \return    Pointer to the next task.
-        \note      Some implementations may return NULL that denotes the end of the iteration
-                   when no runnable tasks are available, in this case kernel will enter into
-                   a FSM_STATE_SLEEPING state.
+        \return    Pointer to the next active task.
+        \note      Implementations may return NULL when no runnable tasks are available,
+                   in this case kernel shall start sleeping (\a FSM_STATE_SLEEPING).
     */
-    virtual IKernelTask *GetNext(IKernelTask *current) = 0;
+    virtual IKernelTask *GetNext() = 0;
 
     /*! \brief     Get number of tasks currently managed by this strategy.
         \return    Total number of tasks in the set (runnable and idle).

@@ -69,7 +69,7 @@ public:
         }
     }
 
-    IKernelTask *GetNext(IKernelTask *current)
+    IKernelTask *GetNext()
     {
         IKernelTask *ret = m_prev;
 

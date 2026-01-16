@@ -83,7 +83,7 @@ public:
     uint32_t GetStackSizeBytes() const { return _StackSize * sizeof(size_t); }
     EAccessMode GetAccessMode() const { return _AccessMode; }
     virtual void OnDeadlineMissed(uint32_t duration) { STK_ASSERT(false); /* HRT is unsupported */ (void)duration; }
-    virtual int32_t GetWeight() const { return _Weight; }
+    virtual int32_t GetWeight() const { STK_STATIC_ASSERT(_Weight > 0); return _Weight; }
     virtual size_t GetId() const  { return reinterpret_cast<size_t>(this); }
     virtual const char *GetTraceName() const  { return NULL; }
 

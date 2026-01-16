@@ -102,7 +102,7 @@ public:
         m_tasks.Unlink(task);
     }
 
-    IKernelTask *GetNext(IKernelTask */*current*/)
+    IKernelTask *GetNext()
     {
         STK_ASSERT(!m_tasks.IsEmpty());
 

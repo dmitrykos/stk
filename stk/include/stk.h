@@ -987,37 +987,31 @@ protected:
     */
     EFsmEvent FetchNextEvent(KernelTask **next)
     {
-        EFsmEvent type = FSM_EVENT_SWITCH;
-        KernelTask *itr = NULL, *prev = m_task_now;
+        EFsmEvent type;
+        KernelTask *itr;
 
         // check if no tasks left in Dynamic mode and exit
         if ((_Mode & KERNEL_DYNAMIC) && (m_strategy.GetSize() == 0))
         {
+            itr  = NULL;
             type = FSM_EVENT_EXIT;
         }
         else
         {
-            for (;;)
+            itr = static_cast<KernelTask *>(m_strategy.GetNext());
+
+            // sleep-aware strategy returns NULL if no active tasks available, start sleeping
+            if (itr == NULL)
             {
-                itr = static_cast<KernelTask *>(m_strategy.GetNext(prev));
+                type = FSM_EVENT_SLEEP;
+            }
+            else
+            {
+                // strategy must provide active-only task
+                STK_ASSERT(!itr->IsSleeping());
 
-                // sleep-aware strategy returns NULL if no active tasks available, start sleeping
-                if (itr == NULL)
-                {
-                    itr  = NULL;
-                    type = FSM_EVENT_SLEEP;
-                    break;
-                }
-                else
-                {
-                    STK_ASSERT(!itr->IsSleeping());
-                }
-
-                // if was sleeping send wake event first
-                if (m_fsm_state == FSM_STATE_SLEEPING)
-                    type = FSM_EVENT_WAKE;
-
-                break;
+                // if was sleeping, process wake event first
+                type = (m_fsm_state == FSM_STATE_SLEEPING ? FSM_EVENT_WAKE : FSM_EVENT_SWITCH);
             }
         }
 

@@ -84,7 +84,7 @@ public:
         }
     }
 
-    IKernelTask *GetNext(IKernelTask */*current*/)
+    IKernelTask *GetNext()
     {
         if (m_tasks.IsEmpty())
             return nullptr; // idle

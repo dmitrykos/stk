@@ -18,14 +18,6 @@ static void InitLeds()
     Led::Init(Led::BLUE,  false);
 }
 
-// Display CPU share by LED on/off times
-static void SetLed(uint8_t id)
-{
-    Led::Set(Led::RED,   id == 0);
-    Led::Set(Led::GREEN, id == 1);
-    Led::Set(Led::BLUE,  id == 2);
-}
-
 // R2350 requires larger stack due to stack-memory heavy SDK API
 #ifdef _PICO_H
 enum { TASK_STACK_SIZE = 1024 };
@@ -34,12 +26,12 @@ enum { TASK_STACK_SIZE = 256 };
 #endif
 
 // Generic LED-blink task
-template <int32_t _Weight, stk::EAccessMode _AccessMode>
-class LedTask : public stk::TaskW<_Weight, TASK_STACK_SIZE, _AccessMode>
+template <int32_t _Priority, stk::EAccessMode _AccessMode>
+class LedTask : public stk::TaskW<_Priority, TASK_STACK_SIZE, _AccessMode>
 {
-    uint8_t m_task_id;
+    uint8_t m_led_id;
 public:
-    LedTask(uint8_t id) : m_task_id(id)
+    LedTask(uint8_t id) : m_led_id(id)
     {}
 
     stk::RunFuncType GetFunc() override { return &Run; }
@@ -53,15 +45,26 @@ private:
 
     void RunInner()
     {
+        bool led_state = false;
+
         while (true)
         {
+            // do some busy work to create CPU load, this ensures tasks are always ready to run (not sleeping)
+            // due to load higher priority tasks will preempt lower priority ones
+            for (volatile uint32_t i = 0; i < 300000; i++)
+            {}
+
             // toggle LED for this task
             {
                 // protect from preemption during hardware IO
                 stk::ScopedCriticalSection __cs;
 
-                SetLed(m_task_id);
+                Led::Set((Led::Id)m_led_id, led_state);
             }
+
+            led_state = !led_state;
+
+            stk::Sleep(10);
         }
     }
 };
@@ -72,16 +75,17 @@ void RunExample()
 
     InitLeds();
 
-    // 3 tasks kernel with Smooth Weighted Round-Robin scheduler
-    static Kernel<KERNEL_STATIC, 3, SwitchStrategySmoothWeightedRoundRobin, PlatformDefault> kernel;
+    // 3 tasks kernel with Smooth Weighted Round-Robin scheduling strategy
+    static Kernel<KERNEL_STATIC, 3, SwitchStrategySWRR, PlatformDefault> kernel;
 
-    // assign weights (1000 is a granularity of weights, we split it between all tasks proportionally):
-    //  task0: 60% of all time spent by tasks - seen very often (bright, RED)
-    //  task1: 30% of all time spent by tasks - seen less (less than half brightness, GREEN)
-    //  task2: 10% of all time spent by tasks - seen least (lowest brightness, BLUE)
-    static LedTask<(1000 * 60) / 100, ACCESS_PRIVILEGED> task_red(0);
-    static LedTask<(1000 * 30) / 100, ACCESS_PRIVILEGED> task_green(1);
-    static LedTask<(1000 * 10) / 100, ACCESS_PRIVILEGED> task_blue(2);
+    // RED is lowest priority (1), and BLUE is highest (87):
+    // - BLUE gets more CPU time and will blink very often
+    // - GRREN blinks less often than BLUE
+    // - RED is least blinking as it gets gets the least CPU time
+    // note: if you set the same priority for tasks LEDs of these tasks will blink equally
+    static LedTask<1, ACCESS_PRIVILEGED> task_red(Led::RED);
+    static LedTask<10, ACCESS_PRIVILEGED> task_green(Led::GREEN);
+    static LedTask<89, ACCESS_PRIVILEGED> task_blue(Led::BLUE);
 
     kernel.Initialize();
 

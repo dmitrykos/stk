@@ -52,7 +52,7 @@ TEST(SwitchStrategyRoundRobin, GetNextEmpty)
     CHECK_EQUAL(0, strategy->GetSize());
 
     // expect to return NULL which puts core into a sleep mode, current is ignored by this strategy
-    CHECK_EQUAL(0, strategy->GetNext(NULL));
+    CHECK_EQUAL(0, strategy->GetNext());
 }
 
 TEST(SwitchStrategyRoundRobin, EndlessNext)
@@ -69,27 +69,27 @@ TEST(SwitchStrategyRoundRobin, EndlessNext)
     IKernelTask *first = strategy->GetFirst();
     CHECK_EQUAL_TEXT(&task1, first->GetUserTask(), "expecting first task1");
 
-    IKernelTask *next = strategy->GetNext(NULL);
+    IKernelTask *next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "expecting next task1");
 
-    next = strategy->GetNext(first);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "expecting next task2");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "expecting next task3");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "expecting next task1 again (endless looping)");
 
-    next = strategy->GetNext(first);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "expecting next task2 again (endless looping)");
 
     kernel.RemoveTask(&task2);
 
-    next = strategy->GetNext(NULL);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "expecting next task3 again (endless looping)");
 
-    next = strategy->GetNext(next);
+    next = strategy->GetNext();
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "expecting next task1 again (endless looping)");
 }
 
@@ -113,7 +113,7 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
     // Always returns the same task
     for (int32_t i = 0; i < 5; i++)
     {
-        next = strategy->GetNext(next);
+        next = strategy->GetNext();
         CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Single task must always be selected");
     }
 
@@ -121,11 +121,11 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
 
     kernel.AddTask(&task2);
 
-    next = strategy->GetNext(next); // should still return task1 as task2 will be scheduled after this call
+    next = strategy->GetNext(); // should still return task1 as task2 will be scheduled after this call
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should be task1");
-    next = strategy->GetNext(next); // should return task2
+    next = strategy->GetNext(); // should return task2
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Next task should be task2");
-    next = strategy->GetNext(next); // should wrap around to task1
+    next = strategy->GetNext(); // should wrap around to task1
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should wrap to task1");
 
     // --- Stage 3: add third task ------------------------------------------
@@ -133,11 +133,11 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
     kernel.AddTask(&task3);
 
     // Expected sequence: task1 -> task2 -> task3 -> task1 ...
-    next = strategy->GetNext(next); // task2
+    next = strategy->GetNext(); // task2
     CHECK_EQUAL_TEXT(&task2, next->GetUserTask(), "Next task should be task2");
-    next = strategy->GetNext(next); // task3
+    next = strategy->GetNext(); // task3
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Next task should be task3");
-    next = strategy->GetNext(next); // task1
+    next = strategy->GetNext(); // task1
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should wrap to task1");
 
     // --- Stage 4: remove a task -------------------------------------------
@@ -145,11 +145,11 @@ TEST(SwitchStrategyRoundRobin, Algorithm)
     kernel.RemoveTask(&task2);
 
     // Expected sequence: task1 -> task3 -> task1 -> task3 ...
-    next = strategy->GetNext(next); // task3
+    next = strategy->GetNext(); // task3
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Next task should be task3 after removal");
-    next = strategy->GetNext(next); // task1
+    next = strategy->GetNext(); // task1
     CHECK_EQUAL_TEXT(&task1, next->GetUserTask(), "Next task should be task1 after removal");
-    next = strategy->GetNext(next); // task3
+    next = strategy->GetNext(); // task3
     CHECK_EQUAL_TEXT(&task3, next->GetUserTask(), "Next task should wrap to task3");
 }
 
