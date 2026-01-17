@@ -64,7 +64,9 @@ private:
 
             led_state = !led_state;
 
-            stk::Sleep(10);
+            // SWRR, unlike Fixed-Priority (FP), does not require tasks cooperation with Sleep() or Yield(), all
+            // tasks will get their CPU time slice, even tasks with lowest priority (see task_red in this example).
+            //stk::Sleep(10);
         }
     }
 };
@@ -83,9 +85,9 @@ void RunExample()
     // - GRREN blinks less often than BLUE
     // - RED is least blinking as it gets gets the least CPU time
     // note: if you set the same priority for tasks LEDs of these tasks will blink equally
-    static LedTask<1, ACCESS_PRIVILEGED> task_red(Led::RED);
-    static LedTask<10, ACCESS_PRIVILEGED> task_green(Led::GREEN);
-    static LedTask<89, ACCESS_PRIVILEGED> task_blue(Led::BLUE);
+    static LedTask<5, ACCESS_PRIVILEGED> task_red(Led::RED);
+    static LedTask<20, ACCESS_PRIVILEGED> task_green(Led::GREEN);
+    static LedTask<75, ACCESS_PRIVILEGED> task_blue(Led::BLUE);
 
     kernel.Initialize();
 

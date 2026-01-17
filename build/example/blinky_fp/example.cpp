@@ -64,6 +64,12 @@ private:
 
             led_state = !led_state;
 
+            // with Fixed-Priority strategy tasks must cooperate by giving up processing with Sleep(), note
+            // that Yield() may not be sufficient with >2 tasks because task with highest priority may
+            // return in processing and task with lowest priority will never get its CPU time slice.
+            // More robust scheduling strategy in this respect is  SwitchStrategySWRR which guarantees CPU
+            // time slice for tasks with lowest priority (weight) and SWRR does not require tasks to
+            // cooperate with Sleep() or Yield() which you can still use to achieve lower power consumption.
             stk::Sleep(10);
         }
     }

@@ -156,6 +156,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/strategy/stk_strategy_edf.h</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/strategy/stk_strategy_fpriority.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/strategy/stk_strategy_fpriority.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include/strategy/stk_strategy_monotonic.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/strategy/stk_strategy_monotonic.h</locationURI>
