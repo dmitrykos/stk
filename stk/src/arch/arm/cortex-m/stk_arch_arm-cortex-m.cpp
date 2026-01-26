@@ -16,16 +16,62 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
+//#define STK_CORTEX_M_TRUSTZONE
+
+#ifdef STK_CORTEX_M_TRUSTZONE
+#include <arm_cmse.h>
+#endif
+
 #include "arch/stk_arch_common.h"
 #include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
 using namespace stk;
 
-#define STK_CORTEX_M_CRITICAL_SECTION_START(SES) do { SES = __get_PRIMASK(); __disable_irq(); } while (0)
-#define STK_CORTEX_M_CRITICAL_SECTION_END(SES) __set_PRIMASK(SES)
-
 #define STK_CORTEX_M_DISABLE_INTERRUPTS() __disable_irq()
 #define STK_CORTEX_M_ENABLE_INTERRUPTS() __enable_irq()
+
+#define STK_CORTEX_M_CRITICAL_SECTION_START(SES)\
+    do { SES = __get_PRIMASK(); STK_CORTEX_M_DISABLE_INTERRUPTS(); __DSB(); __ISB(); } while (0)
+#define STK_CORTEX_M_CRITICAL_SECTION_END(SES)\
+    do { __DSB(); __ISB(); __set_PRIMASK(SES); } while (0)
+
+#ifdef CONTROL_nPRIV_Msk
+    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK) \
+        uint32_t timeout = 0xFFFFFF; \
+        while (__atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE)) { \
+            if (--timeout == 0) { \
+                /* if we hit this, the lock was never released by the previous owner */ \
+                __stk_debug_break(); \
+            } \
+            __stk_relax_cpu(); \
+        }
+    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
+            /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */ \
+            __asm volatile("dmb ishst" ::: "memory"); \
+            __atomic_clear(&LOCK, __ATOMIC_RELEASE); \
+        } while (0)
+#elif defined(RP2040_H)
+    // Raspberry RP2040 dual-core M0+ implementation, using Hardware Spinlock 0 (SIO base 0xd0000000 + offset)
+    #define SIO_SPINLOCK SIO->SPINLOCK31
+
+    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK) \
+        uint32_t timeout = 0xFFFFFF; \
+        while (SIO_SPINLOCK == 0) { \
+            if (--timeout == 0) { \
+            /* if we hit this, the lock was never released by the previous owner */ \
+            __stk_debug_break(); \
+        } \
+        LOCK = true;
+    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
+            __asm volatile("" ::: "memory"); \
+            LOCK = false; \
+            SIO_SPINLOCK = 1; /* writing any value releases the hardware lock */ \
+        } while (0)
+#else
+    // Standard single-core Cortex-M0 implementation:
+    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK)   do { LOCK = true; } while (0)
+    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { LOCK = false; __asm volatile("" ::: "memory"); } while (0)
+#endif
 
 #ifdef CONTROL_nPRIV_Msk
     #define STK_CORTEX_M_PRIVILEGED_MODE_ON() __set_CONTROL(__get_CONTROL() & ~CONTROL_nPRIV_Msk)
@@ -35,15 +81,26 @@ using namespace stk;
     #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() ((void)0)
 #endif
 
-#define STK_CORTEX_M_EXC_RETURN_HANDLR_MSP 0xFFFFFFF1 // Handler mode, MSP stack
-#define STK_CORTEX_M_EXC_RETURN_THREAD_MSP 0xFFFFFFF9 // Thread mode, MSP stack
-#define STK_CORTEX_M_EXC_RETURN_THREAD_PSP 0xFFFFFFFD // Thread mode, PSP stack
+#define STK_CORTEX_M_EXC_RETURN_HANDLR_MSP 0xFFFFFFF1 // Handler mode, MSP stack (non-secure)
+#define STK_CORTEX_M_EXC_RETURN_THREAD_MSP 0xFFFFFFF9 // Thread mode, MSP stack (non-secure)
+#define STK_CORTEX_M_EXC_RETURN_THREAD_PSP 0xFFFFFFFD // Thread mode, PSP stack (non-secure)
 
+#define STK_CORTEX_M_ISR_PRIORITY_HIGHEST 0
 #define STK_CORTEX_M_ISR_PRIORITY_LOWEST 0xFF
 
-#define STK_CORTEX_M_EXIT_FROM_HANDLER() __asm volatile("BX LR")
-#define STK_CORTEX_M_START_SCHEDULING() __asm volatile("SVC #0")
-#define STK_CORTEX_M_FORCE_SWITCH() __asm volatile("SVC #1")
+enum ESvc
+{
+    SVC_START_SCHEDULING = 0,
+    SVC_FORCE_SWITCH,
+    SVC_ENTER_CRITICAL,
+    SVC_EXIT_CRITICAL
+};
+
+#define STK_CORTEX_M_EXIT_FUNCTION() __asm volatile("BX LR")
+#define STK_CORTEX_M_START_SCHEDULING() __asm volatile("SVC %0" : : "I"(SVC_START_SCHEDULING));
+#define STK_CORTEX_M_FORCE_SWITCH() __asm volatile("SVC %0" : : "I"(SVC_FORCE_SWITCH));
+#define STK_CORTEX_M_UNPRIV_ENTER_CRITICAL() __asm volatile("SVC %0" : : "I"(SVC_ENTER_CRITICAL));
+#define STK_CORTEX_M_UNPRIV_EXIT_CRITICAL() __asm volatile("SVC %0" : : "I"(SVC_EXIT_CRITICAL));
 
 //! Do sanity check for a compiler define, __CORTEX_M must be defined.
 #ifndef __CORTEX_M
@@ -85,27 +142,67 @@ using namespace stk;
 // Declarations:
 extern "C" void SVC_Handler_Main(size_t *svc_args) __stk_attr_used; // __stk_attr_used required for Link-Time Optimization (-flto)
 
-/*! \brief Get SP of the calling process.
+//! Check if caller is in Handler Mode (IPSR != 0), i.e. inside ISR.
+static __stk_forceinline bool IsHandlerMode() { return (__get_IPSR() != 0); }
+
+//! Check if caller is in Privileged Thread Mode (nPRIV == 0), note that ARM Cortex-M0 is always Privileged Thread Mode
+static __stk_forceinline bool IsPrivilegedThreadMode()
+{
+#ifdef CONTROL_nPRIV_Msk
+    return ((__get_CONTROL() & CONTROL_nPRIV_Msk) == 0);
+#else
+    return true;
+#endif
+}
+
+/*! \brief  Enter critical section.
+    \note   Unprivileged mode only. No input, but returns a value (will be read from R0).
+    \return Previous value of BASEPRI.
 */
-__stk_forceinline size_t GetCallerSP()
+__stk_attr_naked uint32_t SVC_EnterCritical()
+{
+    STK_CORTEX_M_UNPRIV_ENTER_CRITICAL();
+    STK_CORTEX_M_EXIT_FUNCTION();
+    __builtin_unreachable();
+}
+
+/*! \brief     Exit critical section.
+    \param[in] prev: Previous value of BASEPRI.
+    \note      Unprivileged mode only. Input 'state' is passed in R0; no return value.
+    \see       SVC_EnterCritical
+*/
+__stk_attr_naked void SVC_ExitCritical(uint32_t prev)
+{
+    (void)prev;
+    STK_CORTEX_M_UNPRIV_EXIT_CRITICAL();
+    STK_CORTEX_M_EXIT_FUNCTION();
+}
+
+/*! \brief  Get SP of the calling process.
+    \return SP register value.
+*/
+static __stk_forceinline size_t GetCallerSP()
 {
     // __get_PSP() returns 0 in unprivileged mode, thus get SP (R13) which is available for both modes
 #if 0
     return __get_PSP();
 #else
     uint32_t sp;
-    __asm volatile ("MOV %0, SP" : "=r" (sp));
+    __asm volatile("MOV %0, SP" : "=r" (sp));
     return sp;
 #endif
 }
 
-/*! \brief Switch context by scheduling PendSV interrupt.
+/*! \brief Switch context via the PendSV interrupt.
 */
-__stk_forceinline void ScheduleContextSwitch()
+static __stk_forceinline void ScheduleContextSwitch()
 {
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk; // schedule PendSV interrupt
     __ISB();                             // flush instructions cache
 }
+
+//! Global lock to synchronize critical sections of multiple cores.
+static volatile bool g_CsuLock = false;
 
 //! Internal context.
 static struct Context : public PlatformContext
@@ -135,8 +232,18 @@ static struct Context : public PlatformContext
 
     __stk_forceinline void EnterCriticalSection()
     {
+        // disable local interrupts first to prevent self-deadlock
+        uint32_t current_ses;
+        STK_CORTEX_M_CRITICAL_SECTION_START(current_ses);
+
         if (m_csu_nesting == 0)
-            STK_CORTEX_M_CRITICAL_SECTION_START(m_csu);
+        {
+            // ONLY attempt the global spinlock if we aren't already nested
+            STK_CORTEX_M_SPIN_LOCK_LOCK(g_CsuLock);
+
+            // store the hardware interrupt state to restore later
+            m_csu = current_ses;
+        }
 
         ++m_csu_nesting;
     }
@@ -144,21 +251,66 @@ static struct Context : public PlatformContext
     __stk_forceinline void ExitCriticalSection()
     {
         STK_ASSERT(m_csu_nesting != 0);
-
         --m_csu_nesting;
 
         if (m_csu_nesting == 0)
-            STK_CORTEX_M_CRITICAL_SECTION_END(m_csu);
+        {
+            // capture the state before releasing lock
+            uint32_t ses_to_restore = m_csu;
+
+            // release global lock
+            STK_CORTEX_M_SPIN_LOCK_UNLOCK(g_CsuLock);
+
+            // restore hardware interrupts
+            STK_CORTEX_M_CRITICAL_SECTION_END(ses_to_restore);
+        }
+    }
+
+    // Unprivileged
+    __stk_forceinline void UnprivEnterCriticalSection()
+    {
+        // elevate to privileged/disabled state via SVC
+        uint32_t current_ses = SVC_EnterCritical();
+
+        if (m_csu_nesting == 0)
+        {
+            // ONLY attempt the global spinlock if we aren't already nested
+            STK_CORTEX_M_SPIN_LOCK_LOCK(g_CsuLock);
+
+            // store the hardware interrupt state to restore later
+            m_csu = current_ses;
+        }
+
+        ++m_csu_nesting;
+    }
+
+    // Unprivileged
+    __stk_forceinline void UnprivExitCriticalSection()
+    {
+        STK_ASSERT(m_csu_nesting != 0);
+        --m_csu_nesting;
+
+        if (m_csu_nesting == 0)
+        {
+            // capture the state before releasing lock
+            uint32_t ses_to_restore = m_csu;
+
+            // release global lock
+            STK_CORTEX_M_SPIN_LOCK_UNLOCK(g_CsuLock);
+
+            // restore hardware interrupts via SVC
+            SVC_ExitCritical(ses_to_restore);
+        }
     }
 
     typedef IPlatform::IEventOverrider eovrd_t;
 
-    jmp_buf  m_exit_buf;    //!< saved context of the exit point
-    uint32_t m_csu;         //!< user critical session
-    uint32_t m_csu_nesting; //!< depth of user critical session nesting
-    eovrd_t *m_overrider;   //!< platform events overrider
-    volatile bool m_started;//!< 'true' when in started state
-    bool     m_exiting;     //!< 'true' when is exiting the scheduling process
+    jmp_buf  m_exit_buf;     //!< saved context of the exit point
+    eovrd_t *m_overrider;    //!< platform events overrider
+    uint32_t m_csu;          //!< user critical session
+    uint32_t m_csu_nesting;  //!< depth of user critical session nesting
+    volatile bool m_started; //!< 'true' when in started state
+    bool     m_exiting;      //!< 'true' when is exiting the scheduling process
 }
 g_Context[_STK_ARCH_CPU_COUNT];
 
@@ -196,7 +348,7 @@ extern "C" void _STK_SYSTICK_HANDLER()
 #endif
 }
 
-__stk_forceinline void SaveStackIdle()
+static __stk_forceinline void SaveStackIdle()
 {
     // get Process Stack Pointer (PSP) of the current stack
     __asm volatile(
@@ -233,13 +385,13 @@ __stk_forceinline void SaveStackIdle()
     // save PSP of the idle stack
     __asm volatile(
     "LDR        r1, %0          \n"
-    "STR        r0, [r1]        \n"
+    "STR        r0, [r1]        \n" // store the first member (SP) from r0
     : /* output: none */
     : "m" (GetContext().m_stack_idle)
     : /* clobbers: none */);
 }
 
-__stk_forceinline void LoadStackActive()
+static __stk_forceinline void LoadStackActive()
 {
     if (GetContext().m_stack_active->mode == ACCESS_PRIVILEGED)
        STK_CORTEX_M_PRIVILEGED_MODE_ON();
@@ -249,7 +401,7 @@ __stk_forceinline void LoadStackActive()
     // load PSP of the active stack
     __asm volatile(
     "LDR        r1, %0          \n"
-    "LDR        r0, [r1]        \n" // load
+    "LDR        r0, [r1]        \n" // load the first member (SP) into r0
     : /* output: none */
     : "m" (GetContext().m_stack_active)
     : /* clobbers: none */);
@@ -299,10 +451,10 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 
     STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-    STK_CORTEX_M_EXIT_FROM_HANDLER();
+    STK_CORTEX_M_EXIT_FUNCTION();
 }
 
-__stk_forceinline void OnTaskRun()
+static __stk_forceinline void OnTaskRun()
 {
     // note: STK_CORTEX_M_DISABLE_INTERRUPTS() must be called prior calling this function
 
@@ -324,7 +476,7 @@ __stk_forceinline void OnTaskRun()
 
     STK_CORTEX_M_ENABLE_INTERRUPTS();
 
-    STK_CORTEX_M_EXIT_FROM_HANDLER();
+    STK_CORTEX_M_EXIT_FUNCTION();
 }
 
 static __stk_forceinline void ClearFpuState()
@@ -362,12 +514,17 @@ static void StartScheduling()
     NVIC_SetPriority(PendSV_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
     NVIC_SetPriority(SysTick_IRQn, STK_CORTEX_M_ISR_PRIORITY_LOWEST);
 
+    // set highest priority for SVC interrupts to support critical section for unprivileged tasks
+#ifdef CONTROL_nPRIV_Msk
+    NVIC_SetPriority(SVCall_IRQn, STK_CORTEX_M_ISR_PRIORITY_HIGHEST);
+#endif
+
     GetContext().m_started = true;
 }
 
-void SVC_Handler_Main(size_t *stack)
+void SVC_Handler_Main(size_t *svc_args)
 {
-    // Stack contains: r0, r1, r2, r3, r12, r14, the return address and xPSR, First argument (r0) is svc_args[0]
+    // Stack frame layout: r0, r1, r2, r3, r12, r14, the return address and xPSR, First argument (r0) is svc_args[0]
     // - R0 = stack[0]
     // - R1 = stack[1]
     // - R2 = stack[2]
@@ -376,11 +533,13 @@ void SVC_Handler_Main(size_t *stack)
     // - LR = stack[5]
     // - PC = stack[6]
     // - xPSR= stack[7]
-    char svc_arg = ((char *)stack[6])[-2];
 
-    switch (svc_arg)
+    // The SVC instruction is 2 bytes before the stacked PC
+    uint8_t svc_number = ((uint8_t *)svc_args[6])[-2];
+
+    switch (svc_number)
     {
-    case 0: {
+    case SVC_START_SCHEDULING: {
         // disallow any duplicate attempt
         STK_ASSERT(!GetContext().m_started);
         if (GetContext().m_started)
@@ -390,6 +549,28 @@ void SVC_Handler_Main(size_t *stack)
         StartScheduling();
         OnTaskRun();
         break; }
+
+    case SVC_FORCE_SWITCH: {
+        ScheduleContextSwitch();
+        break; }
+
+#ifdef CONTROL_nPRIV_Msk
+    case SVC_ENTER_CRITICAL: {
+        // save current BASEPRI to return to the user (into stacked R0)
+        svc_args[0] = __get_BASEPRI();
+        // block all interrupts except priority 0 (to be able to invoke SVC SVC_EXIT_CRITICAL)
+        __set_BASEPRI(1 << __NVIC_PRIO_BITS);
+        __DSB();
+        __ISB();
+        break; }
+
+    case SVC_EXIT_CRITICAL: {
+        // restore previous BASEPRI state (passed in R0)
+        __set_BASEPRI(svc_args[0]);
+        __DSB();
+        __ISB();
+        break; }
+#endif
 
     default: {
         STK_ASSERT(false);
@@ -401,41 +582,93 @@ void SVC_Handler_Main(size_t *stack)
 // ARM: How to Write an SVC Function, https://developer.arm.com/documentation/ka004005/latest
 extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 {
-#if (__CORTEX_M >= 3)
-    __asm volatile(
-    ".global SVC_Handler_Main   \n"
-    "TST    LR, #4              \n" // if (LR & 4)
-    "ITE    EQ                  \n"
-    "MRSEQ  r0, MSP             \n" // r0 = MSP
-    "MRSNE  r0, PSP             \n" // else r0 = PSP
-    "BL     SVC_Handler_Main    \n");
-#else
     __asm volatile(
     ".syntax unified            \n"
     ".global SVC_Handler_Main   \n"
+    ".align 2                   \n" // ensure the entry point is aligned
+
+#ifdef STK_CORTEX_M_TRUSTZONE
+    // ARMv8-M TrustZone (Cortex-M33)
+    #if (__CORTEX_M >= 33)
+    "TST    LR, #4              \n" // bit 2: 0 = Main Stack (MSP), 1 = Process Stack (PSP)
+    "BNE    .use_psp            \n"
+    "TST    LR, #1              \n" // check CONTROL.SFPA (secure state), bit 0: 0 = Secure, 1 = Non-Secure
+    "ITE    EQ                  \n"
+    "MRSEQ  r0, MSP             \n" // r0 = secure MSP
+    "MRSNE  r0, MSP_NS          \n" // r0 = non-secure MSP
+    "B      .call_main          \n"
+
+    ".use_psp:                  \n"
+    "TST    LR, #1              \n"
+    "ITE    EQ                  \n"
+    "MRSEQ  r0, PSP             \n" // r0 = secure PSP
+    "MRSNE  r0, PSP_NS          \n" // r0 = non-secure MSP
+    #else
+    // ARMv8-M Baseline (Cortex-M23) - no IT instructions
+    "MOV    r1, LR              \n"
+    "LSLS   r1, r1, #29         \n" // bit 2: 0 = Main Stack (MSP), 1 = Process Stack (PSP)
+    "BMI    .use_psp_v8m_b      \n"
+    "MOV    r1, LR              \n"
+    "LSLS   r1, r1, #31         \n" // check CONTROL.SFPA (secure state), bit 0: 0 = Secure, 1 = Non-Secure
+    "BMI    .use_msp_ns         \n"
+    "MRS    r0, MSP             \n" // r0 = secure MSP
+    "B      .call_main          \n"
+
+    ".use_msp_ns:               \n"
+    "MRS    r0, MSP_NS          \n" // r0 = non-secure MSP
+    "B      .call_main          \n"
+
+    ".use_psp_v8m_b:            \n"
+    "MOV    r1, LR              \n"
+    "LSLS   r1, r1, #31         \n"
+    "BMI    .use_psp_ns         \n"
+    "MRS    r0, PSP             \n" // r0 = secure PSP
+    "B      .call_main          \n"
+
+    ".use_psp_ns:               \n"
+    "MRS    r0, PSP_NS          \n" // r0 = non-secure MSP
+    #endif
+
+    ".call_main:                \n"
+#elif (__CORTEX_M >= 3)
+    // Cortex-M3/M4/M7
+    "TST    LR, #4              \n" // check EXC_RETURN bit 2
+    "ITE    EQ                  \n"
+    "MRSEQ  r0, MSP             \n" // r0 = MSP
+    "MRSNE  r0, PSP             \n" // else r0 = PSP
+#else
+    // Cortex-M0/M0+ (limited ISA)
     "MOV    r0, LR              \n" // r0 = LR
     "LSLS   r0, r0, #29         \n" // if (r0 & 4)
-    "BMI    .ELSE               \n"
+    "BMI    .use_psp_m0         \n" // else
     "MRS    r0, MSP             \n" // r0 = MSP
-    "BL     SVC_Handler_Main    \n"
-    ".ELSE:                     \n"
+    "B      .call_main_m0       \n"
+
+    ".use_psp_m0:               \n"
     "MRS    r0, PSP             \n" // else r0 = PSP
-    "BL     SVC_Handler_Main    \n");
+
+    ".call_main_m0:             \n"
 #endif
+
+    // even on Cortex-M3+, a long jump is safer when using LTO, we load address into register to allow far jump (>2KB)
+    "LDR    r1, =SVC_Handler_Main \n"
+    "BX     r1                  \n"
+
+    ".align 2                   \n"   // ensure literal pool is aligned
+    ".pool                      \n"); // ensure literal pool is reachable
 }
 
 static void OnTaskExit()
 {
-    uint32_t cs;
-    STK_CORTEX_M_CRITICAL_SECTION_START(cs);
-
+    GetContext().EnterCriticalSection();
     GetContext().m_handler->OnTaskExit(GetContext().m_stack_active);
-
-    STK_CORTEX_M_CRITICAL_SECTION_END(cs);
+    GetContext().ExitCriticalSection();
 
     for (;;)
     {
+        __DSB();
         __WFI(); // enter standby mode until time slot expires
+        __ISB();
     }
 }
 
@@ -449,7 +682,6 @@ static void OnSchedulerSleep()
 
         SCB->SCR &= ~SCB_SCR_SLEEPDEEP_Msk; // disable deep-sleep, go into a WAIT mode (sleep)
         __DSB();                            // ensure store takes effect (see ARM info)
-
         __WFI();                            // enter sleep mode
         __ISB();
     }
@@ -594,9 +826,19 @@ void PlatformArmCortexM::SwitchToNext()
     GetContext().m_handler->OnTaskSwitch(::GetCallerSP());
 }
 
-void PlatformArmCortexM::SleepTicks(uint32_t ticks)
+void PlatformArmCortexM::SleepTicks(Timeout ticks)
 {
     GetContext().m_handler->OnTaskSleep(::GetCallerSP(), ticks);
+}
+
+IWaitObject *PlatformArmCortexM::StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+{
+    return GetContext().m_handler->OnTaskWait(::GetCallerSP(), sync_obj, mutex, timeout);
+}
+
+TId PlatformArmCortexM::GetTid() const
+{
+    return GetContext().m_handler->OnGetTid(::GetCallerSP());
 }
 
 void PlatformArmCortexM::ProcessHardFault()
@@ -613,19 +855,27 @@ void PlatformArmCortexM::SetEventOverrider(IEventOverrider *overrider)
     GetContext().m_overrider = overrider;
 }
 
-size_t PlatformArmCortexM::GetCallerSP()
+size_t PlatformArmCortexM::GetCallerSP() const
 {
     return ::GetCallerSP();
 }
 
 void stk::EnterCriticalSection()
 {
-    GetContext().EnterCriticalSection();
+    // if we are in Handler or Privileged Thread Mode, we can skip the SVC and take the fast path
+    if (IsHandlerMode() || IsPrivilegedThreadMode())
+        GetContext().EnterCriticalSection();
+    else
+        GetContext().UnprivEnterCriticalSection();
 }
 
 void stk::ExitCriticalSection()
 {
-    GetContext().ExitCriticalSection();
+    // if we are in Handler or Privileged Thread Mode, we can skip the SVC and take the fast path
+    if (IsHandlerMode() || IsPrivilegedThreadMode())
+        GetContext().ExitCriticalSection();
+    else
+        GetContext().UnprivExitCriticalSection();
 }
 
 IKernelService *IKernelService::GetInstance()

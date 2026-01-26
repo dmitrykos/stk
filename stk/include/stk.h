@@ -93,17 +93,29 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         /*! \brief Default initializer.
         */
-        explicit KernelTask() : m_user(NULL), m_stack(), m_state(STATE_NONE), m_time_sleep(0),
+        explicit KernelTask() : m_user(nullptr), m_stack(), m_state(STATE_NONE), m_time_sleep(0),
             m_srt(), m_hrt(), m_rt_weight()
-        {}
+        {
+            // bind to wait object
+            if (_Mode & KERNEL_SYNC)
+                m_wait_obj->m_task = this;
+        }
 
         ITask *GetUserTask() { return m_user; }
 
         Stack *GetUserStack() { return &m_stack; }
 
-        bool IsBusy() const { return (m_user != NULL); }
+        bool IsBusy() const { return (m_user != nullptr); }
 
         bool IsSleeping() const { return (m_time_sleep < 0); }
+
+        void Wake()
+        {
+            STK_ASSERT(IsSleeping());
+
+            // wakeup on a next cycle
+            m_time_sleep = -1;
+        }
 
         void SetCurrentWeight(int32_t weight)
         {
@@ -114,21 +126,21 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         int32_t GetWeight() const { return (_TyStrategy::WEIGHT_API ? m_user->GetWeight() : 1); }
         int32_t GetCurrentWeight() const { return (_TyStrategy::WEIGHT_API ? m_rt_weight[0] : 1); }
 
-        int32_t GetHrtPeriodicity() const
+        Timeout GetHrtPeriodicity() const
         {
             STK_ASSERT(_Mode & KERNEL_HRT);
 
             return (_Mode & KERNEL_HRT ? m_hrt[0].periodicity : 0);
         }
 
-        int32_t GetHrtDeadline() const
+        Timeout GetHrtDeadline() const
         {
             STK_ASSERT(_Mode & KERNEL_HRT);
 
             return (_Mode & KERNEL_HRT ? m_hrt[0].deadline : 0);
         }
 
-        int32_t GetHrtRelativeDeadline() const
+        Timeout GetHrtRelativeDeadline() const
         {
             STK_ASSERT(_Mode & KERNEL_HRT);
             STK_ASSERT(!IsSleeping());
@@ -143,14 +155,14 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         struct SrtInfo
         {
-            SrtInfo() : add_task_req(NULL)
+            SrtInfo() : add_task_req(nullptr)
             {}
 
             /*! \brief     Clear values.
             */
             void Clear()
             {
-                add_task_req = NULL;
+                add_task_req = nullptr;
             }
 
             AddTaskRequest *add_task_req; //!< add task request made from another active task (see Kernel::AddTask)
@@ -175,10 +187,73 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
                 done        = false;
             }
 
-            int32_t periodicity; //!< scheduling periodicity (ticks)
-            int32_t deadline;    //!< work deadline (ticks)
-            int32_t duration;    //!< current duration of the active state when work is being carried out by the task (ticks)
+            Timeout periodicity; //!< scheduling periodicity (ticks)
+            Timeout deadline;    //!< work deadline (ticks)
+            Timeout duration;    //!< current duration of the active state when work is being carried out by the task (ticks)
             volatile bool done;  //!< true if task completed its work and called Yield()
+        };
+
+        /*! \class WaitObject
+            \brief Concrete implementation of the IWaitObject interface.
+            \note  Related to stk::KERNEL_SYNC mode only.
+        */
+        struct WaitObject : public IWaitObject
+        {
+            explicit WaitObject() : m_task(nullptr), m_sync_obj(nullptr), m_timeout(false), m_time_wait(0)
+            {}
+
+            /*! \class WaitRequest
+                \brief Serialized request for registration of ISyncObject.
+                \note  Related to stk::KERNEL_SYNC mode only.
+            */
+            struct WaitRequest
+            {
+                ISyncObject *sync_obj; //!< sync object to register
+            };
+
+            bool IsTimeout() const { return m_timeout; }
+
+            void Wake(bool timeout)
+            {
+                STK_ASSERT(m_sync_obj != nullptr);
+
+                m_timeout   = timeout;
+                m_time_wait = 0;
+
+                m_sync_obj->RemoveWaitObject(this);
+                m_sync_obj = nullptr;
+
+                return m_task->Wake();
+            }
+
+            bool Tick()
+            {
+                if ((m_time_wait != WAIT_INFINITE) && !m_timeout)
+                {
+                    --m_time_wait;
+
+                    if (m_time_wait <= 0)
+                        m_timeout = true;
+                }
+
+                return !m_timeout;
+            }
+
+            void SetupWait(ISyncObject *sync_obj, Timeout timeout)
+            {
+                STK_ASSERT(m_sync_obj == nullptr);
+
+                m_sync_obj  = sync_obj;
+                m_time_wait = timeout;
+                m_timeout   = false;
+
+                sync_obj->AddWaitObject(this);
+            }
+
+            KernelTask   *m_task;      //!< waiting task
+            ISyncObject  *m_sync_obj;  //!< synchronization object which caused waiting
+            volatile bool m_timeout;   //!< true if timeout happened due to waiting
+            Timeout       m_time_wait; //!< number of ticks left till timeout
         };
 
         /*! \brief     Release variables from info about previous task.
@@ -207,7 +282,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void Unbind()
         {
-            m_user       = NULL;
+            m_user       = nullptr;
             m_stack      = {};
             m_state      = STATE_NONE;
             m_time_sleep = 0;
@@ -215,7 +290,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             if (_Mode & KERNEL_HRT)
                 m_hrt[0].Clear();
             else
-                m_srt[0].Clear();
+                m_srt->Clear();
         }
 
         /*! \brief     Schedule the removal of the task from the kernel on next tick.
@@ -254,7 +329,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
             \param[in] start_delay_tc: Initial start delay for the task (ticks).
         */
-        void HrtInit(uint32_t periodicity_tc, uint32_t deadline_tc, int32_t start_delay_tc)
+        void HrtInit(Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc)
         {
             STK_ASSERT(periodicity_tc > 0);
             STK_ASSERT(deadline_tc > 0);
@@ -282,11 +357,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void HrtOnSwitchedOut(IPlatform */*platform*/)
         {
-            const int32_t duration = m_hrt[0].duration;
+            const Timeout duration = m_hrt[0].duration;
 
             STK_ASSERT(duration >= 0);
 
-            int32_t sleep = m_hrt[0].periodicity - duration;
+            Timeout sleep = m_hrt[0].periodicity - duration;
             if (sleep > 0)
                 ScheduleSleep(sleep);
 
@@ -300,7 +375,7 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         */
         void HrtHardFailDeadline(IPlatform *platform)
         {
-            const int32_t duration = m_hrt[0].duration;
+            const Timeout duration = m_hrt[0].duration;
 
             STK_ASSERT(duration >= 0);
             STK_ASSERT(HrtIsDeadlineMissed(duration));
@@ -312,17 +387,21 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         /*! \brief     Called when task process called IKernelService::SwitchToNext to inform Kernel that work is completed.
             \note      Related to stk::KERNEL_HRT mode only.
         */
-        void HrtOnWorkCompleted() { m_hrt[0].done = true; }
+        void HrtOnWorkCompleted()
+        {
+            m_hrt[0].done = true;
+            __stk_full_memfence();
+        }
 
         /*! \brief     Check if deadline missed.
             \note      Related to stk::KERNEL_HRT mode only.
         */
-        bool HrtIsDeadlineMissed(int32_t duration) const { return (duration > m_hrt[0].deadline); }
+        bool HrtIsDeadlineMissed(Timeout duration) const { return (duration > m_hrt[0].deadline); }
 
         /*! \brief     Schedule task to sleep.
             \param[in] ticks: Number of ticks to sleep.
         */
-        void ScheduleSleep(int32_t ticks)
+        void ScheduleSleep(Timeout ticks)
         {
             STK_ASSERT(ticks > 0);
 
@@ -334,15 +413,17 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             }
 
             m_time_sleep = -ticks;
+            __stk_full_memfence();
         }
 
         ITask            *m_user;       //!< user task
         Stack             m_stack;      //!< stack descriptor
         volatile uint32_t m_state;      //!< state flags
-        volatile int32_t  m_time_sleep; //!< time to sleep (ticks)
-        SrtInfo           m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)]; //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
-        HrtInfo           m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)]; //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
-        int32_t           m_rt_weight[_TyStrategy::WEIGHT_API ? 1 : 0];       //!< current (run-time) weight, see SwitchStrategySmoothWeightedRoundRobin
+        volatile Timeout  m_time_sleep; //!< time to sleep (ticks)
+        SrtInfo           m_srt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 0, 1)];       //!< Soft Real-Time info (does not occupy memory if kernel operation mode is stk::KERNEL_HRT)
+        HrtInfo           m_hrt[STK_ALLOCATE_COUNT(_Mode, KERNEL_HRT, 1, 0)];       //!< Hard Real-Time info (does not occupy memory if kernel operation mode is not stk::KERNEL_HRT)
+        int32_t           m_rt_weight[_TyStrategy::WEIGHT_API ? 1 : 0];             //!< current (run-time) weight, see SwitchStrategySmoothWeightedRoundRobin
+        WaitObject        m_wait_obj[STK_ALLOCATE_COUNT(_Mode, KERNEL_SYNC, 1, 0)]; //!< wait object (synchronization support)
     };
 
     /*! \class KernelService
@@ -353,13 +434,13 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
         friend class Kernel;
 
     public:
-        size_t GetTid() const { return m_platform->GetCallerSP(); }
+        TId GetTid() const { return m_platform->GetTid(); }
 
         int64_t GetTicks() const { return m_ticks; }
 
         int32_t GetTickResolution() const  { return m_platform->GetTickResolution(); }
 
-        __stk_attr_noinline void Delay(uint32_t msec) const
+        __stk_attr_noinline void Delay(Timeout msec) const
         {
             int64_t deadline = GetTicks() + GetTicksFromMsec(msec, GetTickResolution());
             while (GetTicks() < deadline)
@@ -368,11 +449,11 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             }
         }
 
-        __stk_attr_noinline void Sleep(uint32_t msec)
+        __stk_attr_noinline void Sleep(Timeout msec)
         {
             if ((_Mode & KERNEL_HRT) == 0)
             {
-                m_platform->SleepTicks((uint32_t)GetTicksFromMsec(msec, GetTickResolution()));
+                m_platform->SleepTicks((Timeout)GetTicksFromMsec(msec, GetTickResolution()));
             }
             else
             {
@@ -383,10 +464,24 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         void SwitchToNext() { m_platform->SwitchToNext(); }
 
+        IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout ticks)
+        {
+            if (_Mode & KERNEL_SYNC)
+            {
+                return m_platform->StartWaiting(sobj, mutex, ticks);
+            }
+            else
+            {
+                STK_ASSERT(false);
+                return nullptr;
+            }
+        }
+
     private:
         /*! \brief     Default initializer.
         */
-        explicit KernelService() : m_platform(0), m_ticks(0) {}
+        explicit KernelService() : m_platform(0), m_ticks(0)
+        {}
 
         /*! \brief     Initialize instance.
             \note      When call completes Singleton<IKernelService *> will start referencing this
@@ -416,7 +511,7 @@ public:
 
     /*! \brief Default initializer.
     */
-    explicit Kernel() : m_platform(), m_strategy(), m_task_now(NULL), m_task_storage(), m_sleep_trap(),
+    explicit Kernel() : m_platform(), m_strategy(), m_task_now(nullptr), m_task_storage(), m_sleep_trap(),
         m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(~0)
     {
         // HRT mode does not support scheduling strategy with task weights
@@ -440,19 +535,19 @@ public:
         STK_ASSERT(resolution_us <= PERIODICITY_MAX);
         STK_ASSERT(!IsInitialized());
 
-        m_task_now  = NULL;
+        m_task_now  = nullptr;
         m_fsm_state = FSM_STATE_NONE;
         m_request   = REQUEST_NONE;
 
         m_service.Initialize(&m_platform);
-        m_platform.Initialize(this, &m_service, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : NULL));
+        m_platform.Initialize(this, &m_service, resolution_us, (_Mode & KERNEL_DYNAMIC ? &m_exit_trap[0].stack : nullptr));
     }
 
     __stk_attr_noinline void AddTask(ITask *user_task)
     {
         if ((_Mode & KERNEL_HRT) == 0)
         {
-            STK_ASSERT(user_task != NULL);
+            STK_ASSERT(user_task != nullptr);
             STK_ASSERT(IsInitialized());
 
             // when started the operation must be serialized by switching out from processing until
@@ -479,11 +574,11 @@ public:
         }
     }
 
-    __stk_attr_noinline void AddTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc)
+    __stk_attr_noinline void AddTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc)
     {
         if (_Mode & KERNEL_HRT)
         {
-            STK_ASSERT(user_task != NULL);
+            STK_ASSERT(user_task != nullptr);
             STK_ASSERT(IsInitialized());
             STK_ASSERT(!IsStarted());
 
@@ -499,11 +594,11 @@ public:
     {
         if (_Mode & KERNEL_DYNAMIC)
         {
-            STK_ASSERT(user_task != NULL);
+            STK_ASSERT(user_task != nullptr);
             STK_ASSERT(!IsStarted());
 
             KernelTask *task = FindTask(user_task);
-            if (task != NULL)
+            if (task != nullptr)
                 RemoveTask(task);
         }
         else
@@ -517,7 +612,7 @@ public:
     {
         STK_ASSERT(IsInitialized());
 
-        m_task_now = NULL;
+        m_task_now = nullptr;
 
          // stacks of the traps must be re-initilized on every subsequent Start
         InitTraps();
@@ -536,7 +631,7 @@ public:
         m_platform.Start();
     }
 
-    bool IsStarted() const { return (m_task_now != NULL); }
+    bool IsStarted() const { return (m_task_now != nullptr); }
 
     IPlatform *GetPlatform() { return &m_platform; }
 
@@ -582,7 +677,7 @@ protected:
             sleep.stack.tid  = SYS_TASK_ID_SLEEP;
         #endif
 
-            m_platform.InitStack(STACK_SLEEP_TRAP, &sleep.stack, &wrapper, NULL);
+            m_platform.InitStack(STACK_SLEEP_TRAP, &sleep.stack, &wrapper, nullptr);
         }
 
         // init stack for an Exit trap
@@ -596,7 +691,7 @@ protected:
             exit.stack.tid  = SYS_TASK_ID_EXIT;
         #endif
 
-            m_platform.InitStack(STACK_EXIT_TRAP, &exit.stack, &wrapper, NULL);
+            m_platform.InitStack(STACK_EXIT_TRAP, &exit.stack, &wrapper, nullptr);
         }
     }
 
@@ -607,7 +702,7 @@ protected:
     KernelTask *AllocateNewTask(ITask *user_task)
     {
         // look for a free kernel task
-        KernelTask *new_task = NULL;
+        KernelTask *new_task = nullptr;
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
@@ -620,7 +715,7 @@ protected:
                 STK_ASSERT(task->m_user->GetStack() != user_task->GetStack());
             }
             else
-            if (new_task == NULL)
+            if (new_task == nullptr)
             {
                 new_task = task;
             #if defined(NDEBUG) && !defined(_STK_ASSERT_REDIRECT)
@@ -629,8 +724,8 @@ protected:
             }
         }
 
-        // if NULL - exceeded max supported kernel task count, application design failure
-        STK_ASSERT(new_task != NULL);
+        // if nullptr - exceeded max supported kernel task count, application design failure
+        STK_ASSERT(new_task != nullptr);
 
         new_task->Bind(&m_platform, user_task);
 
@@ -659,7 +754,7 @@ protected:
     void AllocateAndAddNewTask(ITask *user_task)
     {
         KernelTask *task = AllocateNewTask(user_task);
-        STK_ASSERT(task != NULL);
+        STK_ASSERT(task != nullptr);
 
         AddKernelTask(task);
     }
@@ -672,10 +767,10 @@ protected:
         \param[in] start_delay_tc: Initial start delay for the task (ticks).
         \return    Kernel task.
     */
-    void HrtAllocateAndAddNewTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc)
+    void HrtAllocateAndAddNewTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc)
     {
         KernelTask *task = AllocateNewTask(user_task);
-        STK_ASSERT(task != NULL);
+        STK_ASSERT(task != nullptr);
 
         task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
 
@@ -691,7 +786,7 @@ protected:
         STK_ASSERT(_Mode & KERNEL_DYNAMIC);
 
         KernelTask *caller = FindTaskBySP(m_platform.GetCallerSP());
-        STK_ASSERT(caller != NULL);
+        STK_ASSERT(caller != nullptr);
 
         typename KernelTask::AddTaskRequest req = { .user_task = user_task };
         caller->m_srt[0].add_task_req = &req;
@@ -700,11 +795,10 @@ protected:
         ScheduleAddTask();
 
         // switch out and wait for completion (due to context switch request could be processed here)
-        __stk_full_memfence();
-        if (caller->m_srt[0].add_task_req != NULL)
+        if (caller->m_srt[0].add_task_req != nullptr)
             m_platform.SwitchToNext();
 
-        STK_ASSERT(caller->m_srt[0].add_task_req == NULL);
+        STK_ASSERT(caller->m_srt[0].add_task_req == nullptr);
     }
 
     /*! \brief     Find kernel task for the bound ITask instance.
@@ -720,39 +814,39 @@ protected:
                 return task;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     /*! \brief     Find kernel task for the bound Stack instance.
         \param[in] stack: Stack.
         \return    Kernel task.
     */
-    KernelTask *FindTask(const Stack *stack)
+    KernelTask *FindTask(const Stack *stack) const
     {
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
-            KernelTask *task = &m_task_storage[i];
+            KernelTask *task = const_cast<KernelTask *>(&m_task_storage[i]);
             if (task->GetUserStack() == stack)
                 return task;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     /*! \brief     Find kernel task for a Stack Pointer (SP).
         \param[in] SP: Stack pointer.
         \return    Kernel task.
     */
-    __stk_attr_noinline KernelTask *FindTaskBySP(size_t SP)
+    __stk_attr_noinline KernelTask *FindTaskBySP(size_t SP) const
     {
-        STK_ASSERT(m_task_now != NULL);
+        STK_ASSERT(m_task_now != nullptr);
 
         if (m_task_now->IsMemoryOfSP(SP))
             return m_task_now;
 
         for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
-            KernelTask *task = &m_task_storage[i];
+            KernelTask *task = const_cast<KernelTask *>(&m_task_storage[i]);
 
             // skip finished tasks (applicable only for KERNEL_DYNAMIC mode)
             if ((_Mode & KERNEL_DYNAMIC) && !task->IsBusy())
@@ -762,7 +856,7 @@ protected:
                 return task;
         }
 
-        return NULL;
+        return nullptr;
     }
 
     /*! \brief     Remove kernel task.
@@ -771,7 +865,7 @@ protected:
     */
     void RemoveTask(KernelTask *task)
     {
-        STK_ASSERT(task != NULL);
+        STK_ASSERT(task != nullptr);
 
     #if STK_SEGGER_SYSVIEW
         SEGGER_SYSVIEW_OnTaskTerminate(task->GetUserStack()->tid);
@@ -788,7 +882,7 @@ protected:
         // iterate tasks and generate OnTaskSleep for a strategy for all initially sleeping tasks
         if (_TyStrategy::SLEEP_EVENT_API)
         {
-            for (int32_t i = 0; i < TASKS_MAX; ++i)
+            for (uint32_t i = 0; i < TASKS_MAX; ++i)
             {
                 KernelTask *task = &m_task_storage[i];
 
@@ -809,7 +903,7 @@ protected:
         {
             m_fsm_state = FSM_STATE_SWITCHING;
 
-            KernelTask *next = NULL;
+            KernelTask *next = nullptr;
             m_fsm_state = GetNewFsmState(&next);
 
             // expecting only SLEEPING or SWITCHING states
@@ -849,10 +943,10 @@ protected:
         OnTaskSleep(caller_SP, 2);
     }
 
-    void OnTaskSleep(size_t caller_SP, int32_t ticks)
+    void OnTaskSleep(size_t caller_SP, Timeout ticks)
     {
         KernelTask *task = FindTaskBySP(caller_SP);
-        STK_ASSERT(task != NULL);
+        STK_ASSERT(task != nullptr);
 
         if (_Mode & KERNEL_HRT)
         {
@@ -861,6 +955,7 @@ protected:
 
         task->ScheduleSleep(ticks);
 
+        // note: we do not spin long here, kernel will switch this task out from scheduling on the next tick
         while (task->IsSleeping())
         {
             __stk_relax_cpu();
@@ -872,7 +967,7 @@ protected:
         if (_Mode & KERNEL_DYNAMIC)
         {
             KernelTask *task = FindTask(stack);
-            STK_ASSERT(task != NULL);
+            STK_ASSERT(task != nullptr);
 
             task->ScheduleRemoval();
         }
@@ -883,10 +978,65 @@ protected:
         }
     }
 
+    IWaitObject *OnTaskWait(size_t caller_SP, ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+    {
+        if (_Mode & KERNEL_SYNC)
+        {
+            STK_ASSERT(timeout != 0);
+            STK_ASSERT(sync_obj != nullptr);
+            STK_ASSERT(mutex != nullptr);
+            STK_ASSERT((sync_obj->GetHead() == nullptr) || (sync_obj->GetHead() == &m_sync_list[0]));
+
+            KernelTask *task = FindTaskBySP(caller_SP);
+            STK_ASSERT(task != nullptr);
+
+            // configure waiting
+            task->m_wait_obj->SetupWait(sync_obj, timeout);
+
+            // register ISyncObject if not yet
+            if (sync_obj->GetHead() == nullptr)
+                m_sync_list->LinkBack(sync_obj);
+
+            // start sleeping infinitely, we rely on a Wake call via WaitObject
+            task->ScheduleSleep(WAIT_INFINITE);
+
+            // unlock mutex locked externally, so that we could wait in a busy-waiting loop
+            mutex->Unlock();
+
+            // note: we do not spin long here, kernel will switch this task out from scheduling on the next tick
+            while (task->IsSleeping())
+            {
+                __stk_relax_cpu();
+            }
+
+            // re-lock mutex when returning to the task's execution space
+            mutex->Lock();
+
+            return task->m_wait_obj;
+        }
+        else
+        {
+            STK_ASSERT(false);
+            return nullptr;
+        }
+    }
+
+    TId OnGetTid(size_t caller_SP) const
+    {
+        KernelTask *task = FindTaskBySP(caller_SP);
+        STK_ASSERT(task != nullptr);
+
+        return reinterpret_cast<TId>(task->GetUserTask());
+    }
+
     /*! \brief     Update tasks (sleep, requests).
     */
     void UpdateTasks()
     {
+        // sync objects are updated before UpdateTaskRequest which may add a new object (newly added object must become 1 tick older)
+        if (_Mode & KERNEL_SYNC)
+            UpdateSyncObjects();
+
         UpdateTaskRequest();
         UpdateTaskState();
     }
@@ -895,20 +1045,7 @@ protected:
     */
     void UpdateTaskState()
     {
-        // deliver sleep event to strategy
-        // note: only currently scheduled task can be pending to sleep
-        if (_TyStrategy::SLEEP_EVENT_API && (m_task_now != NULL))
-        {
-            if (m_task_now->m_state & KernelTask::STATE_SLEEP_PENDING)
-            {
-                m_task_now->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
-
-                // notify strategy that task is sleeping
-                m_strategy.OnTaskSleep(m_task_now);
-            }
-        }
-
-        for (int32_t i = 0; i < TASKS_MAX; ++i)
+        for (uint32_t i = 0; i < TASKS_MAX; ++i)
         {
             KernelTask *task = &m_task_storage[i];
 
@@ -928,6 +1065,19 @@ protected:
                     }
                 }
 
+                // deliver sleep event to strategy
+                // note: only currently scheduled task can be pending to sleep
+                if (_TyStrategy::SLEEP_EVENT_API)
+                {
+                    if (task->m_state & KernelTask::STATE_SLEEP_PENDING)
+                    {
+                        task->m_state &= ~KernelTask::STATE_SLEEP_PENDING;
+
+                        // notify strategy that task is sleeping
+                        m_strategy.OnTaskSleep(task);
+                    }
+                }
+
                 // advance sleep time by a tick
                 ++task->m_time_sleep;
 
@@ -935,7 +1085,7 @@ protected:
                 if (_TyStrategy::SLEEP_EVENT_API)
                 {
                     // notify strategy that task woke up
-                    if (task->m_time_sleep == 0)
+                    if (task->m_time_sleep >= 0)
                         m_strategy.OnTaskWake(task);
                 }
             }
@@ -955,6 +1105,25 @@ protected:
         }
     }
 
+    /*! \brief     Update synchronization objects.
+    */
+    void UpdateSyncObjects()
+    {
+        STK_ASSERT(_Mode & KERNEL_SYNC);
+
+        ISyncObject::ListEntryType *itr = m_sync_list->GetFirst();
+
+        while (itr != nullptr)
+        {
+            ISyncObject::ListEntryType *next = itr->GetNext();
+
+            if (!static_cast<ISyncObject *>(itr)->Tick())
+                m_sync_list->Unlink(itr);
+
+            itr = next;
+        }
+    }
+
     /*! \brief     Update pending task requests.
     */
     void UpdateTaskRequest()
@@ -962,23 +1131,29 @@ protected:
         if (m_request == REQUEST_NONE)
             return;
 
-        for (int32_t i = 0; i < TASKS_MAX; ++i)
+        // process AddTask requests coming from tasks (KERNEL_DYNAMIC mode only)
+        if (!(_Mode & KERNEL_HRT) && (_Mode & KERNEL_DYNAMIC))
         {
-            KernelTask *task = &m_task_storage[i];
-
             // process serialized AddTask request made from another active task, requesting process
             // is currently waiting due to SwitchToNext()
-            if (((_Mode & KERNEL_HRT) == 0) && ((_Mode & KERNEL_DYNAMIC) != 0))
+            if (m_request & REQUEST_ADD_TASK)
             {
-                if (task->m_srt[0].add_task_req != NULL)
+                m_request &= ~REQUEST_ADD_TASK;
+
+                for (uint32_t i = 0; i < TASKS_MAX; ++i)
                 {
-                    AllocateAndAddNewTask(task->m_srt[0].add_task_req->user_task);
-                    task->m_srt[0].add_task_req = NULL;
+                    KernelTask *task = &m_task_storage[i];
+
+                    if (task->m_srt[0].add_task_req != nullptr)
+                    {
+                        AllocateAndAddNewTask(task->m_srt[0].add_task_req->user_task);
+
+                        task->m_srt[0].add_task_req = nullptr;
+                        __stk_full_memfence();
+                    }
                 }
             }
         }
-
-        m_request = REQUEST_NONE;
     }
 
     /*! \brief     Fetch next event for the FSM.
@@ -993,15 +1168,15 @@ protected:
         // check if no tasks left in Dynamic mode and exit
         if ((_Mode & KERNEL_DYNAMIC) && (m_strategy.GetSize() == 0))
         {
-            itr  = NULL;
+            itr  = nullptr;
             type = FSM_EVENT_EXIT;
         }
         else
         {
             itr = static_cast<KernelTask *>(m_strategy.GetNext());
 
-            // sleep-aware strategy returns NULL if no active tasks available, start sleeping
-            if (itr == NULL)
+            // sleep-aware strategy returns nullptr if no active tasks available, start sleeping
+            if (itr == nullptr)
             {
                 type = FSM_EVENT_SLEEP;
             }
@@ -1075,8 +1250,8 @@ protected:
     */
     bool StateSwitch(KernelTask *now, KernelTask *next, Stack **idle, Stack **active)
     {
-        STK_ASSERT(now != NULL);
-        STK_ASSERT(next != NULL);
+        STK_ASSERT(now != nullptr);
+        STK_ASSERT(next != nullptr);
 
         // do not switch context because task did not change
         if (next == now)
@@ -1088,7 +1263,7 @@ protected:
         // if stack memory is exceeded these assertions will be hit
         if (now->IsBusy())
         {
-            // current task could exit, thus we check it with IsBusy to avoid referencing NULL returned by GetUserTask()
+            // current task could exit, thus we check it with IsBusy to avoid referencing nullptr returned by GetUserTask()
             STK_ASSERT(now->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
         }
         STK_ASSERT(next->GetUserTask()->GetStack()[0] == STK_STACK_MEMORY_FILLER);
@@ -1123,7 +1298,7 @@ protected:
     {
         (void)now;
 
-        STK_ASSERT(next != NULL);
+        STK_ASSERT(next != nullptr);
 
         (*idle)   = &m_sleep_trap[0].stack;
         (*active) = next->GetUserStack();
@@ -1157,7 +1332,7 @@ protected:
     {
         (void)next;
 
-        STK_ASSERT(now != NULL);
+        STK_ASSERT(now != nullptr);
         STK_ASSERT(m_sleep_trap[0].stack.SP != 0);
 
         (*idle)   = now->GetUserStack();
@@ -1196,10 +1371,10 @@ protected:
             // dynamic tasks are not supported if main processes's stack memory is not provided in Start()
             STK_ASSERT(m_exit_trap[0].stack.SP != 0);
 
-            (*idle)   = NULL;
+            (*idle)   = nullptr;
             (*active) = &m_exit_trap[0].stack;
 
-            m_task_now = NULL;
+            m_task_now = nullptr;
 
             m_platform.Stop();
         }
@@ -1219,7 +1394,11 @@ protected:
 
     /*! \brief     Schedule processing of the add task request.
     */
-    void ScheduleAddTask() { m_request |= REQUEST_ADD_TASK; }
+    void ScheduleAddTask()
+    {
+        m_request |= REQUEST_ADD_TASK;
+        __stk_full_memfence();
+    }
 
 #if STK_SEGGER_SYSVIEW
     /*! \brief      Send task trace info.
@@ -1277,15 +1456,21 @@ protected:
         Memory memory; //!< stack memory
     };
 
-    KernelService   m_service;         //!< run-time kernel service
-    _TyPlatform     m_platform;        //!< platform driver
-    _TyStrategy     m_strategy;        //!< task switching strategy
-    KernelTask     *m_task_now;        //!< current task task
-    TaskStorageType m_task_storage;    //!< task storage
-    TrapStack       m_sleep_trap[1];   //!< sleep trap
-    TrapStack       m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
-    EFsmState       m_fsm_state;       //!< FSM state
-    uint32_t        m_request;         //!< pending requests from the tasks
+    /*! \typedef WaitObjectList
+        \brief   List of wait objects.
+    */
+    typedef ISyncObject::ListHeadType SyncObjectList;
+
+    KernelService     m_service;         //!< run-time kernel service
+    _TyPlatform       m_platform;        //!< platform driver
+    _TyStrategy       m_strategy;        //!< task switching strategy
+    KernelTask       *m_task_now;        //!< current task task
+    TaskStorageType   m_task_storage;    //!< task storage
+    TrapStack         m_sleep_trap[1];   //!< sleep trap
+    TrapStack         m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    EFsmState         m_fsm_state;       //!< FSM state
+    volatile uint32_t m_request;         //!< pending requests from the tasks
+    SyncObjectList    m_sync_list[STK_ALLOCATE_COUNT(_Mode, KERNEL_SYNC, 1, 0)]; //!< list of sync objects
 
     const EFsmState m_fsm[FSM_STATE_MAX][FSM_EVENT_MAX] = {
     //    FSM_EVENT_SWITCH     FSM_EVENT_SLEEP     FSM_EVENT_WAKE    FSM_EVENT_EXIT

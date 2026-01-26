@@ -50,7 +50,7 @@ __stk_forceinline void SetTlsPtr(const _TyTls *tp)
 }
 
 /*! \class ScopedCriticalSection
-    \brief Enters critical section and exits from it autmatically within the scope of execution.
+    \brief Enters critical section and exits from it automatically within the scope of execution.
 
     Usage example:
     \code

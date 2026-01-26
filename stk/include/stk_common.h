@@ -21,6 +21,7 @@ namespace stk {
 
 // Forward declarations:
 class IKernelService;
+class IKernelTask;
 
 /*! \typedef RunFuncType
     \brief   User task main entry function prototype.
@@ -44,6 +45,7 @@ enum EKernelMode
     KERNEL_STATIC  = (1 << 0), //!< All tasks are static and can not exit.
     KERNEL_DYNAMIC = (1 << 1), //!< Tasks can be added or removed and therefore exit when done.
     KERNEL_HRT     = (1 << 2), //!< Hard Real-Time (HRT) behavior (tasks are scheduled periodically and have an execution deadline, whole system is failed when task's deadline is failed).
+    KERNEL_SYNC    = (1 << 3), //!< Synchronization support (see \a Event).
 };
 
 /*! \enum  EStackType
@@ -86,6 +88,21 @@ enum ETraceEventId
     TRACE_EVENT_SLEEP   = 1000 + 2
 };
 
+/*! \typedef ThreadId
+    \brief   Task/thread id.
+*/
+typedef size_t TId;
+
+/*! \typedef Timeout
+    \brief   Timeout time (ticks).
+*/
+typedef int32_t Timeout;
+
+/*! \typedef WAIT_INFINITE
+    \brief   Infinite timeout time (ticks).
+*/
+const Timeout WAIT_INFINITE = INT32_MAX;
+
 /*! \class StackMemoryDef
     \brief Stack memory type definition.
     \note  This descriptor provides an encapsulated type only on basis of which you can declare
@@ -111,10 +128,10 @@ template <uint32_t _StackSize> struct StackMemoryDef
 */
 struct Stack
 {
-    size_t      SP;   //!< Stack Pointer (SP) register
+    size_t      SP;   //!< Stack Pointer (SP) register (note: must be the first entry in this struct)
     EAccessMode mode; //!< access mode
 #if STK_NEED_TASK_ID
-    uint32_t    tid;  //!< task id (see \a STK_SEGGER_SYSVIEW)
+    TId        tid;  //!< task id (see \a STK_SEGGER_SYSVIEW)
 #endif
 };
 
@@ -135,6 +152,189 @@ public:
     /*! \brief Get size of the memory in bytes.
     */
     virtual uint32_t GetStackSizeBytes() const = 0;
+};
+
+/*! \class IWaitObject
+    \brief Wait object.
+*/
+class IWaitObject : public util::DListEntry<IWaitObject, false>
+{
+public:
+    /*! \typedef   ListHeadType
+        \brief     List head type for IWaitObject elements.
+    */
+    typedef DLHeadType ListHeadType;
+
+    /*! \typedef   ListEntryType
+        \brief     List entry type of IWaitObject elements.
+    */
+    typedef DLEntryType ListEntryType;
+
+    /*! \brief     Wake task.
+        \param[in] timeout: Set \a true if task is waking due to a timeout, otherwise \a false.
+    */
+    virtual void Wake(bool timeout) = 0;
+
+    /*! \brief     Check if task woke up due to a timeout.
+        \return    Returns \a true if timeout, \a false otherwise.
+    */
+    virtual bool IsTimeout() const = 0;
+
+    /*! \brief     Update wait object's waiting time.
+        \return    Returns \a true if update caused a timeout of the object, \a false otherwise.
+    */
+    virtual bool Tick() = 0;
+};
+
+/*! \class ITraceable
+    \brief Traceable object.
+    \note  Used for debugging and tracing by tools like SEGGER SystemView. See \a STK_SYNC_DEBUG_NAMES.
+*/
+class ITraceable
+{
+public:
+#if STK_SYNC_DEBUG_NAMES
+    ITraceable() : m_trace_name(nullptr)
+    {}
+#endif
+
+    /*! \brief     Set name.
+        \param[in] name: Null-terminated string or \c nullptr.
+        \note      If STK_SYNC_DEBUG_NAMES is 0 then calling this function has no effect.
+    */
+    void SetTraceName(const char *name)
+    {
+    #if STK_SYNC_DEBUG_NAMES
+        m_trace_name = name;
+    #else
+        (void)name;
+    #endif
+    }
+
+    /*! \brief     Get name.
+        \return    Name string or NULL if not set.
+        \note      If STK_SYNC_DEBUG_NAMES is 0 then it will always return nullptr.
+    */
+    const char *GetTraceName() const
+    {
+    #if STK_SYNC_DEBUG_NAMES
+        return (m_trace_name != nullptr ? m_trace_name : nullptr);
+    #else
+        return nullptr;
+    #endif
+    }
+
+protected:
+#if STK_SYNC_DEBUG_NAMES
+    const char *m_trace_name; //!< name (debug/tracing only)
+#endif
+};
+
+/*! \class ISyncObject
+    \brief Synchronization object.
+*/
+class ISyncObject : public util::DListEntry<ISyncObject, false>
+{
+public:
+    /*! \typedef   ListHeadType
+        \brief     List head type for ISyncObject elements.
+    */
+    typedef DLHeadType ListHeadType;
+
+    /*! \typedef   ListEntryType
+        \brief     List entry type of ISyncObject elements.
+    */
+    typedef DLEntryType ListEntryType;
+
+    /*! \brief     Called by kernel when a new task starts waiting on this event.
+        \param[in] wobj: Wait object representing blocked task.
+    */
+    virtual void AddWaitObject(IWaitObject *wobj)
+    {
+        STK_ASSERT(wobj->GetHead() == nullptr);
+        m_wait_list.LinkBack(wobj);
+    }
+
+    /*! \brief     Called by kernel when a waiting task is being removed (timeout expired, wait aborted, task terminated etc.).
+        \param[in] wobj: Wait object to remove from the wait list.
+    */
+    virtual void RemoveWaitObject(IWaitObject *wobj)
+    {
+        STK_ASSERT(wobj->GetHead() == &m_wait_list);
+        m_wait_list.Unlink(wobj);
+    }
+
+    /*! \brief     Called by kernel on every system tick to handle timeout logic of waiting tasks.
+        \return    \c true if this synchronization object still needs tick processing (i.e. has waiters with finite timeout),
+                   \c false if no further tick calls are required.
+    */
+    virtual bool Tick()
+    {
+        IWaitObject *itr = static_cast<IWaitObject *>(m_wait_list.GetFirst());
+
+        while (itr != nullptr)
+        {
+            IWaitObject *next = static_cast<IWaitObject *>(itr->GetNext());
+
+            if (!itr->Tick())
+                itr->Wake(true);
+
+            itr = next;
+        }
+
+        return !m_wait_list.IsEmpty();
+    }
+
+protected:
+    /*! \brief     Constructor.
+        \note      Can not be standalone object, must be inherited by the implementation.
+    */
+    explicit ISyncObject() : m_wait_list()
+    {}
+
+    void WakeOne()
+    {
+        if (!m_wait_list.IsEmpty())
+            static_cast<IWaitObject *>(m_wait_list.GetFirst())->Wake(false);
+    }
+
+    void WakeAll()
+    {
+        while (!m_wait_list.IsEmpty())
+            static_cast<IWaitObject *>(m_wait_list.GetFirst())->Wake(false);
+    }
+
+    IWaitObject::ListHeadType m_wait_list; //!< tasks blocked on this object
+};
+
+/*! \class IMutex
+    \brief Interface for mutex synchronization primitive.
+    \note  Implementations may be either recursive or non-recursive.
+*/
+class IMutex
+{
+public:
+    /*! \class ScopedLock
+        \brief Locks bound mutex within a scope of execution. Ensures the mutex is always unlocked
+               when leaving the scope, even when exceptions are thrown.
+        \note  RAII
+    */
+    class ScopedLock
+    {
+    public:
+        explicit ScopedLock(IMutex &mutex) : m_mutex(mutex) { m_mutex.Lock(); }
+        ~ScopedLock() { m_mutex.Unlock(); }
+    private:
+        IMutex &m_mutex;
+    };
+
+    /*! \brief Lock the mutex.
+    */
+    virtual void Lock() = 0;
+
+    /*! \brief Unlock the mutex.
+    */
+    virtual void Unlock() = 0;
 };
 
 /*! \class ITask
@@ -235,27 +435,32 @@ public:
         \see       SwitchStrategySmoothWeightedRoundRobin
         \note      Weight API
     */
-    virtual int32_t GetCurrentWeight() const = 0;
+    virtual Timeout GetCurrentWeight() const = 0;
 
     /*! \brief     Get HRT task execution periodicity.
         \return    Periodicity of the task (ticks).
     */
-    virtual int32_t GetHrtPeriodicity() const = 0;
+    virtual Timeout GetHrtPeriodicity() const = 0;
 
     /*! \brief     Get HRT task deadline (max allowed task execution time).
       \return      Deadline of the task (ticks).
     */
-    virtual int32_t GetHrtDeadline() const = 0;
+    virtual Timeout GetHrtDeadline() const = 0;
+
+    /*! \brief     Get HRT task's relative deadline.
+      \return      Relative deadline of the task (ticks).
+    */
+    virtual Timeout GetHrtRelativeDeadline() const = 0;
 
     /*! \brief     Check whether the task is currently sleeping.
         \return    True if the task is sleeping, false otherwise.
     */
     virtual bool IsSleeping() const = 0;
 
-    /*! \brief     Get HRT task's relative deadline.
-      \return      Relative deadline of the task (ticks).
+    /*! \brief     Wake task from sleeping.
+        \note      Does nothing if not sleeping.
     */
-    virtual int32_t GetHrtRelativeDeadline() const = 0;
+    virtual void Wake() = 0;
 };
 
 /*! \class IPlatform
@@ -302,12 +507,26 @@ public:
             \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
             \param[in]  ticks: Time to sleep (ticks).
         */
-        virtual void OnTaskSleep(size_t caller_SP, int32_t ticks) = 0;
+        virtual void OnTaskSleep(size_t caller_SP, Timeout ticks) = 0;
 
         /*! \brief      Called from the Thread process when task finished (its Run function exited by return).
             \param[out] stack: Stack of the exited task.
         */
         virtual void OnTaskExit(Stack *stack) = 0;
+
+        /*! \brief      Called from the Thread process when task needs to wait.
+            \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
+            \param[in]  sync_obj: ISyncObject instance (passed by StartWaiting).
+            \param[in]  mutex: IMutex instance (passed by StartWaiting).
+            \param[in]  timeout: Time to sleep (ticks).
+        */
+        virtual IWaitObject *OnTaskWait(size_t caller_SP, ISyncObject *sync_obj, IMutex *mutex, Timeout timeout) = 0;
+
+        /*! \brief      Called from the Thread process when for getting task/thread id of the process.
+            \param[in]  caller_SP: Value of Stack Pointer (SP) register (for locating the calling process inside the kernel).
+            \return     Task/thread id of the process.
+        */
+        virtual TId OnGetTid(size_t caller_SP) const = 0;
     };
 
     /*! \class IEventOverrider
@@ -369,7 +588,7 @@ public:
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
         \param[in] ticks: Time to sleep (ticks).
     */
-    virtual void SleepTicks(uint32_t ticks) = 0;
+    virtual void SleepTicks(Timeout ticks) = 0;
 
     /*! \brief     Process one tick.
         \note      Normally system tick is processed by the platform driver implementation.
@@ -397,7 +616,12 @@ public:
         \note      Valid for a Thread process only.
         \return    Current value of the Stack Pointer (SP) of the calling process.
     */
-    virtual size_t GetCallerSP() = 0;
+    virtual size_t GetCallerSP() const = 0;
+
+    /*! \brief     Get thread Id.
+        \return    Thread Id.
+    */
+    virtual TId GetTid() const = 0;
 };
 
 /*! \class ITaskSwitchStrategy
@@ -487,7 +711,7 @@ public:
         \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
         \param[in] start_delay_tc: Initial start delay for the task (ticks).
     */
-    virtual void AddTask(ITask *user_task, int32_t periodicity_tc, int32_t deadline_tc, int32_t start_delay_tc) = 0;
+    virtual void AddTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc) = 0;
 
     /*! \brief     Remove user task.
         \param[in] user_task: Pointer to the user task to remove.
@@ -540,7 +764,7 @@ public:
     /*! \brief     Get thread Id.
         \return    Thread Id.
     */
-    virtual size_t GetTid() const = 0;
+    virtual TId GetTid() const = 0;
 
     /*! \brief     Get number of ticks elapsed since kernel start.
         \return    Ticks.
@@ -558,18 +782,28 @@ public:
         \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
         \param[in] msec: Delay time (milliseconds).
     */
-    virtual void Delay(uint32_t msec) const = 0;
+    virtual void Delay(Timeout msec) const = 0;
 
     /*! \brief     Put calling process into a sleep state.
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
         \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
         \param[in] msec: Sleep time (milliseconds).
     */
-    virtual void Sleep(uint32_t msec) = 0;
+    virtual void Sleep(Timeout msec) = 0;
 
     /*! \brief     Notify scheduler that it can switch to a next task.
     */
     virtual void SwitchToNext() = 0;
+
+    /*! \brief     Put calling process into a waiting state until synchronization object is signaled or timeout occurs.
+        \note      This function implements core blocking logic using the Monitor pattern to ensure atomicity between state check and suspension.
+        \note      The kernel automatically unlocks the provided \a mutex before the task is suspended and re-locks it before this function returns.
+        \param[in] sobj:  Synchronization object to wait on.
+        \param[in] mutex: Mutex protecting the state of the synchronization object.
+        \param[in] timeout: Maximum wait time (ticks). Use \c WAIT_INFINITE for infinite waiting (no timeout).
+        \return    Pointer to the wait object handle representing this wait operation (always non NULL).
+    */
+    virtual IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout) = 0;
 };
 
 } // namespace stk

@@ -50,13 +50,42 @@ using namespace stk;
     #define STK_RISCV_CLINT_MTIME_ADDR (STK_RISCV_CLINT_BASE_ADDR + 0xBFF8) // 8-byte value, global
 #endif
 
-#define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); } while (0)
-#define STK_RISCV_CRITICAL_SECTION_END(SES) ::HW_ExitCriticalSection(SES)
+//! Orders all predecessor Read/Write with all successor Read/Write (similar to ARM's __DSB(DSB ISH)).
+static __stk_forceinline void __DSB() { __asm volatile("fence rw, rw" : : : "memory"); }
+
+//! Flushes the instruction cache and pipeline (similar to ARM's __ISB).
+static __stk_forceinline void __ISB()
+{
+#ifdef __riscv_zifencei
+    __asm volatile("fence.i" : : : "memory");
+#else
+    __sync_synchronize();
+#endif
+}
+
+//! Put core into a low-power state (similar to ARM's __WFI).
+static __stk_forceinline void __WFI() { __asm volatile("wfi"); }
+
+#define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); __DSB(); __ISB(); } while (0)
+#define STK_RISCV_CRITICAL_SECTION_END(SES) do { __DSB(); __ISB(); ::HW_ExitCriticalSection(SES); } while (0)
+
+#define STK_RISCV_SPIN_LOCK_LOCK(LOCK) \
+    uint32_t timeout = 0xFFFFFF; \
+    while (__atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE)) { \
+        if (--timeout == 0) { \
+            /* if we hit this, the lock was never released by the previous owner */ \
+            __stk_debug_break(); \
+        } \
+        __stk_relax_cpu(); \
+    }
+#define STK_RISCV_SPIN_LOCK_UNLOCK(LOCK) do { \
+        /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */ \
+        __asm volatile("fence rw, w" ::: "memory"); \
+        __atomic_clear(&LOCK, __ATOMIC_RELEASE); \
+    } while (0)
 
 #define STK_RISCV_DISABLE_INTERRUPTS() ::HW_DisableIrq()
 #define STK_RISCV_ENABLE_INTERRUPTS() ::HW_EnableIrq()
-
-#define STK_RISCV_WFI() __asm volatile("wfi")
 
 #define STK_RISCV_PRIVILEGED_MODE_ON() ((void)0)
 #define STK_RISCV_PRIVILEGED_MODE_OFF() ((void)0)
@@ -287,6 +316,9 @@ static __stk_forceinline void ScheduleContextSwitch()
 volatile uint32_t _STK_SYSTEM_CLOCK_VAR = _STK_SYSTEM_CLOCK_FREQUENCY;
 #endif
 
+//! Global lock to synchronize critical sections of multiple cores.
+static volatile bool g_CsuLock = false;
+
 //! Internal context.
 static struct Context : public PlatformContext
 {
@@ -327,8 +359,18 @@ static struct Context : public PlatformContext
 
     __stk_forceinline void EnterCriticalSection()
     {
+        // disable local interrupts and save state
+        size_t current_ses;
+        STK_RISCV_CRITICAL_SECTION_START(current_ses);
+
         if (m_csu_nesting == 0)
-            STK_RISCV_CRITICAL_SECTION_START(m_csu);
+        {
+            // ONLY attempt the global spinlock if we aren't already nested
+            STK_RISCV_SPIN_LOCK_LOCK(g_CsuLock);
+
+            // store the hardware interrupt state to restore later
+            m_csu = current_ses;
+        }
 
         ++m_csu_nesting;
     }
@@ -336,11 +378,19 @@ static struct Context : public PlatformContext
     __stk_forceinline void ExitCriticalSection()
     {
         STK_ASSERT(m_csu_nesting != 0);
-
         --m_csu_nesting;
 
         if (m_csu_nesting == 0)
-            STK_RISCV_CRITICAL_SECTION_END(m_csu);
+        {
+            // capture the state before releasing lock
+            size_t ses_to_restore = m_csu;
+
+            // release global lock
+            STK_RISCV_SPIN_LOCK_UNLOCK(g_CsuLock);
+
+            // restore hardware interrupts
+            STK_RISCV_CRITICAL_SECTION_END(ses_to_restore);
+        }
     }
 
     typedef IPlatform::IEventOverrider                               eovrd_t;
@@ -351,11 +401,11 @@ static struct Context : public PlatformContext
     Stack     m_stack_isr;     //!< isr stack info
     jmp_buf   m_exit_buf;      //!< saved context of the exit point
     isrmem_t  m_stack_isr_mem; //!< ISR stack memory
-    size_t    m_csu;           //!< user critical session
-    uint32_t  m_csu_nesting;   //!< depth of user critical session nesting
     eovrd_t  *m_overrider;     //!< platform events overrider
     sehndl_t *m_specific;      //!< platform-specific event handler
     int32_t   m_tick_period;   //!< system tick periodicity (microseconds, ticks)
+    size_t    m_csu;           //!< user critical session
+    volatile uint32_t m_csu_nesting; //!< depth of user critical session nesting
     bool      m_starting;      //!< 'true' when in is being started
     bool      m_started;       //!< 'true' when in started state
     bool      m_exiting;       //!< 'true' when is exiting the scheduling process
@@ -432,26 +482,26 @@ static __stk_forceinline void SaveContext()
     FSREG " f9, " FOFFSET "+9*" FREGBYTES "(sp)  \n"
     FSREG " f10, " FOFFSET "+10*" FREGBYTES "(sp)  \n"
     FSREG " f11, " FOFFSET "+11*" FREGBYTES "(sp)  \n"
-    FSREG " f12, " FOFFSET "+11*" FREGBYTES "(sp)  \n"
-    FSREG " f13, " FOFFSET "+12*" FREGBYTES "(sp)  \n"
-    FSREG " f14, " FOFFSET "+13*" FREGBYTES "(sp)  \n"
-    FSREG " f15, " FOFFSET "+14*" FREGBYTES "(sp)  \n"
-    FSREG " f16, " FOFFSET "+15*" FREGBYTES "(sp)  \n"
-    FSREG " f17, " FOFFSET "+16*" FREGBYTES "(sp)  \n"
-    FSREG " f18, " FOFFSET "+17*" FREGBYTES "(sp)  \n"
-    FSREG " f19, " FOFFSET "+18*" FREGBYTES "(sp)  \n"
-    FSREG " f20, " FOFFSET "+19*" FREGBYTES "(sp)  \n"
-    FSREG " f21, " FOFFSET "+20*" FREGBYTES "(sp)  \n"
-    FSREG " f22, " FOFFSET "+21*" FREGBYTES "(sp)  \n"
-    FSREG " f23, " FOFFSET "+22*" FREGBYTES "(sp)  \n"
-    FSREG " f24, " FOFFSET "+23*" FREGBYTES "(sp)  \n"
-    FSREG " f25, " FOFFSET "+24*" FREGBYTES "(sp)  \n"
-    FSREG " f26, " FOFFSET "+25*" FREGBYTES "(sp)  \n"
-    FSREG " f27, " FOFFSET "+26*" FREGBYTES "(sp)  \n"
-    FSREG " f28, " FOFFSET "+27*" FREGBYTES "(sp)  \n"
-    FSREG " f29, " FOFFSET "+28*" FREGBYTES "(sp)  \n"
-    FSREG " f30, " FOFFSET "+29*" FREGBYTES "(sp)  \n"
-    FSREG " f31, " FOFFSET "+30*" FREGBYTES "(sp)  \n"
+    FSREG " f12, " FOFFSET "+12*" FREGBYTES "(sp)  \n"
+    FSREG " f13, " FOFFSET "+13*" FREGBYTES "(sp)  \n"
+    FSREG " f14, " FOFFSET "+14*" FREGBYTES "(sp)  \n"
+    FSREG " f15, " FOFFSET "+15*" FREGBYTES "(sp)  \n"
+    FSREG " f16, " FOFFSET "+16*" FREGBYTES "(sp)  \n"
+    FSREG " f17, " FOFFSET "+17*" FREGBYTES "(sp)  \n"
+    FSREG " f18, " FOFFSET "+18*" FREGBYTES "(sp)  \n"
+    FSREG " f19, " FOFFSET "+19*" FREGBYTES "(sp)  \n"
+    FSREG " f20, " FOFFSET "+20*" FREGBYTES "(sp)  \n"
+    FSREG " f21, " FOFFSET "+21*" FREGBYTES "(sp)  \n"
+    FSREG " f22, " FOFFSET "+22*" FREGBYTES "(sp)  \n"
+    FSREG " f23, " FOFFSET "+23*" FREGBYTES "(sp)  \n"
+    FSREG " f24, " FOFFSET "+24*" FREGBYTES "(sp)  \n"
+    FSREG " f25, " FOFFSET "+25*" FREGBYTES "(sp)  \n"
+    FSREG " f26, " FOFFSET "+26*" FREGBYTES "(sp)  \n"
+    FSREG " f27, " FOFFSET "+27*" FREGBYTES "(sp)  \n"
+    FSREG " f28, " FOFFSET "+28*" FREGBYTES "(sp)  \n"
+    FSREG " f29, " FOFFSET "+29*" FREGBYTES "(sp)  \n"
+    FSREG " f30, " FOFFSET "+30*" FREGBYTES "(sp)  \n"
+    FSREG " f31, " FOFFSET "+31*" FREGBYTES "(sp)  \n"
 #endif
 
     // save PC, Status of the current process
@@ -484,8 +534,8 @@ static __stk_forceinline void LoadContext()
 {
     // load SP of the active stack
     __asm volatile(
-    LREG " t0, %0                    \n"
-    LREG " sp, 0(t0)                 \n" // load
+    LREG " t0, %0                    \n" // load the first member (SP) into t0
+    LREG " sp, 0(t0)                 \n" // sp = t0
     : /* output: none */
     : "m"(GetContext().m_stack_active)
     : /* clobbers: none */);
@@ -552,26 +602,26 @@ static __stk_forceinline void LoadContext()
     FLREG " f9, " FOFFSET "+9*" FREGBYTES "(sp)  \n"
     FLREG " f10, " FOFFSET "+10*" FREGBYTES "(sp)  \n"
     FLREG " f11, " FOFFSET "+11*" FREGBYTES "(sp)  \n"
-    FLREG " f12, " FOFFSET "+11*" FREGBYTES "(sp)  \n"
-    FLREG " f13, " FOFFSET "+12*" FREGBYTES "(sp)  \n"
-    FLREG " f14, " FOFFSET "+13*" FREGBYTES "(sp)  \n"
-    FLREG " f15, " FOFFSET "+14*" FREGBYTES "(sp)  \n"
-    FLREG " f16, " FOFFSET "+15*" FREGBYTES "(sp)  \n"
-    FLREG " f17, " FOFFSET "+16*" FREGBYTES "(sp)  \n"
-    FLREG " f18, " FOFFSET "+17*" FREGBYTES "(sp)  \n"
-    FLREG " f19, " FOFFSET "+18*" FREGBYTES "(sp)  \n"
-    FLREG " f20, " FOFFSET "+19*" FREGBYTES "(sp)  \n"
-    FLREG " f21, " FOFFSET "+20*" FREGBYTES "(sp)  \n"
-    FLREG " f22, " FOFFSET "+21*" FREGBYTES "(sp)  \n"
-    FLREG " f23, " FOFFSET "+22*" FREGBYTES "(sp)  \n"
-    FLREG " f24, " FOFFSET "+23*" FREGBYTES "(sp)  \n"
-    FLREG " f25, " FOFFSET "+24*" FREGBYTES "(sp)  \n"
-    FLREG " f26, " FOFFSET "+25*" FREGBYTES "(sp)  \n"
-    FLREG " f27, " FOFFSET "+26*" FREGBYTES "(sp)  \n"
-    FLREG " f28, " FOFFSET "+27*" FREGBYTES "(sp)  \n"
-    FLREG " f29, " FOFFSET "+28*" FREGBYTES "(sp)  \n"
-    FLREG " f30, " FOFFSET "+29*" FREGBYTES "(sp)  \n"
-    FLREG " f31, " FOFFSET "+30*" FREGBYTES "(sp)  \n"
+    FLREG " f12, " FOFFSET "+12*" FREGBYTES "(sp)  \n"
+    FLREG " f13, " FOFFSET "+13*" FREGBYTES "(sp)  \n"
+    FLREG " f14, " FOFFSET "+14*" FREGBYTES "(sp)  \n"
+    FLREG " f15, " FOFFSET "+15*" FREGBYTES "(sp)  \n"
+    FLREG " f16, " FOFFSET "+16*" FREGBYTES "(sp)  \n"
+    FLREG " f17, " FOFFSET "+17*" FREGBYTES "(sp)  \n"
+    FLREG " f18, " FOFFSET "+18*" FREGBYTES "(sp)  \n"
+    FLREG " f19, " FOFFSET "+19*" FREGBYTES "(sp)  \n"
+    FLREG " f20, " FOFFSET "+20*" FREGBYTES "(sp)  \n"
+    FLREG " f21, " FOFFSET "+21*" FREGBYTES "(sp)  \n"
+    FLREG " f22, " FOFFSET "+22*" FREGBYTES "(sp)  \n"
+    FLREG " f23, " FOFFSET "+23*" FREGBYTES "(sp)  \n"
+    FLREG " f24, " FOFFSET "+24*" FREGBYTES "(sp)  \n"
+    FLREG " f25, " FOFFSET "+25*" FREGBYTES "(sp)  \n"
+    FLREG " f26, " FOFFSET "+26*" FREGBYTES "(sp)  \n"
+    FLREG " f27, " FOFFSET "+27*" FREGBYTES "(sp)  \n"
+    FLREG " f28, " FOFFSET "+28*" FREGBYTES "(sp)  \n"
+    FLREG " f29, " FOFFSET "+29*" FREGBYTES "(sp)  \n"
+    FLREG " f30, " FOFFSET "+30*" FREGBYTES "(sp)  \n"
+    FLREG " f31, " FOFFSET "+31*" FREGBYTES "(sp)  \n"
 #endif
 
     // shrink stack memory of registers
@@ -773,7 +823,8 @@ STK_RISCV_ISR void _STK_SVC_HANDLER()
             for (;;)
             {
                 //assert(false);
-                STK_RISCV_WFI();
+                __stk_debug_break();
+                __WFI();
             }
         }
     }
@@ -790,7 +841,9 @@ static void OnTaskExit()
 
     for (;;)
     {
-        STK_RISCV_WFI(); // enter standby mode until time slot expires
+        __DSB(); // data barrier
+        __WFI(); // enter standby mode until time slot expires
+        __ISB(); // instruction sync
     }
 }
 
@@ -802,11 +855,9 @@ static STK_RISCV_ISR_SECTION void OnSchedulerSleep()
 
     for (;;)
     {
-        __asm volatile ("fence rw, rw" : : : "memory"); // data barrier (DSB)
-        STK_RISCV_WFI();                                // enter sleep until interrupt
-    #ifdef __riscv_zifencei
-        __asm volatile ("fence.i" : : : "memory");      // instruction sync (ISB)
-    #endif
+        __DSB(); // data barrier
+        __WFI(); // enter sleep until interrupt
+        __ISB(); // instruction sync
     }
 }
 
@@ -927,9 +978,19 @@ void PlatformRiscV::SwitchToNext()
     GetContext().m_handler->OnTaskSwitch(::HW_GetCallerSP());
 }
 
-void PlatformRiscV::SleepTicks(uint32_t ticks)
+void PlatformRiscV::SleepTicks(Timeout ticks)
 {
     GetContext().m_handler->OnTaskSleep(::HW_GetCallerSP(), ticks);
+}
+
+IWaitObject *PlatformRiscV::StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+{
+    return GetContext().m_handler->OnTaskWait(::HW_GetCallerSP(), sync_obj, mutex, timeout);
+}
+
+TId PlatformRiscV::GetTid() const
+{
+    return GetContext().m_handler->OnGetTid(::HW_GetCallerSP());
 }
 
 void PlatformRiscV::ProcessHardFault()
@@ -946,7 +1007,7 @@ void PlatformRiscV::SetEventOverrider(IEventOverrider *overrider)
     GetContext().m_overrider = overrider;
 }
 
-size_t PlatformRiscV::GetCallerSP()
+size_t PlatformRiscV::GetCallerSP() const
 {
     return ::HW_GetCallerSP();
 }

@@ -33,6 +33,18 @@ static inline void __stktest_relax_cpu()
 #include <stk.h>
 #include <arch/stk_arch_common.h>
 
+namespace stk {
+
+//! Enter critical section mock.
+void EnterCriticalSection();
+
+//! Exit critical section mock.
+void ExitCriticalSection();
+
+}
+
+#include <sync/stk_sync.h>
+
 #include "stktest_context.h"
 
 namespace stk {
@@ -43,6 +55,9 @@ namespace stk {
 namespace test {
 
 extern IKernelService *g_KernelService;
+
+//! Critical section state.
+extern int32_t g_CriticalSectionState;
 
 /*! \class TestAssertPassed
     \brief Throwable class for catching assertions from _STK_ASSERT_IMPL().
@@ -134,13 +149,18 @@ public:
 
     void SwitchToNext()
     {
-        m_event_handler->OnTaskSwitch(m_stack_active->SP);
+        m_event_handler->OnTaskSwitch(GetCallerSP());
         ++m_switch_to_next_nr;
     }
 
-    void SleepTicks(uint32_t ticks)
+    void SleepTicks(Timeout ticks)
     {
-        m_event_handler->OnTaskSleep(m_stack_active->SP, ticks);
+        m_event_handler->OnTaskSleep(GetCallerSP(), ticks);
+    }
+
+    IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout)
+    {
+        return m_event_handler->OnTaskWait(GetCallerSP(), sobj, mutex, timeout);
     }
 
     void ProcessHardFault()
@@ -181,9 +201,19 @@ public:
         m_event_handler->OnTaskSleep(caller_SP, sleep_ticks);
     }
 
-    size_t GetCallerSP()
+    IWaitObject *EventTaskWait(size_t caller_SP, ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+    {
+        return m_event_handler->OnTaskWait(caller_SP, sync_obj, mutex, timeout);
+    }
+
+    size_t GetCallerSP() const
     {
         return m_stack_active->SP;
+    }
+
+    virtual TId GetTid() const
+    {
+        return m_event_handler->OnGetTid(GetCallerSP());
     }
 
     IKernelService  *m_service;
@@ -238,12 +268,12 @@ public:
         return m_resolution;
     }
 
-    void Delay(uint32_t delay_ms) const
+    void Delay(Timeout delay_ms) const
     {
         (void)delay_ms;
     }
 
-    void Sleep(uint32_t sleep_ms)
+    void Sleep(Timeout sleep_ms)
     {
         (void)sleep_ms;
     }
@@ -251,6 +281,11 @@ public:
     void SwitchToNext()
     {
         m_switch_to_next = true;
+    }
+
+    IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout)
+    {
+        return nullptr;
     }
 
     bool    m_inc_ticks;
@@ -307,6 +342,36 @@ public:
 private:
     static void Run(void *user_data) { ((TaskMockW *)user_data)->RunInner(); }
     void RunInner() {}
+};
+
+struct MutexMock : public IMutex
+{
+    explicit MutexMock() : m_nesting(0), m_locked(false)
+    {}
+
+    uint32_t m_nesting;
+    bool     m_locked;
+
+    void Lock()
+    {
+        if (m_nesting == 0)
+            m_locked = true;
+
+        ++m_nesting;
+    }
+
+    void Unlock()
+    {
+        STK_ASSERT(m_nesting != 0);
+
+        if (--m_nesting == 0)
+            m_locked = false;
+    }
+};
+
+struct SyncObjectMock : public ISyncObject
+{
+
 };
 
 } // namespace test

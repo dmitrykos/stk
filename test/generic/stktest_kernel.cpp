@@ -1052,5 +1052,204 @@ TEST(Kernel, HrtOnlyAPI)
     }
 }
 
+TEST(Kernel, SyncNotEnabledFailsOnWait)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->StartWaiting(nullptr, nullptr, 0);
+        CHECK_TEXT(false, "kernel does not support waiting without KERNEL_SYNC");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    // test return NULL
+    g_TestContext.ExpectAssert(true);
+    g_TestContext.RethrowAssertException(false);
+    IWaitObject *wo = IKernelService::GetInstance()->StartWaiting(nullptr, nullptr, 0);
+    g_TestContext.RethrowAssertException(true);
+    g_TestContext.ExpectAssert(false);
+    CHECK_TRUE_TEXT(wo == nullptr, "expect NULL");
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        platform->EventTaskWait(0, nullptr, nullptr, 0);
+        CHECK_TEXT(false, "kernel does not support waiting without KERNEL_SYNC");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    // test return NULL
+    g_TestContext.ExpectAssert(true);
+    g_TestContext.RethrowAssertException(false);
+    wo = platform->EventTaskWait(0, nullptr, nullptr, 0);
+    g_TestContext.RethrowAssertException(true);
+    g_TestContext.ExpectAssert(false);
+    CHECK_TRUE_TEXT(wo == nullptr, "expect NULL");
+}
+
+TEST(Kernel, SyncNoNullSyncObj)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->StartWaiting(nullptr, &mutex, 10);
+        CHECK_TEXT(false, "sync object must not be NULL");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, SyncNoNullMutex)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    SyncObjectMock sobj;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->StartWaiting(&sobj, nullptr, 10);
+        CHECK_TEXT(false, "mutex must not be NULL");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, SyncNoZeroWait)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+    SyncObjectMock sobj;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->StartWaiting(&sobj, &mutex, 0);
+        CHECK_TEXT(false, "must not be zero wait");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, SyncMutexMustBeLocked)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+    SyncObjectMock sobj;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->StartWaiting(&sobj, &mutex, 10);
+        CHECK_TEXT(false, "mutex must be locked");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+static struct SyncWaitRelaxCpuContext
+{
+    SyncWaitRelaxCpuContext()
+    {
+        counter  = 0;
+        platform = NULL;
+    }
+
+    uint32_t          counter;
+    PlatformTestMock *platform;
+
+    void Process()
+    {
+        platform->ProcessTick();
+        ++counter;
+    }
+}
+g_SyncWaitRelaxCpuContext;
+
+static void SyncWaitRelaxCpu()
+{
+    g_SyncWaitRelaxCpuContext.Process();
+}
+
+TEST(Kernel, SyncWait)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+    SyncObjectMock sobj;
+
+    g_SyncWaitRelaxCpuContext.platform = platform;
+    g_RelaxCpuHandler = SyncWaitRelaxCpu;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    mutex.Lock();
+
+    IWaitObject *wo = IKernelService::GetInstance()->StartWaiting(&sobj, &mutex, 2);
+
+    CHECK_TRUE_TEXT(wo != nullptr, "expect wait object in return after timeout");
+    CHECK_TRUE_TEXT(wo->IsTimeout(), "expect timeout");
+    CHECK_EQUAL_TEXT(2, g_SyncWaitRelaxCpuContext.counter, "expect 2 ticks after timeout");
+    CHECK_EQUAL_TEXT(true, mutex.m_locked, "expect locked mutex after StartWaiting return");
+}
+
 } // namespace stk
 } // namespace test

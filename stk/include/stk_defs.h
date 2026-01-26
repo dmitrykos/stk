@@ -22,6 +22,15 @@
     #define STK_NEED_TASK_ID 1
 #endif
 
+/*! \def   STK_SYNC_DEBUG_NAMES
+    \brief Enable names for synchronization primitives for debugging/tracing purpose.
+*/
+#if !defined(STK_SYNC_DEBUG_NAMES) && STK_SEGGER_SYSVIEW
+    #define STK_SYNC_DEBUG_NAMES 1
+#elif !defined(STK_SYNC_DEBUG_NAMES)
+    #define STK_SYNC_DEBUG_NAMES 0
+#endif
+
 /*! \def   __stk_forceinline
     \brief Inline function (function prefix).
 */
@@ -106,7 +115,7 @@
 #ifdef __GNUC__
     #define __stk_unreachable() __builtin_unreachable()
 #else
-    #define __stk_unreachable()
+    #error __stk_unreachable()
 #endif
 
 /*! \def   __stk_full_memfence
@@ -115,7 +124,7 @@
 #ifdef __GNUC__
     #define __stk_full_memfence() __sync_synchronize()
 #else
-    #define __stk_full_memfence()
+    #error __stk_full_memfence()
 #endif
 
 /*! \def   __stk_relax_cpu
@@ -126,12 +135,37 @@
 #ifdef __GNUC__
     #if defined(__i386__) || defined(__x86_64__)
         #define __stk_relax_cpu() __builtin_ia32_pause()
+    #elif defined(__riscv)
+        #ifdef __riscv_zihintpause
+            #define __stk_relax_cpu() __builtin_riscv_pause()
+        #else
+            #define __stk_relax_cpu() __stk_full_memfence()
+        #endif
     #else
         #define __stk_relax_cpu() __stk_full_memfence()
     #endif
 #else
-    #define __stk_relax_cpu()
+    #error __stk_relax_cpu()
 #endif
+#endif
+
+/*! \def   __stk_debug_break
+    \brief Breakpoint.
+*/
+#if defined(DEBUG) || defined(_DEBUG)
+    #if defined(_STK_ARCH_ARM_CORTEX_M)
+        #define __stk_debug_break() __asm volatile("bkpt 0")
+    #elif defined(_STK_ARCH_RISC_V)
+        #define __stk_debug_break() __asm volatile("ebreak")
+    #elif defined(_STK_ARCH_X86_WIN32)
+        #ifdef _MSC_VER
+            #define __stk_debug_break() __debugbreak()
+        #else
+            #define __stk_debug_break() __asm volatile("int $3")
+        #endif
+    #endif
+#else
+    #define __stk_debug_break()
 #endif
 
 /*! \def   STK_ASSERT

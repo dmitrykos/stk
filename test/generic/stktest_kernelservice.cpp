@@ -104,8 +104,9 @@ TEST(KernelService, GetTid)
 
     platform->ProcessTick();
 
+    // task/thread id is a pointer to the user task
     size_t tid = stk::GetTid();
-    CHECK_EQUAL(tid, platform->GetCallerSP());
+    CHECK_EQUAL(tid, (size_t)&task);
 }
 
 TEST(KernelService, GetTickResolution)
@@ -210,28 +211,31 @@ static struct SwitchToNextRelaxCpuContext
 
         platform->ProcessTick();
 
-        // ISR calls OnSysTick (task1 = active, task2 = idle)
-        if (counter == 0)
+        if ((task1 != nullptr) && (task2 != nullptr))
         {
-            CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
-        }
-        else
-        // ISR calls OnSysTick (task1 = idle, task2 = active)
-        if (counter == 1)
-        {
-            CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
-        }
-        else
-        // ISR calls OnSysTick (task1 = active, task2 = idle)
-        if (counter == 2)
-        {
-            CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
-        }
-        else
-        // ISR calls OnSysTick (task1 = idle, task2 = active)
-        if (counter == 3)
-        {
-            CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
+            // ISR calls OnSysTick (task1 = active, task2 = idle)
+            if (counter == 0)
+            {
+                CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
+            }
+            else
+            // ISR calls OnSysTick (task1 = idle, task2 = active)
+            if (counter == 1)
+            {
+                CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
+            }
+            else
+            // ISR calls OnSysTick (task1 = active, task2 = idle)
+            if (counter == 2)
+            {
+                CHECK_EQUAL(active->SP, (size_t)task1->GetStack());
+            }
+            else
+            // ISR calls OnSysTick (task1 = idle, task2 = active)
+            if (counter == 3)
+            {
+                CHECK_EQUAL(active->SP, (size_t)task2->GetStack());
+            }
         }
 
         ++counter;
@@ -288,7 +292,7 @@ TEST(KernelService, SwitchToNext)
     g_RelaxCpuHandler = NULL;
 }
 
-TEST(KernelService, SwitchToNextActiveTaskOnly)
+TEST(KernelService, SwitchToNextInactiveTask)
 {
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
@@ -310,21 +314,10 @@ TEST(KernelService, SwitchToNextActiveTaskOnly)
     g_RelaxCpuHandler = SwitchToNextRelaxCpu;
     g_SwitchToNextRelaxCpuContext.Clear();
     g_SwitchToNextRelaxCpuContext.platform = platform;
-    g_SwitchToNextRelaxCpuContext.task1    = &task1;
-    g_SwitchToNextRelaxCpuContext.task2    = &task2;
+    g_SwitchToNextRelaxCpuContext.task1    = nullptr;
+    g_SwitchToNextRelaxCpuContext.task2    = nullptr;
 
-    // kernel does not allow to switch not currently active task
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        platform->EventTaskSwitch(platform->m_stack_idle->SP + 1); // add shift to test IsMemoryOfSP
-        CHECK_TEXT(false, "expecting assertion when switching inactive task");
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
-    }
+    platform->EventTaskSwitch(platform->m_stack_idle->SP + 1); // add shift to test IsMemoryOfSP
 }
 
 static struct SleepRelaxCpuContext
