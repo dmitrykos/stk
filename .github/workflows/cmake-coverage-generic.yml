@@ -42,7 +42,16 @@ jobs:
           -b ${{ github.workspace }}/cov-build \
           -o ${{ github.workspace }}/cov-report \
           -f ${{ github.workspace }}/cov-build/coverage.info
-      
+
+    - name: Filter Coverage Info
+      run: |
+        lcov --remove ${{ github.workspace }}/cov-build/coverage.info \
+        '*/stk_sync_cv.h' \
+        '*/stk_sync_event.h' \
+        '*/stk_sync_mutex.h' \
+        '*/stk_sync_semaphore.h' \
+        -o ${{ github.workspace }}/cov-build/coverage.info
+
     - name: Report Code Coverage with Pass Threshold - ${{env.PASS_THRESHOLD}}%
       uses: zgosalvez/github-actions-report-lcov@v4
       with:
