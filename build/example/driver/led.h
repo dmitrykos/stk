@@ -12,8 +12,7 @@
 
 #include <stdbool.h>
 
-typedef enum LedId
-{
+typedef enum LedId {
     LED_RED,
     LED_GREEN,
     LED_BLUE

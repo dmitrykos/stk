@@ -40,7 +40,7 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 | Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces, including new scheduling strategies    |
 | Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                                         |
 | Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                                          |
-| Critical section API                  | Basic synchronization primitive                                                                               |
+| Synchronization API                   | Synchronization primitives for building application of any difficulty level                                   |
 | Tiny footprint                        | Minimal code unrelated to scheduling                                                                          |
 | Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                                      |
 | C++ and C API                         | Can be used easily in C++ and C projects                                                                      |
@@ -183,6 +183,24 @@ void start_core1()
 ```
 
 There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `build/example/project/eclipse/rpi/blinky-smp-rp2350w` folder.
+
+---
+
+### Synchronization API
+
+Synchronization API is feature-rich and supports single and multicore systems (STK instance per CPU core), located in `stk/sync` folder.
+
+| Primitive           | Description                                                                                                                                                 |
+|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Critical Section`  | Low-level RAII primitive (`ScopedCriticalSection`) that ensures atomicity by preventing preemption. Always available and independent of `KERNEL_SYNC` mode. |
+| `ConditionVariable` | Monitor-pattern signaling used with a `Mutex`. Allows tasks to sleep until a specific condition is met, with atomic unlock/relock semantics.                |
+| `Event`             | State-based signaling object. Supports manual or auto-reset behavior to wake one or multiple tasks upon a specific system occurrence.                       |
+| `Mutex`             | Re-entrant (recursive) mutual exclusion primitive. Ensures exclusive resource access with ownership tracking to prevent unauthorized release.               |
+| `Semaphore`         | Counting primitive for resource throttling. Features a "Direct Handover" policy, passing tokens directly to waiting tasks to ensure deterministic behavior. |
+| `Pipe`              | Thread-safe FIFO ring buffer for inter-task data passing. Supports blocking single and bulk I/O with zero dynamic memory allocation.                        |
+| Custom              | Extensible architecture where any class inheriting from `ISyncObject` can implement custom synchronization logic integrated with the kernel scheduler.      |
+
+Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC` flag. If `KERNEL_SYNC` is not set then synchronization-related implementation is stripped by the compiler.
 
 ---
 

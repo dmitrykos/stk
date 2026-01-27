@@ -12,9 +12,17 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+
 struct Cpu
 {
     static void Start(uint8_t cpu_id, void (*entry_func)(void));
 };
+
+#else
+
+    void Cpu_Start(uint8_t cpu_id, void (*entry_func)(void));
+
+#endif
 
 #endif /* DRIVER_SMP_H_ */

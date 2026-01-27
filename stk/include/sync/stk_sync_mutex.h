@@ -1,0 +1,173 @@
+/*
+ * SuperTinyKernel (STK): minimalistic C++ thread scheduling kernel for Embedded Systems.
+ *
+ * Source: http://github.com/dmitrykos/stk
+ *
+ * Copyright (c) 2022-2026 Neutron Code Limited <stk@neutroncode.com>
+ * License: MIT License, see LICENSE for a full text.
+ */
+
+#ifndef STK_SYNC_MUTEX_H_
+#define STK_SYNC_MUTEX_H_
+
+#include "stk_common.h"
+
+/*! \file  stk_sync_mutex.h
+    \brief Implementation of synchronization primitive: Mutex.
+*/
+
+namespace stk {
+namespace sync {
+
+/*! \class Mutex
+    \brief Recursive mutex primitive that allows the same thread to acquire the lock multiple times.
+
+    A recursive mutex tracks ownership and a recursion count. If the owning thread
+    calls \c Lock() again, the count is incremented and the call returns immediately
+    without blocking. The lock is only fully released when \c Unlock() has been
+    called an equal number of times.
+
+    \code
+    // Example: Recursive locking in nested methods
+    stk::sync::Mutex g_ResourceMtx;
+
+    void Method_Internal() {
+        // second acquisition (recursion count = 2)
+        g_ResourceMtx.Lock();
+        // ... perform internal logic ...
+        g_ResourceMtx.Unlock();
+    }
+
+    void Method_Public() {
+        // first acquisition (recursion count = 1)
+        if (g_ResourceMtx.TimedLock(100)) {
+            // safe to call: same thread already owns the lock
+            Method_Internal();
+            g_ResourceMtx.Unlock();
+        }
+    }
+    \endcode
+
+    \note  Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
+    \see   ISyncObject, IWaitObject, IKernelService::StartWaiting
+*/
+class Mutex : public IMutex, public ITraceable, private ISyncObject
+{
+public:
+    /*! \brief     Constructor.
+    */
+    explicit Mutex() : m_owner_tid(0), m_count(0)
+    {}
+
+    /*! \brief Destructor.
+        \note  If tasks are still waiting at destruction time it is considered a logical error (dangling waiters).
+               An assertion is triggered in debug builds.
+    */
+    ~Mutex() { STK_ASSERT(m_wait_list.IsEmpty()); }
+
+    /*! \brief     Acquire lock.
+        \param[in] timeout: Maximum time to wait (ticks).
+        \return    True if lock acquired, false if timeout occurred.
+    */
+    bool TimedLock(Timeout timeout);
+
+    /*! \brief     Acquire lock.
+    */
+    void Lock() { (void)TimedLock(WAIT_INFINITE); }
+
+    /*! \brief     Acquire the lock.
+        \return    True if lock acquired, false if lock is already acquired by another task.
+    */
+    bool TryLock() { return TimedLock(0); }
+
+    /*! \brief     Release lock.
+    */
+    void Unlock();
+
+private:
+    void WakeOne();
+    bool Tick();
+
+    TId      m_owner_tid; //!< thread id of the current owner
+    uint32_t m_count;     //!< recursion depth
+};
+
+inline bool Mutex::TimedLock(Timeout timeout)
+{
+    IKernelService *svc = IKernelService::GetInstance();
+    TId current_tid = svc->GetTid();
+
+    ScopedCriticalSection __cs;
+
+    // already owned by the calling thread (recursive path)
+    if ((m_count != 0) && (m_owner_tid == current_tid))
+    {
+        m_count++;
+        return true;
+    }
+
+    // mutex is free (fast path)
+    if (m_count == 0)
+    {
+        m_owner_tid = current_tid;
+        m_count     = 1;
+        __stk_full_memfence();
+
+        return true;
+    }
+
+    // try lock behavior
+    if (timeout == 0)
+        return false;
+
+    // mutex owned by another thread (slow path/blocking)
+    IWaitObject *wo = svc->StartWaiting(this, &__cs, timeout);
+    STK_ASSERT(wo != nullptr);
+
+    if (wo->IsTimeout())
+        return false;
+
+    // upon waking, we are guaranteed by the Monitor pattern in StartWaiting that
+    // mutex state is now ours and we are inside the critical section
+    m_owner_tid = current_tid;
+    m_count     = 1;
+    __stk_full_memfence();
+
+    return true;
+}
+
+inline void Mutex::Unlock()
+{
+    ScopedCriticalSection __cs;
+
+    // ensure the caller actually owns the mutex
+    STK_ASSERT((m_count != 0) && (m_owner_tid == IKernelService::GetInstance()->GetTid()));
+
+    if (--m_count == 0)
+    {
+        m_owner_tid = 0;
+        __stk_full_memfence();
+
+        // if there are waiters, wake the first one (FIFO order)
+        WakeOne();
+    }
+}
+
+inline void Mutex::WakeOne()
+{
+    if (!m_wait_list.IsEmpty())
+        static_cast<IWaitObject *>(m_wait_list.GetFirst())->Wake(false);
+}
+
+inline bool Mutex::Tick()
+{
+    // required for multi-core CPU and multiple instances of STK (one per core)
+    ScopedCriticalSection __cs;
+
+    return ISyncObject::Tick();
+}
+
+} // namespace sync
+} // namespace stk
+
+#endif /* STK_SYNC_EVENT_H_ */

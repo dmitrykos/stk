@@ -38,11 +38,13 @@ public:
     bool InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
     int32_t GetTickResolution() const;
     void SwitchToNext();
-    void SleepTicks(uint32_t ticks);
+    void SleepTicks(Timeout ticks);
+    IWaitObject *StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout);
     void ProcessTick();
     void ProcessHardFault();
     void SetEventOverrider(IEventOverrider *overrider);
-    size_t GetCallerSP();
+    size_t GetCallerSP() const;
+    TId GetTid() const;
 
     void SetSpecificEventHandler(ISpecificEventHandler *handler);
 };
@@ -71,16 +73,6 @@ __stk_forceinline void SetTls(uintptr_t tp)
 {
     __asm volatile("mv tp, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
 }
-
-/*! \brief     Enter to critical section.
-    \note      Use with care, critical section changes timing of tasks. Supports nesting.
-*/
-void EnterCriticalSection();
-
-/*! \brief     Exit from critical section.
-    \note      Must follow EnterCriticalSection().
-*/
-void ExitCriticalSection();
 
 } // namespace stk
 

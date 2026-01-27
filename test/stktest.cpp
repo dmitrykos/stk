@@ -16,6 +16,7 @@ using namespace stk::test;
 TestContext test::g_TestContext;
 void (* g_RelaxCpuHandler)() = NULL;
 IKernelService *test::g_KernelService = NULL;
+int32_t test::g_CriticalSectionState = false;
 
 /*! \fn    STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.
@@ -48,6 +49,16 @@ extern void STK_ASSERT_IMPL(const char *message, const char *file, int32_t line)
 IKernelService *IKernelService::GetInstance()
 {
     return g_KernelService;
+}
+
+void stk::EnterCriticalSection()
+{
+    ++g_CriticalSectionState;
+}
+
+void stk::ExitCriticalSection()
+{
+    --g_CriticalSectionState;
 }
 
 int main(int argc, char **argv)

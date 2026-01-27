@@ -13,8 +13,8 @@
 
 #ifdef _STK_ARCH_X86_WIN32
 
+#include "stk_arch.h"
 #include "arch/stk_arch_common.h"
-#include "arch/x86/win32/stk_arch_x86-win32.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -38,6 +38,10 @@ static timeBeginPeriodF timeBeginPeriod = NULL;
 #define STK_X86_WIN32_CRITICAL_SECTION_END(SES) ::LeaveCriticalSection(SES)
 #define STK_X86_WIN32_MIN_RESOLUTION (1000)
 #define STK_X86_WIN32_GET_SP(STACK) (STACK + 2) // +2 to overcome stack filler check inside Kernel (adjusting to +2 preserves 8-byte alignment)
+#define STK_X86_WIN32_SPIN_LOCK_LOCK(LOCK) \
+    while (InterlockedCompareExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 1, 0) != 0) { Yield(); }
+#define STK_X86_WIN32_SPIN_LOCK_UNLOCK(LOCK) \
+    InterlockedExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 0);
 
 using namespace stk;
 
@@ -49,12 +53,13 @@ static struct Context : public PlatformContext
         PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
 
         m_overrider    = NULL;
-        m_sleep_trap    = NULL;
-        m_exit_trap     = NULL;
+        m_sleep_trap   = NULL;
+        m_exit_trap    = NULL;
         m_winmm_dll    = NULL;
         m_timer_thread = NULL;
         m_started      = false;
         m_csu_nesting  = 0;
+        m_timer_tid    = 0;
 
         if ((m_tls = TlsAlloc()) == TLS_OUT_OF_INDEXES)
         {
@@ -142,9 +147,11 @@ static struct Context : public PlatformContext
     void ProcessTick();
     void SwitchContext();
     void SwitchToNext();
-    void SleepTicks(uint32_t ticks);
+    void SleepTicks(Timeout ticks);
+    IWaitObject *StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout);
     void Stop();
-    size_t GetCallerSP();
+    size_t GetCallerSP() const;
+    TId GetTid() const;
     
     __stk_forceinline uintptr_t GetTls() 
     { 
@@ -158,20 +165,36 @@ static struct Context : public PlatformContext
     
     __stk_forceinline void EnterCriticalSection()
     {
+        STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+
         if (m_csu_nesting == 0)
-            SuspendThread(m_timer_thread);
+        {
+            // avoid suspending self
+            if (GetCurrentThreadId() != m_timer_tid)
+                SuspendThread(m_timer_thread);
+        }
 
         ++m_csu_nesting;
+
+        STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
     }
     
     __stk_forceinline void ExitCriticalSection()
     {
+        STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+
         STK_ASSERT(m_csu_nesting != 0);
 
         --m_csu_nesting;
 
         if (m_csu_nesting == 0)
-            ResumeThread(m_timer_thread);
+        {
+            // suspending self is not supported
+            if (GetCurrentThreadId() != m_timer_tid)
+                ResumeThread(m_timer_thread);
+        }
+
+        STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
     }
 
     IPlatform::IEventOverrider    *m_overrider;
@@ -184,6 +207,7 @@ static struct Context : public PlatformContext
     std::vector<HANDLE>            m_task_threads;  //!< task threads
     STK_X86_WIN32_CRITICAL_SECTION m_cs;            //!< critical session
     DWORD                          m_csu_nesting;   //!< depth of user critical session nesting
+    DWORD                          m_timer_tid;     //!< timer thread id
     bool                           m_started;       //!< started state's flag
 }
 g_Context;
@@ -193,6 +217,7 @@ static DWORD WINAPI TimerThread(LPVOID param)
     (void)param;
 
     DWORD wait_ms = g_Context.m_tick_resolution / 1000;
+    g_Context.m_timer_tid = GetCurrentThreadId();
 
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
@@ -331,10 +356,15 @@ void Context::SwitchContext()
     }
 }
 
-size_t Context::GetCallerSP()
+size_t Context::GetCallerSP() const
 {
-    TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
-    return (size_t)STK_X86_WIN32_GET_SP(active_task->m_task->GetStack());
+    const TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
+    return reinterpret_cast<size_t>(STK_X86_WIN32_GET_SP(active_task->m_task->GetStack()));
+}
+
+TId Context::GetTid() const
+{
+    return m_handler->OnGetTid(GetCallerSP());
 }
 
 void Context::SwitchToNext()
@@ -342,9 +372,14 @@ void Context::SwitchToNext()
     m_handler->OnTaskSwitch(GetCallerSP());
 }
 
-void Context::SleepTicks(uint32_t ticks)
+void Context::SleepTicks(Timeout ticks)
 {
     m_handler->OnTaskSleep(GetCallerSP(), ticks);
+}
+
+IWaitObject *Context::StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+{
+    return m_handler->OnTaskWait(GetCallerSP(), sync_obj, mutex, timeout);
 }
 
 void Context::Stop()
@@ -418,9 +453,14 @@ void PlatformX86Win32::SwitchToNext()
     g_Context.SwitchToNext();
 }
 
-void PlatformX86Win32::SleepTicks(uint32_t ticks)
+void PlatformX86Win32::SleepTicks(Timeout ticks)
 {
     g_Context.SleepTicks(ticks);
+}
+
+IWaitObject *PlatformX86Win32::StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout)
+{
+    return g_Context.StartWaiting(sync_obj, mutex, timeout);
 }
 
 void PlatformX86Win32::ProcessTick()
@@ -443,9 +483,14 @@ void PlatformX86Win32::SetEventOverrider(IEventOverrider *overrider)
     g_Context.m_overrider = overrider;
 }
 
-size_t PlatformX86Win32::GetCallerSP()
+size_t PlatformX86Win32::GetCallerSP() const
 {
     return g_Context.GetCallerSP();
+}
+
+TId PlatformX86Win32::GetTid() const
+{
+    return g_Context.GetTid();
 }
 
 uintptr_t stk::GetTls()
@@ -458,6 +503,11 @@ void stk::SetTls(uintptr_t tp)
     return g_Context.SetTls(tp);
 }
 
+IKernelService *IKernelService::GetInstance()
+{
+    return g_Context.m_service;
+}
+
 void stk::EnterCriticalSection()
 {
     g_Context.EnterCriticalSection();
@@ -468,9 +518,14 @@ void stk::ExitCriticalSection()
     g_Context.ExitCriticalSection();
 }
 
-IKernelService *IKernelService::GetInstance()
+void stk::Spinlock::Lock()
 {
-    return g_Context.m_service;
+    STK_X86_WIN32_SPIN_LOCK_LOCK(m_lock);
+}
+
+void stk::Spinlock::Unlock()
+{
+    STK_X86_WIN32_SPIN_LOCK_UNLOCK(m_lock);
 }
 
 #endif // _STK_ARCH_X86_WIN32

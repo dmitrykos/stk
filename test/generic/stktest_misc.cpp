@@ -316,9 +316,10 @@ namespace stk
         virtual size_t GetTid() const { return 0; }
         virtual int64_t GetTicks() const { return ticks; }
         virtual int32_t GetTickResolution() const { return resolution; }
-        virtual void Delay(uint32_t msec) const { (void)msec; }
-        virtual void Sleep(uint32_t msec) { (void)msec; }
+        virtual void Delay(Timeout msec) const { (void)msec; }
+        virtual void Sleep(Timeout msec) { (void)msec; }
         virtual void SwitchToNext() {}
+        IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout) { return nullptr; }
     }
     s_KernelServiceMock;
 

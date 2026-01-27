@@ -123,7 +123,7 @@ private:
 /*! \brief     Get thread Id.
     \return    Thread Id.
 */
-__stk_forceinline size_t GetTid()
+__stk_forceinline TId GetTid()
 {
     return IKernelService::GetInstance()->GetTid();
 }

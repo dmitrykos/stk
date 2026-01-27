@@ -13,34 +13,12 @@
 #include <stk.h>
 #include "stk_c.h"
 
-#define STK_TASKS_MAX (STK_KERNEL_MAX_TASKS * STK_CPU_COUNT)
+#define STK_C_TASKS_MAX (STK_C_KERNEL_MAX_TASKS)
+
+inline void *operator new(std::size_t, void *ptr) noexcept { return ptr; }
+inline void operator delete(void *, void *) noexcept { /* nothing for placement delete */ }
 
 using namespace stk;
-
-typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticRR;
-typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicRR;
-typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelStaticSWRR;
-typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault> KernelDynamicSWRR;
-typedef Kernel<KERNEL_STATIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault> KernelStaticFP;
-typedef Kernel<KERNEL_DYNAMIC, STK_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault> KernelDynamicFP;
-typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelStaticHrtRR;
-typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault> KernelDynamicHrtRR;
-typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelStaticHrtRM;
-typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault> KernelDynamicHrtRM;
-typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelStaticHrtDM;
-typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault> KernelDynamicHrtDM;
-typedef Kernel<KERNEL_STATIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault> KernelStaticHrtEDF;
-typedef Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault> KernelDynamicHrtEDF;
-
-inline void *operator new(std::size_t, void *ptr) noexcept
-{
-    return ptr;
-}
-
-inline void operator delete(void *, void *) noexcept
-{
-    // nothing to do for placement delete
-}
 
 class TaskWrapper : public ITask
 {
@@ -88,248 +66,72 @@ private:
     const char *m_tname;
 };
 
+struct stk_task_t
+{
+    TaskWrapper handle;
+};
+
 struct TaskSlot
 {
     TaskSlot() : busy(false), task()
     {}
 
-    bool        busy;
-    TaskWrapper task;
-};
-
-class KernelWrapper
-{
-public:
-    enum Type
-    {
-        None,
-        StaticRR,
-        DynamicRR,
-        StaticSWRR,
-        DynamicSWRR,
-        StaticFP,
-        DynamicFP,
-        StaticHrtRR,
-        DynamicHrtRR,
-        StaticHrtRM,
-        DynamicHrtRM,
-        StaticHrtDM,
-        DynamicHrtDM,
-        StaticHrtEDF,
-        DynamicHrtEDF
-    };
-
-    Type     active;
-    IKernel *ptr;
-
-    KernelWrapper() : active(Type::None), ptr(nullptr)
-    {}
-
-    ~KernelWrapper()
-    {
-        Destroy();
-    }
-
-    IKernel *Create(Type req_type)
-    {
-        Destroy();
-
-        active = req_type;
-
-        switch (req_type)
-        {
-        case Type::StaticRR:
-            ptr = new (&static_rr) KernelStaticRR();
-            break;
-        case Type::DynamicRR:
-            ptr = new (&dynamic_rr) KernelDynamicRR();
-            break;
-        case Type::StaticSWRR:
-            ptr = new (&static_swrr) KernelStaticSWRR();
-            break;
-        case Type::DynamicSWRR:
-            ptr = new (&dynamic_swrr) KernelDynamicSWRR();
-            break;
-        case Type::StaticFP:
-            ptr = new (&static_fp) KernelStaticFP();
-            break;
-        case Type::DynamicFP:
-            ptr = new (&dynamic_fp) KernelDynamicFP();
-            break;
-        case Type::StaticHrtRR:
-            ptr = new (&static_hrt_rr) KernelStaticHrtRR();
-            break;
-        case Type::DynamicHrtRR:
-            ptr = new (&dynamic_hrt_rr) KernelDynamicHrtRR();
-            break;
-        case Type::StaticHrtRM:
-            ptr = new (&static_hrt_rm) KernelStaticHrtRM();
-            break;
-        case Type::DynamicHrtRM:
-            ptr = new (&dynamic_hrt_rm) KernelDynamicHrtRM();
-            break;
-        case Type::StaticHrtDM:
-            ptr = new (&static_hrt_dm) KernelStaticHrtDM();
-            break;
-        case Type::DynamicHrtDM:
-            ptr = new (&dynamic_hrt_dm) KernelDynamicHrtDM();
-            break;
-        case Type::StaticHrtEDF:
-            ptr = new (&static_hrt_edf) KernelStaticHrtEDF();
-            break;
-        case Type::DynamicHrtEDF:
-            ptr = new (&dynamic_hrt_edf) KernelDynamicHrtEDF();
-            break;
-        default:
-            STK_ASSERT(false);
-            break;
-        }
-
-        return ptr;
-    }
-
-    void Destroy()
-    {
-        switch (active)
-        {
-        case Type::StaticRR:
-            static_rr.~KernelStaticRR();
-            break;
-        case Type::DynamicRR:
-            dynamic_rr.~KernelDynamicRR();
-            break;
-        case Type::StaticSWRR:
-            static_swrr.~KernelStaticSWRR();
-            break;
-        case Type::DynamicSWRR:
-            dynamic_swrr.~KernelDynamicSWRR();
-            break;
-        case Type::StaticFP:
-            static_fp.~KernelStaticFP();
-            break;
-        case Type::DynamicFP:
-            dynamic_fp.~KernelDynamicFP();
-            break;
-        case Type::StaticHrtRR:
-            static_hrt_rr.~KernelStaticHrtRR();
-            break;
-        case Type::DynamicHrtRR:
-            dynamic_hrt_rr.~KernelDynamicHrtRR();
-            break;
-        case Type::StaticHrtRM:
-            static_hrt_rm.~KernelStaticHrtRM();
-            break;
-        case Type::DynamicHrtRM:
-            dynamic_hrt_rm.~KernelDynamicHrtRM();
-            break;
-        case Type::StaticHrtDM:
-            static_hrt_dm.~KernelStaticHrtDM();
-            break;
-        case Type::DynamicHrtDM:
-            dynamic_hrt_dm.~KernelDynamicHrtDM();
-            break;
-        case Type::StaticHrtEDF:
-            static_hrt_edf.~KernelStaticHrtEDF();
-            break;
-        case Type::DynamicHrtEDF:
-            dynamic_hrt_edf.~KernelDynamicHrtEDF();
-            break;
-        case Type::None:
-            break;
-        }
-
-        active = Type::None;
-        ptr = nullptr;
-    }
-
-private:
-
-    union
-    {
-        KernelStaticRR static_rr;
-        KernelDynamicRR dynamic_rr;
-        KernelStaticSWRR static_swrr;
-        KernelDynamicSWRR dynamic_swrr;
-        KernelStaticFP static_fp;
-        KernelDynamicFP dynamic_fp;
-        KernelStaticHrtRR static_hrt_rr;
-        KernelDynamicHrtRR dynamic_hrt_rr;
-        KernelStaticHrtRM static_hrt_rm;
-        KernelDynamicHrtRM dynamic_hrt_rm;
-        KernelStaticHrtDM static_hrt_dm;
-        KernelDynamicHrtDM dynamic_hrt_dm;
-        KernelStaticHrtEDF static_hrt_edf;
-        KernelDynamicHrtEDF dynamic_hrt_edf;
-    };
+    bool       busy;
+    stk_task_t task;
 };
 
 // Static vars
-static KernelWrapper s_Kernel[STK_CPU_COUNT];
-static TaskSlot      s_Tasks[STK_TASKS_MAX];
+static volatile bool s_TaskPoolLock = false;
+static TaskSlot s_Tasks[STK_C_TASKS_MAX];
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-static IKernel *AllocateKernel(KernelWrapper::Type type)
+
+static stk_task_t *AllocateTask(stk_task_entry_t entry,
+                                void *arg,
+                                size_t *stack,
+                                uint32_t stack_size,
+                                EAccessMode mode)
 {
-    for (uint32_t i = 0; i < STK_CPU_COUNT; ++i)
-    {
-        if (s_Kernel[i].active == KernelWrapper::Type::None)
-            return s_Kernel[i].Create(type);
-    }
+    stk_task_t *task = nullptr;
 
-    STK_ASSERT(false);
-    return nullptr;
-}
+    stk::EnterCriticalSection();
 
-static void DestroyKernel(const IKernel *kernel)
-{
-    for (uint32_t i = 0; i < STK_CPU_COUNT; ++i)
-    {
-        if ((s_Kernel[i].active != KernelWrapper::Type::None) &&
-            (kernel == s_Kernel[i].ptr))
-        {
-            s_Kernel[i].Destroy();
-            return;
-        }
-    }
-
-    STK_ASSERT(false);
-}
-
-static TaskWrapper *AllocateTask(stk_task_entry_t entry,
-                                 void *arg,
-                                 size_t *stack,
-                                 uint32_t stack_size,
-                                 EAccessMode mode)
-{
-    for (uint32_t i = 0; i < STK_TASKS_MAX; ++i)
+    for (uint32_t i = 0; i < STK_C_TASKS_MAX; ++i)
     {
         if (!s_Tasks[i].busy)
         {
             s_Tasks[i].busy = true;
 
-            TaskWrapper *task = &s_Tasks[i].task;
-            task->Initialize(entry, arg, stack, stack_size, mode);
-            return task;
+            task = &s_Tasks[i].task;
+            task->handle.Initialize(entry, arg, stack, stack_size, mode);
+            break;
         }
     }
 
-    STK_ASSERT(false);
-    return nullptr;
+    stk::ExitCriticalSection();
+
+    STK_ASSERT(task != nullptr);
+    return task;
 }
 
-static void FreeTask(const TaskWrapper *task)
+static void FreeTask(const stk_task_t *task)
 {
-    for (uint32_t i = 0; i < STK_TASKS_MAX; ++i)
+    stk::EnterCriticalSection();
+
+    for (uint32_t i = 0; i < STK_C_TASKS_MAX; ++i)
     {
         if (s_Tasks[i].busy && (task == &s_Tasks[i].task))
         {
             s_Tasks[i].busy = false;
+
+            stk::ExitCriticalSection();
             return;
         }
     }
 
+    stk::ExitCriticalSection();
     STK_ASSERT(false);
 }
 
@@ -341,80 +143,55 @@ extern "C" {
 // ---------------------------------------------------------------------------
 // Kernel create/destroy wrappers
 // ---------------------------------------------------------------------------
-stk_kernel_t *stk_kernel_create_static()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticRR));
-}
+#define STK_KERNEL_CASE(X) \
+    case X: \
+    { \
+        static_assert(sizeof(STK_C_KERNEL_TYPE_CPU_##X) % sizeof(size_t) == 0, \
+                      "Kernel memory size must be multiple of size_t"); \
+        alignas(alignof(STK_C_KERNEL_TYPE_CPU_##X)) /* instead of __stk_c_stack_attr */ \
+        static size_t kernel_##X##_mem[sizeof(STK_C_KERNEL_TYPE_CPU_##X) / sizeof(size_t)]; \
+        IKernel *kernel = new (kernel_##X##_mem) STK_C_KERNEL_TYPE_CPU_##X(); \
+        return reinterpret_cast<stk_kernel_t *>(kernel); \
+    }
 
-stk_kernel_t *stk_kernel_create_dynamic()
+stk_kernel_t *stk_kernel_create(uint8_t core_nr)
 {
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicRR));
-}
-
-stk_kernel_t *stk_kernel_create_static_swrr()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticSWRR));
-}
-
-stk_kernel_t *stk_kernel_create_dynamic_swrr()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicSWRR));
-}
-
-stk_kernel_t *stk_kernel_create_static_fp()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticFP));
-}
-
-stk_kernel_t *stk_kernel_create_dynamic_fp()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicFP));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_static()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtRR));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_dynamic()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtRR));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_static_rm()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtRM));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_dynamic_rm()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtRM));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_static_dm()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtDM));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_dynamic_dm()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtDM));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_static_edf()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::StaticHrtEDF));
-}
-
-stk_kernel_t *stk_kernel_create_hrt_dynamic_edf()
-{
-    return reinterpret_cast<stk_kernel_t *>(AllocateKernel(KernelWrapper::DynamicHrtEDF));
+    switch (core_nr)
+    {
+#ifdef STK_C_KERNEL_TYPE_CPU_0
+    STK_KERNEL_CASE(0)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_1
+    STK_KERNEL_CASE(1)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_2
+    STK_KERNEL_CASE(2)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_3
+    STK_KERNEL_CASE(3)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_4
+    STK_KERNEL_CASE(4)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_5
+    STK_KERNEL_CASE(5)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_6
+    STK_KERNEL_CASE(6)
+#endif
+#ifdef STK_C_KERNEL_TYPE_CPU_7
+    STK_KERNEL_CASE(7)
+#endif
+    default:
+        return nullptr;
+    }
 }
 
 void stk_kernel_destroy(stk_kernel_t *k)
 {
-    STK_ASSERT(k);
-    DestroyKernel(reinterpret_cast<IKernel *>(k));
+    STK_ASSERT(k != nullptr);
+
+    reinterpret_cast<IKernel *>(k)->~IKernel();
 }
 
 // ---------------------------------------------------------------------------
@@ -423,44 +200,47 @@ void stk_kernel_destroy(stk_kernel_t *k)
 void stk_kernel_init(stk_kernel_t *k,
                      uint32_t tick_period_us)
 {
-    STK_ASSERT(k);
+    STK_ASSERT(k != nullptr);
+
     reinterpret_cast<stk::IKernel *>(k)->Initialize(tick_period_us);
 }
 
 void stk_kernel_start(stk_kernel_t *k)
 {
-    STK_ASSERT(k);
+    STK_ASSERT(k != nullptr);
+
     reinterpret_cast<stk::IKernel *>(k)->Start();
 }
 
 bool stk_kernel_is_running(const stk_kernel_t *k)
 {
-    STK_ASSERT(k);
+    STK_ASSERT(k != nullptr);
+
     return reinterpret_cast<const stk::IKernel *>(k)->IsStarted();
 }
 
 bool stk_kernel_is_schedulable(const stk_kernel_t *k)
 {
-    STK_ASSERT(k);
+    STK_ASSERT(k != nullptr);
 
-    return SchedulabilityCheck::IsSchedulableWCRT<STK_KERNEL_MAX_TASKS>(
+    return SchedulabilityCheck::IsSchedulableWCRT<STK_C_KERNEL_MAX_TASKS>(
             reinterpret_cast<stk::IKernel *>(const_cast<stk_kernel_t *>(k))->GetSwitchStrategy());
 }
 
 void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *task)
 {
-    STK_ASSERT(k);
-    STK_ASSERT(task);
-    reinterpret_cast<stk::IKernel *>(k)->AddTask(
-        reinterpret_cast<TaskWrapper *>(task));
+    STK_ASSERT(k != nullptr);
+    STK_ASSERT(task != nullptr);
+
+    reinterpret_cast<stk::IKernel *>(k)->AddTask(&task->handle);
 }
 
 void stk_kernel_remove_task(stk_kernel_t *k, stk_task_t *task)
 {
-    STK_ASSERT(k);
-    STK_ASSERT(task);
-    reinterpret_cast<stk::IKernel *>(k)->RemoveTask(
-        reinterpret_cast<TaskWrapper *>(task));
+    STK_ASSERT(k != nullptr);
+    STK_ASSERT(task != nullptr);
+
+    reinterpret_cast<stk::IKernel *>(k)->RemoveTask(&task->handle);
 }
 
 void stk_kernel_add_task_hrt(stk_kernel_t *k,
@@ -469,10 +249,11 @@ void stk_kernel_add_task_hrt(stk_kernel_t *k,
                              int32_t deadline_ticks,
                              int32_t start_delay_ticks)
 {
-    STK_ASSERT(k);
-    STK_ASSERT(task);
+    STK_ASSERT(k != nullptr);
+    STK_ASSERT(task != nullptr);
+
     reinterpret_cast<stk::IKernel *>(k)->AddTask(
-        reinterpret_cast<TaskWrapper *>(task),
+        &task->handle,
         periodicity_ticks,
         deadline_ticks,
         start_delay_ticks);
@@ -486,9 +267,10 @@ stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
                                        size_t *stack,
                                        uint32_t stack_size)
 {
-    STK_ASSERT(entry);
-    STK_ASSERT(stack);
-    STK_ASSERT(stack_size);
+    STK_ASSERT(entry != nullptr);
+    STK_ASSERT(stack != nullptr);
+    STK_ASSERT(stack_size != 0);
+
     return reinterpret_cast<stk_task_t *>(AllocateTask(entry, arg, stack, stack_size, ACCESS_PRIVILEGED));
 }
 
@@ -497,41 +279,47 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  size_t *stack,
                                  uint32_t stack_size)
 {
-    STK_ASSERT(entry);
-    STK_ASSERT(stack);
-    STK_ASSERT(stack_size);
+    STK_ASSERT(entry != nullptr);
+    STK_ASSERT(stack != nullptr);
+    STK_ASSERT(stack_size != 0);
+
     return reinterpret_cast<stk_task_t *>(AllocateTask(entry, arg, stack, stack_size, ACCESS_USER));
 }
 
 void stk_task_set_weight(stk_task_t *task, uint32_t weight)
 {
-    STK_ASSERT(task);
+    STK_ASSERT(task != nullptr);
     STK_ASSERT(weight != 0);
-    reinterpret_cast<TaskWrapper *>(task)->SetWeight(weight);
+
+    task->handle.SetWeight(weight);
 }
 
 void stk_task_set_priority(stk_task_t *task, uint8_t priority)
 {
     STK_ASSERT(priority <= 31);
+
     stk_task_set_weight(task, priority);
 }
 
 void stk_task_set_id(stk_task_t *task, uint32_t tid)
 {
-    STK_ASSERT(task);
-    reinterpret_cast<TaskWrapper *>(task)->SetId(tid);
+    STK_ASSERT(task != nullptr);
+
+    task->handle.SetId(tid);
 }
 
 void stk_task_set_name(stk_task_t *task, const char *tname)
 {
-    STK_ASSERT(task);
-    reinterpret_cast<TaskWrapper *>(task)->SetName(tname);
+    STK_ASSERT(task != nullptr);
+
+    task->handle.SetName(tname);
 }
 
 void stk_task_destroy(stk_task_t *task)
 {
-    STK_ASSERT(task);
-    FreeTask(reinterpret_cast<TaskWrapper *>(task));
+    STK_ASSERT(task != nullptr);
+
+    FreeTask(task);
 }
 
 // ---------------------------------------------------------------------------
@@ -561,12 +349,12 @@ void stk_tls_set(void *ptr)
 // ---------------------------------------------------------------------------
 // Critical Section - Manual Enter/Exit
 // ---------------------------------------------------------------------------
-void stk_enter_critical_section(void)
+void stk_critical_section_enter(void)
 {
     stk::EnterCriticalSection();
 }
 
-void stk_exit_critical_section(void)
+void stk_critical_section_exit(void)
 {
     stk::ExitCriticalSection();
 }
