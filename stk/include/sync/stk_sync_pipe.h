@@ -146,7 +146,7 @@ public:
             size_t available = N - m_count;
             size_t to_write = ((count - written) < available ? (count - written) : available);
 
-            // copy to source
+            // copy from source
             // note: if value type is not scalar or queue is small we copy with a for loop,
             //       otherwise using faster memcpy version for large scalar arrays
             if (!std::is_scalar<T>::value && (N < 8))

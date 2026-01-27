@@ -49,6 +49,19 @@ __stk_forceinline void SetTlsPtr(const _TyTls *tp)
     SetTls(reinterpret_cast<uintptr_t>(tp));
 }
 
+/*! \brief Enter a critical section.
+    \note  Disables preemption to protect shared resources.
+           Supports nesting: multiple calls from the same context are safe.
+           Use sparingly, as long critical sections can affect real-time behavior.
+*/
+void EnterCriticalSection();
+
+/*! \brief Exit a critical section.
+    \note  Must be called after EnterCriticalSection().
+           Each call to EnterCriticalSection() must be matched with one ExitCriticalSection().
+*/
+void ExitCriticalSection();
+
 /*! \class ScopedCriticalSection
     \brief Enters critical section and exits from it automatically within the scope of execution.
 
@@ -63,8 +76,55 @@ __stk_forceinline void SetTlsPtr(const _TyTls *tp)
 */
 struct ScopedCriticalSection
 {
-    ScopedCriticalSection() { stk::EnterCriticalSection(); }
+    explicit ScopedCriticalSection() { stk::EnterCriticalSection(); }
     ~ScopedCriticalSection() { stk::ExitCriticalSection(); }
+};
+
+/*! \class Spinlock
+    \brief Minimal spinlock implementation for short critical sections.
+    \note  Use only for very short, low-latency critical sections.
+           Spinning blocks the CPU and may affect real-time behavior.
+*/
+class Spinlock
+{
+public:
+    /*! \brief  Construct a Spinlock (unlocked by default).
+    */
+    Spinlock() : m_lock(false)
+    {}
+
+    /*! \brief   Acquire the spinlock.
+        \note    Blocks (busy-waits) until the lock is acquired.
+                 Non-recursive: calling Lock() twice on the same lock from the same thread/core will deadlock.
+    */
+    void Lock();
+
+    /*! \brief   Release the spinlock.
+        \note    Must be called after a successful Lock().
+                 Releases the lock immediately, allowing other threads/cores to acquire it.
+    */
+    void Unlock();
+
+    /*! \brief  Attempt to acquire the spinlock without blocking.
+        \return True if the lock was successfully acquired; false otherwise.
+        \note   Non-blocking. Does not guarantee acquisition. Use only for short critical sections or retry loops.
+    */
+    bool TryLock()
+    {
+        if (!m_lock)
+        {
+            Lock();
+            return true;
+        }
+        return false;
+    }
+
+protected:
+#ifdef _STK_ARCH_X86_WIN32
+    volatile long m_lock; //! lock flag: true = locked, false = unlocked
+#else
+    volatile bool m_lock __stk_aligned(8); //! lock flag: true = locked, false = unlocked
+#endif
 };
 
 } // namespace stk

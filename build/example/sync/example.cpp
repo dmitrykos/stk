@@ -27,6 +27,13 @@ extern void STK_ASSERT_IMPL(const char *err, const char *source, int32_t line);
 
 #define STK_EXAMPLE_USE_PIPE 1
 
+// R2350 requires larger stack due to stack-memory heavy SDK API
+#ifdef _PICO_H
+enum { TASK_STACK_SIZE = 1024 };
+#else
+enum { TASK_STACK_SIZE = 256 };
+#endif
+
 #ifdef _STK_ASSERT_REDIRECT
 void STK_ASSERT_IMPL(const char *err, const char *source, int32_t line)
 {
@@ -37,7 +44,8 @@ void STK_ASSERT_IMPL(const char *err, const char *source, int32_t line)
 
 enum LedState
 {
-    LED_OFF, LED_ON
+    LED_OFF = 0,
+    LED_ON
 };
 
 #if STK_EXAMPLE_USE_PIPE
@@ -109,13 +117,6 @@ private:
         }
     }
 };
-
-// R2350 requires larger stack due to stack-memory heavy SDK API
-#ifdef _PICO_H
-enum { TASK_STACK_SIZE = 1024 };
-#else
-enum { TASK_STACK_SIZE = 256 };
-#endif
 
 // Task's core (thread)
 template <stk::EAccessMode _AccessMode>
@@ -288,9 +289,6 @@ void RunExample()
 
     // start scheduler (it will start threads added by AddTask), execution in main() will be blocked on this line
     kernel.Start();
-
-    // shall not reach here after Start() was called
-    STK_ASSERT(false);
 
     // shall not reach here after Start() was called
     STK_ASSERT(false);

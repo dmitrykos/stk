@@ -7,22 +7,16 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#ifndef DRIVER_SMP_H_
-#define DRIVER_SMP_H_
+#include "example.h"
 
-#include <stdint.h>
-
-#ifdef __cplusplus
-
-struct Cpu
+int main(int argc, char* argv[])
 {
-    static void Start(uint8_t cpu_id, void (*entry_func)(void));
-};
+    (void)argc;
+    (void)argv;
 
-#else
+    // activate ARM Cortex-M core of RP2350:
+    // picotool reboot -c arm
 
-    void Cpu_Start(uint8_t cpu_id, void (*entry_func)(void));
-
-#endif
-
-#endif /* DRIVER_SMP_H_ */
+    RunExample();
+    return 0 ;
+}

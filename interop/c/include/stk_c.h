@@ -34,27 +34,47 @@ extern "C" {
 // Configuration macros (can be overridden before including this file)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \def   STK_KERNEL_MAX_TASKS
+/*! \def   STK_C_KERNEL_MAX_TASKS
     \brief Maximum number of tasks per kernel instance (default: 4).
     \note  Increase this value if you need more tasks.
            Has direct impact on RAM and FLASH usage.
 */
-#ifndef STK_KERNEL_MAX_TASKS
-    #define STK_KERNEL_MAX_TASKS 4
+#ifndef STK_C_KERNEL_MAX_TASKS
+    #define STK_C_KERNEL_MAX_TASKS 4
 #endif
 
-/*! \def   STK_CPU_COUNT
+/*! \def   STK_C_CPU_COUNT
     \brief Number of kernel instances / CPU cores supported (default: 1)
     \note  Each core usually gets its own independent kernel instance.
 */
-#ifndef STK_CPU_COUNT
-    #define STK_CPU_COUNT 1
+#ifndef STK_C_CPU_COUNT
+    #define STK_C_CPU_COUNT 1
+#endif
+
+/*! \def   STK_SYNC_DEBUG_NAMES
+    \brief Enable names for synchronization primitives for debugging/tracing purpose.
+*/
+#if !defined(STK_SYNC_DEBUG_NAMES) && STK_SEGGER_SYSVIEW
+    #define STK_SYNC_DEBUG_NAMES 1
+#elif !defined(STK_SYNC_DEBUG_NAMES)
+    #define STK_SYNC_DEBUG_NAMES 0
 #endif
 
 /*! \def STK_C_ASSERT
     \brief Assertion macro used inside STK C bindings
 */
 #define STK_C_ASSERT(e) assert(e)
+
+/*! \def       ____stk_c_stack_attr
+    \brief     Stack attribute (applies required alignment).
+*/
+#ifdef __GNUC__
+    #define __stk_c_stack_attr __attribute__((aligned(16)))
+#elif defined(__ICCARM__)
+    #define __stk_c_stack_attr __attribute__((aligned(16)))
+#else
+    #define __stk_c_stack_attr
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -66,11 +86,11 @@ typedef struct stk_kernel_t stk_kernel_t;
 
 /*! \brief Opaque handle to a task instance.
 */
-typedef struct stk_task_t   stk_task_t;
+typedef struct stk_task_t stk_task_t;
 
 /*! \brief Default tick period (1 ms).
 */
-#define STK_PERIODICITY_DEFAULT  (1000U) /*!< in microseconds */
+#define STK_PERIODICITY_DEFAULT (1000U) /*!< in microseconds */
 
 /*! \brief     Task entry point function type
     \param[in] arg: User-supplied argument (may be NULL)
@@ -79,81 +99,77 @@ typedef struct stk_task_t   stk_task_t;
 */
 typedef void (*stk_task_entry_t)(void *arg);
 
+/*! \brief Infinite timeout constant.
+*/
+#define STK_WAIT_INFINITE (INT32_MAX)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Kernel factory functions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief Create static kernel – Round Robin.
-    \note  Kernel uses \a KERNEL_STATIC mode.
-*/
-stk_kernel_t *stk_kernel_create_static(void);
+/* Available kernel type definitions:
 
-/*! \brief Create dynamic kernel – Round Robin.
-    \note  Kernel uses \a KERNEL_DYNAMIC mode.
-*/
-stk_kernel_t *stk_kernel_create_dynamic(void);
+// Standard variants
+Kernel<KERNEL_STATIC,  STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_DYNAMIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_STATIC,  STK_C_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault>
+Kernel<KERNEL_DYNAMIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault>
+Kernel<KERNEL_STATIC,  STK_C_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault>
+Kernel<KERNEL_DYNAMIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault>
 
-/*! \brief Create static kernel – Smooth Weighted Round Robin.
-    \note  Kernel uses \a KERNEL_STATIC mode.
-*/
-stk_kernel_t *stk_kernel_create_static_swrr(void);
+// HRT variants
+Kernel<KERNEL_STATIC  | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT, STK_C_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault>
 
-/*! \brief Create dynamic kernel – Smooth Weighted Round Robin.
-    \note  Kernel uses \a KERNEL_DYNAMIC mode.
-*/
-stk_kernel_t *stk_kernel_create_dynamic_swrr(void);
+// Standard variants with KERNEL_SYNC
+Kernel<KERNEL_STATIC  | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR,  PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR,  PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategySWRR, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyFP32, PlatformDefault>
 
-/*! \brief Create static kernel – Fixed Priority.
-    \note  Kernel uses \a KERNEL_STATIC mode.
+// HRT variants with KERNEL_SYNC
+Kernel<KERNEL_STATIC  | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRM, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyDM, PlatformDefault>
+Kernel<KERNEL_STATIC  | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault>
+Kernel<KERNEL_DYNAMIC | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault>
 */
-stk_kernel_t *stk_kernel_create_static_fp(void);
 
-/*! \brief Create dynamic kernel – Fixed Priority.
-    \note  Kernel uses \a KERNEL_DYNAMIC mode.
+/*! \def   STK_C_KERNEL_TYPE_CPU_X
+    \brief Kernel type definition per CPU core.
+    \note  STK_C_KERNEL_TYPE_CPU_X type will be assigned to X core.
+
+    \code
+    // Example of kernel type definition for 8 cores.
+    #define STK_C_KERNEL_TYPE_CPU_0 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_1 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_2 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_3 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_4 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_5 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_6 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    #define STK_C_KERNEL_TYPE_CPU_7 Kernel<KERNEL_STATIC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyRR, PlatformDefault>
+    \endcode
+ */
+
+/*! \brief     Create kernel.
+    \note      At least \a STK_C_KERNEL_TYPE_CPU_0 must be defined with the type of the kernel.
+               Place STK_C_KERNEL_TYPE_CPU_X defines inside the stk_config.h file which is per project.
+               STK_C_KERNEL_TYPE_CPU_X type will be assigned to X core.
+    \param[in] core_nr: CPU core number (starts with 0). Max: 7 (for 8 cores).
 */
-stk_kernel_t *stk_kernel_create_dynamic_fp(void);
-
-// ───── Hard Real-Time (HRT) variants ────────────────────────────────────────
-
-/*! \brief Create static HRT kernel – Round Robin.
-    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode.
-*/
-stk_kernel_t *stk_kernel_create_hrt_static(void);
-
-/*! \brief Create dynamic HRT kernel – Round Robin.
-    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode.
-*/
-stk_kernel_t *stk_kernel_create_hrt_dynamic(void);
-
-/*! \brief Create static HRT kernel – Rate Monotonic.
-    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (RM).
-*/
-stk_kernel_t *stk_kernel_create_hrt_static_rm(void);
-
-/*! \brief Create dynamic HRT kernel – Rate Monotonic.
-    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (RM).
-*/
-stk_kernel_t *stk_kernel_create_hrt_dynamic_rm(void);
-
-/*! \brief Create static HRT kernel – Deadline Monotonic.
-    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (DM).
-*/
-stk_kernel_t *stk_kernel_create_hrt_static_dm(void);
-
-/*! \brief Create dynamic HRT kernel – Deadline Monotonic.
-    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (DM).
-*/
-stk_kernel_t *stk_kernel_create_hrt_dynamic_dm(void);
-
-/*! \brief Create static HRT kernel – Earliest Deadline First.
-    \note  Kernel uses \a KERNEL_STATIC + \a KERNEL_HRT mode (EDF).
-*/
-stk_kernel_t *stk_kernel_create_hrt_static_edf(void);
-
-/*! \brief Create dynamic HRT kernel – Earliest Deadline First.
-    \note  Kernel uses \a KERNEL_DYNAMIC + \a KERNEL_HRT mode (EDF).
-*/
-stk_kernel_t *stk_kernel_create_hrt_dynamic_edf(void);
+stk_kernel_t *stk_kernel_create(uint8_t core_nr);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kernel control
@@ -368,18 +384,279 @@ void stk_tls_set(void *ptr);
 */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Critical section (interrupt / preemption protection)
+// Synchronization Primitives
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ───── Critical Section ──────────────────────────────────────────────────────
 
 /*! \brief Enter critical section — disable context switches on current core.
     \note  Supports nesting (number of enter calls must match number of exit calls).
 */
-void stk_enter_critical_section(void);
+void stk_critical_section_enter(void);
 
 /*! \brief Leave critical section — re-enable context switches.
-    \note  Must be called once for each previous stk_enter_critical_section().
+    \note  Must be called once for each previous stk_critical_section_enter().
 */
-void stk_exit_critical_section(void);
+void stk_critical_section_exit(void);
+
+// ───── Mutex ─────────────────────────────────────────────────────────────────
+
+/*! \brief A memory size (multiples of size_t) required for a Mutex instance.
+*/
+#define STK_MUTEX_IMPL_SIZE (10 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
+
+/*! \brief A memory container for a Mutex instance.
+*/
+typedef struct stk_mutex_mem_t {
+    size_t data[STK_MUTEX_IMPL_SIZE] __stk_c_stack_attr;
+} stk_mutex_mem_t;
+
+/*! \brief Opaque handle to a Mutex instance.
+*/
+typedef struct stk_mutex_t stk_mutex_t;
+
+/*! \brief     Create a Mutex (using provided memory).
+    \param[in] memory: Pointer to static memory container.
+    \param[in] memory_size: Size of the container.
+    \return    Mutex handle.
+*/
+stk_mutex_t *stk_mutex_create(stk_mutex_mem_t *memory, uint32_t memory_size);
+
+/*! \brief     Destroy a Mutex.
+    \param[in] mtx: Mutex handle.
+*/
+void stk_mutex_destroy(stk_mutex_t *mtx);
+
+/*! \brief     Lock the mutex. Blocks until available.
+    \param[in] mtx: Mutex handle.
+*/
+void stk_mutex_lock(stk_mutex_t *mtx);
+
+/*! \brief     Unlock the mutex.
+    \param[in] mtx: Mutex handle.
+*/
+void stk_mutex_unlock(stk_mutex_t *mtx);
+
+/*! \brief     Try to lock the mutex with a timeout.
+    \param[in] mtx: Mutex handle.
+    \param[in] timeout: Max time to wait in milliseconds.
+    \return    True if locked successfully, False on timeout.
+*/
+bool stk_mutex_timed_lock(stk_mutex_t *mtx, int32_t timeout);
+
+// ───── Condition Variable ────────────────────────────────────────────────────
+
+/*! \brief A memory size (multiples of size_t) required for a ConditionVariable instance.
+*/
+#define STK_CV_IMPL_SIZE (7 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
+
+/*! \brief A memory container for a ConditionVariable instance.
+*/
+typedef struct stk_cv_mem_t {
+    size_t data[STK_CV_IMPL_SIZE] __stk_c_stack_attr;
+} stk_cv_mem_t;
+
+/*! \brief Opaque handle to a Condition Variable instance.
+*/
+typedef struct stk_cv_t stk_cv_t;
+
+/*! \brief     Create a Condition Variable (using provided memory).
+    \param[in] memory:      Pointer to static memory container.
+    \param[in] memory_size: Size of the container.
+    \return    CV handle.
+*/
+stk_cv_t *stk_cv_create(stk_cv_mem_t *memory, uint32_t memory_size);
+
+/*! \brief     Destroy a Condition Variable.
+    \param[in] cv: CV handle.
+*/
+void stk_cv_destroy(stk_cv_t *cv);
+
+/*! \brief     Wait for a signal on the condition variable.
+    \details   Atomically releases the mutex and suspends the task.
+               The mutex is re-acquired before returning.
+    \param[in] cv: CV handle.
+    \param[in] mtx: Locked mutex handle protecting the state.
+    \param[in] timeout: Max time to wait (or \a STK_WAIT_INFINITE).
+    \return    True if signaled, False on timeout.
+*/
+bool stk_cv_wait(stk_cv_t *cv, stk_mutex_t *mtx, int32_t timeout);
+
+/*! \brief     Wake one task waiting on the condition variable.
+    \param[in] cv: CV handle.
+*/
+void stk_cv_notify_one(stk_cv_t *cv);
+
+/*! \brief     Wake all tasks waiting on the condition variable.
+    \param[in] cv: CV handle.
+*/
+void stk_cv_notify_all(stk_cv_t *cv);
+
+// ───── Event ─────────────────────────────────────────────────────────────────
+
+/*! \brief A memory size (multiples of size_t) required for an Event instance.
+*/
+#define STK_EVENT_IMPL_SIZE (8 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
+
+/*! \brief A memory container for an Event instance.
+*/
+typedef struct stk_event_mem_t {
+    size_t data[STK_EVENT_IMPL_SIZE] __stk_c_stack_attr;
+} stk_event_mem_t;
+
+/*! \brief Opaque handle to an Event instance.
+*/
+typedef struct stk_event_t stk_event_t;
+
+/*! \brief     Create an Event (using provided memory).
+    \param[in] memory:       Pointer to static memory container.
+    \param[in] memory_size:  Size of the container.
+    \param[in] manual_reset: True for manual-reset, False for auto-reset.
+    \return    Event handle.
+*/
+stk_event_t *stk_event_create(stk_event_mem_t *memory, uint32_t memory_size, bool manual_reset);
+
+/*! \brief     Destroy an Event.
+    \param[in] ev: Event handle.
+*/
+void stk_event_destroy(stk_event_t *ev);
+
+/*! \brief     Wait for the event to become signaled.
+    \param[in] ev:      Event handle.
+    \param[in] timeout: Max time to wait in milliseconds.
+    \return    True if signaled, False on timeout.
+*/
+bool stk_event_wait(stk_event_t *ev, int32_t timeout);
+
+/*! \brief     Set the event to signaled state.
+    \param[in] ev: Event handle.
+*/
+void stk_event_set(stk_event_t *ev);
+
+/*! \brief     Reset the event to non-signaled state.
+    \param[in] ev: Event handle.
+*/
+void stk_event_reset(stk_event_t *ev);
+
+/*! \brief     Pulse the event (signal then immediately reset).
+    \param[in] ev: Event handle.
+*/
+void stk_event_pulse(stk_event_t *ev);
+
+// ───── Semaphore ─────────────────────────────────────────────────────────────
+
+/*! \brief A memory size (multiples of size_t) required for a Semaphore instance.
+*/
+#define STK_SEM_IMPL_SIZE (8 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
+
+/*! \brief A memory container for a Semaphore instance.
+*/
+typedef struct stk_sem_mem_t {
+    size_t data[STK_SEM_IMPL_SIZE] __stk_c_stack_attr;
+} stk_sem_mem_t;
+
+/*! \brief Opaque handle to a Semaphore instance.
+*/
+typedef struct stk_sem_t stk_sem_t;
+
+/*! \brief     Create a Semaphore (using provided memory).
+    \param[in] memory: Pointer to static memory container.
+    \param[in] memory_size: Size of the container.
+    \param[in] initial_count: Starting value of the resource counter.
+    \return    Semaphore handle.
+*/
+stk_sem_t *stk_sem_create(stk_sem_mem_t *memory, uint32_t memory_size, uint32_t initial_count);
+
+/*! \brief     Destroy a Semaphore.
+    \param[in] sem: Semaphore handle.
+*/
+void stk_sem_destroy(stk_sem_t *sem);
+
+/*! \brief     Wait for a semaphore resource.
+    \param[in] sem: Semaphore handle.
+    \param[in] timeout: Max time to wait in milliseconds.
+    \return    True if resource acquired, False on timeout.
+*/
+bool stk_sem_wait(stk_sem_t *sem, int32_t timeout);
+
+/*! \brief     Signal/Release a semaphore resource.
+    \param[in] sem: Semaphore handle.
+*/
+void stk_sem_signal(stk_sem_t *sem);
+
+// ───── Pipe (FIFO) ───────────────────────────────────────────────────────────
+
+/*! \brief Size of the Pipe: Pipe<size_t, STK_PIPE_SIZE>.
+    \note  Adjust if larger or smaller pipe is needed.
+*/
+#define STK_PIPE_SIZE 16
+
+/*! \brief A memory size (multiples of size_t) required for a Pipe instance.
+    \note  Sized for Pipe<size_t, 16>. Adjust if template parameters change.
+*/
+#define STK_PIPE_IMPL_SIZE ((27 + (STK_SYNC_DEBUG_NAMES ? 3 : 0)) + STK_PIPE_SIZE)
+
+/*! \brief A memory container for a Pipe instance.
+*/
+typedef struct stk_pipe_mem_t {
+    size_t data[STK_PIPE_IMPL_SIZE] __stk_c_stack_attr;
+} stk_pipe_mem_t;
+
+/*! \brief Opaque handle to a Pipe instance.
+*/
+typedef struct stk_pipe_t stk_pipe_t;
+
+/*! \brief     Create a Pipe (using provided memory).
+    \param[in] memory:      Pointer to static memory container.
+    \param[in] memory_size: Size of the container.
+    \return    Pipe handle.
+*/
+stk_pipe_t *stk_pipe_create(stk_pipe_mem_t *memory, uint32_t memory_size);
+
+/*! \brief     Destroy a Pipe.
+    \param[in] pipe: Pipe handle.
+*/
+void stk_pipe_destroy(stk_pipe_t *pipe);
+
+/*! \brief     Write data to the pipe.
+    \param[in] pipe:    Pipe handle.
+    \param[in] data:    Value to write.
+    \param[in] timeout: Max time to wait in milliseconds.
+    \return    True if successful, False on timeout.
+*/
+bool stk_pipe_write(stk_pipe_t *pipe, size_t data, int32_t timeout);
+
+/*! \brief     Read data from the pipe.
+    \param[in]  pipe:    Pipe handle.
+    \param[out] data:    Pointer to variable receiving the data.
+    \param[in]  timeout: Max time to wait in milliseconds.
+    \return     True if successful, False on timeout.
+*/
+bool stk_pipe_read(stk_pipe_t *pipe, size_t *data, int32_t timeout);
+
+/*! \brief     Write multiple elements to the pipe.
+    \param[in] pipe:    Pipe handle.
+    \param[in] src:     Pointer to source array.
+    \param[in] count:   Number of elements to write.
+    \param[in] timeout: Max time to wait in milliseconds.
+    \return    Number of elements actually written.
+*/
+size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const size_t *src, size_t count, int32_t timeout);
+
+/*! \brief     Read multiple elements from the pipe.
+    \param[in]  pipe:    Pipe handle.
+    \param[out] dst:     Pointer to destination array.
+    \param[in]  count:   Number of elements to read.
+    \param[in]  timeout: Max time to wait in milliseconds.
+    \return     Number of elements actually read.
+*/
+size_t stk_pipe_read_bulk(stk_pipe_t *pipe, size_t *dst, size_t count, int32_t timeout);
+
+/*! \brief     Get the current number of elements in the pipe.
+    \param[in] pipe: Pipe handle.
+    \return    Current element count.
+*/
+size_t stk_pipe_get_count(stk_pipe_t *pipe);
 
 #ifdef __cplusplus
 }

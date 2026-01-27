@@ -14,7 +14,7 @@
 #define STACK_SIZE 256
 
 static volatile uint8_t g_TaskSwitch = 0;
-uint32_t g_Stack[3][STACK_SIZE];
+static uint32_t g_Stack[STK_C_KERNEL_MAX_TASKS][STACK_SIZE] __stk_c_stack_attr;
 
 static void InitLeds()
 {
@@ -72,11 +72,11 @@ void TaskFunc(void *arg)
 
         // change LED state
         {
-            stk_enter_critical_section();
+            stk_critical_section_enter();
 
             SwitchOnLED(task_id);
 
-            stk_exit_critical_section();
+            stk_critical_section_exit();
         }
 
         // sleep 1s and delegate work to another task switching another LED
@@ -90,7 +90,7 @@ void RunExample()
     InitLeds();
 
     // allocate scheduling kernel
-    stk_kernel_t *k = stk_kernel_create_static();
+    stk_kernel_t *k = stk_kernel_create(0);
 
     // init kernel with default periodicity - 1ms tick
     stk_kernel_init(k, STK_PERIODICITY_DEFAULT);

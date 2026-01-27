@@ -16,7 +16,7 @@
 // Use ARM Cortex-M33 cores of RP2350
 #define _STK_ARCH_ARM_CORTEX_M
 
-// Define _STK_C_CPU_COUNT as 2 to use STK on both CPU cores or on CPU1, if 1 then STK can be hosted on CPU0 only
+// Define _STK_ARCH_CPU_COUNT as 2 to use STK on both CPU cores or on CPU1, if 1 then STK can be hosted on CPU0 only
 #define _STK_ARCH_CPU_COUNT    (2)
 #define _STK_ARCH_GET_CPU_ID() (*(uint32_t *)(SIO_BASE + SIO_CPUID_OFFSET)) // see get_core_num() in pico/platform.h
 
@@ -24,5 +24,15 @@
 #define _STK_SYSTICK_HANDLER   isr_systick
 #define _STK_PENDSV_HANDLER    isr_pendsv
 #define _STK_SVC_HANDLER       isr_svcall
+
+// For C interface:
+#define STK_C_CPU_COUNT         (2)
+#define STK_C_KERNEL_MAX_TASKS  (3)
+#define STK_C_KERNEL_TYPE_CPU_0 Kernel<KERNEL_STATIC | KERNEL_SYNC, 3, SwitchStrategyRR, PlatformDefault>
+#if (STK_C_CPU_COUNT == 2)
+#undef STK_C_KERNEL_MAX_TASKS
+#define STK_C_KERNEL_MAX_TASKS  (4)
+#define STK_C_KERNEL_TYPE_CPU_1 Kernel<KERNEL_STATIC | KERNEL_SYNC, 1, SwitchStrategyRR, PlatformDefault>
+#endif
 
 #endif /* STK_CONFIG_H_ */

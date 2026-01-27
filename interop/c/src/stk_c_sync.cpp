@@ -1,0 +1,273 @@
+/*
+ * SuperTinyKernel (STK): minimalistic C++ thread scheduling kernel for Embedded Systems.
+ *
+ * Source: http://github.com/dmitrykos/stk
+ *
+ * Copyright (c) 2022-2026 Neutron Code Limited <stk@neutroncode.com>
+ * License: MIT License, see LICENSE for a full text.
+ */
+
+#include <cstddef> // for std::size_t
+
+#include <stk_config.h>
+#include <stk.h>
+#include <sync/stk_sync.h>
+#include "stk_c.h"
+
+using namespace stk;
+using namespace stk::sync;
+
+inline void *operator new(std::size_t, void *ptr) noexcept { return ptr; }
+inline void operator delete(void *, void *) noexcept { /* nothing for placement delete */ }
+
+// ---------------------------------------------------------------------------
+// C-interface
+// ---------------------------------------------------------------------------
+extern "C" {
+
+// ---------------------------------------------------------------------------
+// Mutex
+// ---------------------------------------------------------------------------
+struct stk_mutex_t
+{
+    Mutex handle;
+};
+
+stk_mutex_t *stk_mutex_create(stk_mutex_mem_t *memory, uint32_t memory_size)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_mutex_t));
+    if (memory_size < sizeof(stk_mutex_t))
+        return nullptr;
+
+    // construct in-place within the provided memory
+    return (stk_mutex_t *)new (memory->data) stk_mutex_t{};
+}
+
+void stk_mutex_destroy(stk_mutex_t *mtx)
+{
+    if (mtx != NULL)
+        mtx->~stk_mutex_t();
+}
+
+void stk_mutex_lock(stk_mutex_t *mtx)
+{
+    STK_ASSERT(mtx != NULL);
+
+    mtx->handle.Lock();
+}
+
+void stk_mutex_unlock(stk_mutex_t *mtx)
+{
+    STK_ASSERT(mtx != NULL);
+
+    mtx->handle.Unlock();
+}
+
+bool stk_mutex_timed_lock(stk_mutex_t *mtx, int32_t timeout)
+{
+    STK_ASSERT(mtx != NULL);
+
+    return mtx->handle.TimedLock(timeout);
+}
+
+// ---------------------------------------------------------------------------
+// ConditionVariable
+// ---------------------------------------------------------------------------
+struct stk_cv_t
+{
+    ConditionVariable handle;
+};
+
+stk_cv_t *stk_cv_create(stk_cv_mem_t *memory, uint32_t memory_size)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_cv_t));
+    if (memory_size < sizeof(stk_cv_t))
+        return nullptr;
+
+    // construct in-place within the provided memory
+    return (stk_cv_t *)new (memory->data) stk_cv_t{};
+}
+
+void stk_cv_destroy(stk_cv_t *cv)
+{
+    if (cv != nullptr)
+        cv->~stk_cv_t();
+}
+
+bool stk_cv_wait(stk_cv_t *cv, stk_mutex_t *mtx, int32_t timeout)
+{
+    STK_ASSERT(cv != nullptr);
+    STK_ASSERT(mtx != nullptr);
+
+    return cv->handle.Wait(mtx->handle, timeout);
+}
+
+void stk_cv_notify_one(stk_cv_t *cv)
+{
+    STK_ASSERT(cv != nullptr);
+
+    cv->handle.NotifyOne();
+}
+
+void stk_cv_notify_all(stk_cv_t *cv)
+{
+    STK_ASSERT(cv != nullptr);
+
+    cv->handle.NotifyAll();
+}
+
+// ---------------------------------------------------------------------------
+// Event
+// ---------------------------------------------------------------------------
+struct stk_event_t
+{
+    Event handle;
+};
+
+stk_event_t *stk_event_create(stk_event_mem_t *memory, uint32_t memory_size, bool manual_reset)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_event_t));
+    if (memory_size < sizeof(stk_event_t))
+        return nullptr;
+
+    return (stk_event_t *)new (memory->data) stk_event_t{ Event(manual_reset) };
+}
+
+void stk_event_destroy(stk_event_t *ev)
+{
+    if (ev != nullptr)
+        ev->~stk_event_t();
+}
+
+bool stk_event_wait(stk_event_t *ev, int32_t timeout)
+{
+    STK_ASSERT(ev != nullptr);
+
+    return ev->handle.Wait(timeout);
+}
+
+void stk_event_set(stk_event_t *ev)
+{
+    STK_ASSERT(ev != nullptr);
+
+    ev->handle.Set();
+}
+
+void stk_event_reset(stk_event_t *ev)
+{
+    STK_ASSERT(ev != nullptr);
+
+    ev->handle.Reset();
+}
+
+void stk_event_pulse(stk_event_t *ev)
+{
+    STK_ASSERT(ev != nullptr);
+
+    ev->handle.Pulse();
+}
+
+// ---------------------------------------------------------------------------
+// Semaphore
+// ---------------------------------------------------------------------------
+struct stk_sem_t
+{
+    Semaphore handle;
+};
+
+stk_sem_t *stk_sem_create(stk_sem_mem_t *memory, uint32_t memory_size, uint32_t initial_count)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_sem_t));
+    if (memory_size < sizeof(stk_sem_t))
+        return nullptr;
+
+    return (stk_sem_t *)new (memory->data) stk_sem_t{ Semaphore(initial_count) };
+}
+
+void stk_sem_destroy(stk_sem_t *sem)
+{
+    if (sem != nullptr)
+        sem->~stk_sem_t();
+}
+
+bool stk_sem_wait(stk_sem_t *sem, int32_t timeout)
+{
+    STK_ASSERT(sem != nullptr);
+
+    return sem->handle.Wait(timeout);
+}
+
+void stk_sem_signal(stk_sem_t *sem)
+{
+    STK_ASSERT(sem != nullptr);
+
+    sem->handle.Signal();
+}
+
+// ---------------------------------------------------------------------------
+// Pipe (template instantiation for size_t, STK_PIPE_SIZE)
+// ---------------------------------------------------------------------------
+typedef Pipe<size_t, STK_PIPE_SIZE> PipeX;
+
+struct stk_pipe_t
+{
+    PipeX handle;
+};
+
+stk_pipe_t *stk_pipe_create(stk_pipe_mem_t *memory, uint32_t memory_size)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_pipe_t));
+    if (memory_size < sizeof(stk_pipe_t))
+        return nullptr;
+
+    return (stk_pipe_t *)new (memory->data) stk_pipe_t{};
+}
+
+void stk_pipe_destroy(stk_pipe_t *pipe)
+{
+    if (pipe != nullptr)
+        pipe->~stk_pipe_t();
+}
+
+bool stk_pipe_write(stk_pipe_t *pipe, size_t data, int32_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    return pipe->handle.Write(data, timeout);
+}
+
+bool stk_pipe_read(stk_pipe_t *pipe, size_t *data, int32_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+    STK_ASSERT(data != nullptr);
+
+    return pipe->handle.Read(*data, timeout);
+}
+
+size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const size_t *src, size_t count, int32_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    return pipe->handle.WriteBulk(src, count, timeout);
+}
+
+size_t stk_pipe_read_bulk(stk_pipe_t *pipe, size_t *dst, size_t count, int32_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    return pipe->handle.ReadBulk(dst, count, timeout);
+}
+
+size_t stk_pipe_get_count(stk_pipe_t *pipe)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    return pipe->handle.GetCount();
+}
+
+} // extern "C"

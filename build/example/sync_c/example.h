@@ -7,22 +7,13 @@
  * License: MIT License, see LICENSE for a full text.
  */
 
-#ifndef DRIVER_SMP_H_
-#define DRIVER_SMP_H_
+#ifndef EXAMPLE_H_
+#define EXAMPLE_H_
 
-#include <stdint.h>
+#include <assert.h>
+#include "../driver/led.h"
+#include "../driver/cpu.h"
 
-#ifdef __cplusplus
+extern void RunExample();
 
-struct Cpu
-{
-    static void Start(uint8_t cpu_id, void (*entry_func)(void));
-};
-
-#else
-
-    void Cpu_Start(uint8_t cpu_id, void (*entry_func)(void));
-
-#endif
-
-#endif /* DRIVER_SMP_H_ */
+#endif /* EXAMPLE_H_ */

@@ -17,8 +17,8 @@
 #include <setjmp.h>
 
 #include "stk_helper.h"
+#include "stk_arch.h"
 #include "arch/stk_arch_common.h"
-#include "arch/risc-v/stk_arch_risc-v.h"
 
 using namespace stk;
 
@@ -1018,6 +1018,11 @@ void PlatformRiscV::SetSpecificEventHandler(ISpecificEventHandler *handler)
     GetContext().m_specific = handler;
 }
 
+IKernelService *IKernelService::GetInstance()
+{
+    return GetContext().m_service;
+}
+
 void stk::EnterCriticalSection()
 {
     GetContext().EnterCriticalSection();
@@ -1028,9 +1033,14 @@ void stk::ExitCriticalSection()
     GetContext().ExitCriticalSection();
 }
 
-IKernelService *IKernelService::GetInstance()
+void stk::Spinlock::Lock()
 {
-    return GetContext().m_service;
+    STK_RISCV_SPIN_LOCK_LOCK(m_lock);
+}
+
+void stk::Spinlock::Unlock()
+{
+    STK_RISCV_SPIN_LOCK_UNLOCK(m_lock);
 }
 
 #endif // _STK_ARCH_RISC_V

@@ -13,8 +13,8 @@
 
 #ifdef _STK_ARCH_X86_WIN32
 
+#include "stk_arch.h"
 #include "arch/stk_arch_common.h"
-#include "arch/x86/win32/stk_arch_x86-win32.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -38,6 +38,10 @@ static timeBeginPeriodF timeBeginPeriod = NULL;
 #define STK_X86_WIN32_CRITICAL_SECTION_END(SES) ::LeaveCriticalSection(SES)
 #define STK_X86_WIN32_MIN_RESOLUTION (1000)
 #define STK_X86_WIN32_GET_SP(STACK) (STACK + 2) // +2 to overcome stack filler check inside Kernel (adjusting to +2 preserves 8-byte alignment)
+#define STK_X86_WIN32_SPIN_LOCK_LOCK(LOCK) \
+    while (InterlockedCompareExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 1, 0) != 0) { Yield(); }
+#define STK_X86_WIN32_SPIN_LOCK_UNLOCK(LOCK) \
+    InterlockedExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 0);
 
 using namespace stk;
 
@@ -499,6 +503,11 @@ void stk::SetTls(uintptr_t tp)
     return g_Context.SetTls(tp);
 }
 
+IKernelService *IKernelService::GetInstance()
+{
+    return g_Context.m_service;
+}
+
 void stk::EnterCriticalSection()
 {
     g_Context.EnterCriticalSection();
@@ -509,9 +518,14 @@ void stk::ExitCriticalSection()
     g_Context.ExitCriticalSection();
 }
 
-IKernelService *IKernelService::GetInstance()
+void stk::Spinlock::Lock()
 {
-    return g_Context.m_service;
+    STK_X86_WIN32_SPIN_LOCK_LOCK(m_lock);
+}
+
+void stk::Spinlock::Unlock()
+{
+    STK_X86_WIN32_SPIN_LOCK_UNLOCK(m_lock);
 }
 
 #endif // _STK_ARCH_X86_WIN32

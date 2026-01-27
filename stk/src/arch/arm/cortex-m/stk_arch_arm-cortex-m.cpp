@@ -22,8 +22,8 @@
 #include <arm_cmse.h>
 #endif
 
+#include "stk_arch.h"
 #include "arch/stk_arch_common.h"
-#include "arch/arm/cortex-m/stk_arch_arm-cortex-m.h"
 
 using namespace stk;
 
@@ -38,7 +38,7 @@ using namespace stk;
 #ifdef CONTROL_nPRIV_Msk
     #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK) \
         uint32_t timeout = 0xFFFFFF; \
-        while (__atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE)) { \
+        while (__atomic_test_and_set(&(LOCK), __ATOMIC_ACQUIRE)) { \
             if (--timeout == 0) { \
                 /* if we hit this, the lock was never released by the previous owner */ \
                 __stk_debug_break(); \
@@ -48,7 +48,7 @@ using namespace stk;
     #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
             /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */ \
             __asm volatile("dmb ishst" ::: "memory"); \
-            __atomic_clear(&LOCK, __ATOMIC_RELEASE); \
+            __atomic_clear(&(LOCK), __ATOMIC_RELEASE); \
         } while (0)
 #elif defined(RP2040_H)
     // Raspberry RP2040 dual-core M0+ implementation, using Hardware Spinlock 0 (SIO base 0xd0000000 + offset)
@@ -61,16 +61,16 @@ using namespace stk;
             /* if we hit this, the lock was never released by the previous owner */ \
             __stk_debug_break(); \
         } \
-        LOCK = true;
+        (LOCK) = true;
     #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
             __asm volatile("" ::: "memory"); \
-            LOCK = false; \
+            (LOCK) = false; \
             SIO_SPINLOCK = 1; /* writing any value releases the hardware lock */ \
         } while (0)
 #else
     // Standard single-core Cortex-M0 implementation:
-    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK)   do { LOCK = true; } while (0)
-    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { LOCK = false; __asm volatile("" ::: "memory"); } while (0)
+    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK)   do { (LOCK) = true; } while (0)
+    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { (LOCK) = false; __asm volatile("" ::: "memory"); } while (0)
 #endif
 
 #ifdef CONTROL_nPRIV_Msk
@@ -860,6 +860,11 @@ size_t PlatformArmCortexM::GetCallerSP() const
     return ::GetCallerSP();
 }
 
+IKernelService *IKernelService::GetInstance()
+{
+    return GetContext().m_service;
+}
+
 void stk::EnterCriticalSection()
 {
     // if we are in Handler or Privileged Thread Mode, we can skip the SVC and take the fast path
@@ -878,9 +883,14 @@ void stk::ExitCriticalSection()
         GetContext().UnprivExitCriticalSection();
 }
 
-IKernelService *IKernelService::GetInstance()
+void stk::Spinlock::Lock()
 {
-    return GetContext().m_service;
+    STK_CORTEX_M_SPIN_LOCK_LOCK(m_lock);
+}
+
+void stk::Spinlock::Unlock()
+{
+    STK_CORTEX_M_SPIN_LOCK_UNLOCK(m_lock);
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M
