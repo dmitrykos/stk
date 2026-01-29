@@ -23,15 +23,16 @@ namespace sync {
     \brief Binary synchronization event (signaled / non-signaled) primitive.
 
     Supports two operation modes:
-    - Auto-reset (default):   Set() wakes one waiting task and automatically resets.
-    - Manual-reset:           Set() wakes all waiting tasks; state remains signaled until Reset().
+    - Auto-reset (default): Set() wakes one waiting task and automatically resets.
+    - Manual-reset:         Set() wakes all waiting tasks; state remains signaled until Reset().
 
-    Additionally supports \c Pulse(): attempt to release waiters and then reset (Win32 PulseEvent() semantics).
+    Additionally, supports \c Pulse(): attempt to release waiters and then reset (Win32 PulseEvent() semantics).
 
     \note  Follows Win32 PulseEvent() behavior:
            - For auto-reset events: releases one waiting thread (if any) and resets to non-signaled.
            - For manual-reset events: releases all waiting threads (if any) and resets to non-signaled.
            - If no threads are waiting, resets to non-signaled.
+
     \warning Pulse semantics are inherently racy and considered unreliable in many Win32 usage scenarios.
              Prefer explicit \c Set() + \c Reset() patterns when possible.
 
@@ -81,6 +82,7 @@ public:
         \note      - In auto-reset mode: wakes one waiting task (if any) and immediately resets.
                    - In manual-reset mode: wakes all waiting tasks (if any); state remains set.
                    - If not signaled, does nothing.
+        \note      ISR-safe.
     */
     bool Set();
 
@@ -89,21 +91,34 @@ public:
                    \c false if event was already non-signaled.
         \note      Has no practical effect on auto-reset events that are already non-signaled.
                    Mainly used with manual-reset events.
+        \note      ISR-safe.
     */
     bool Reset();
 
     /*! \brief     Wait until event becomes signaled or the timeout expires.
         \param[in] timeout: Maximum time to wait (ticks). Use \a WAIT_INFINITE for no timeout (wait forever).
-        \return    \c true if the event was signaled (wait succeeded),
+        \warning   ISR-unsafe.
+        \return    \c true if event was signaled (wait succeeded),
                    \c false if timeout occurred before the event was signaled.
     */
     bool Wait(Timeout timeout = WAIT_INFINITE);
+
+    /*! \brief     Poll event state without blocking.
+        \details   This method checks if event is currently signaled. If signaled, it performs the reset
+                   (if auto-reset is enabled) and returns immediately without yielding the CPU or entering
+                   a wait list.
+        \note      ISR-safe.
+        \return    \c true if event was signaled at the time of the call,
+                   \c false if event was not signaled.
+    */
+    bool TryWait();
 
     /*! \brief     Pulse event: attempt to release waiters and then reset (Win32 PulseEvent() semantics).
         \note      Follows Win32 PulseEvent() behavior:
                     - For auto-reset events: releases one waiting thread (if any) and resets to non-signaled.
                     - For manual-reset events: releases all waiting threads (if any) and resets to non-signaled.
                     - If no threads are waiting, resets to non-signaled.
+        \note      ISR-safe.
         \warning   Pulse semantics are inherently racy and considered unreliable in many Win32 usage scenarios.
                    Prefer explicit \c Set() + \c Reset() patterns when possible.
     */
@@ -171,6 +186,9 @@ inline void Event::Pulse()
 
 inline bool Event::Wait(Timeout timeout)
 {
+    // not supported inside ISR, may call StartWaiting
+    STK_ASSERT(!hw::IsInsideISR());
+
     ScopedCriticalSection __cs;
 
     // fast path: already signaled
@@ -186,6 +204,24 @@ inline bool Event::Wait(Timeout timeout)
     }
 
     return !IKernelService::GetInstance()->StartWaiting(this, &__cs, timeout)->IsTimeout();
+}
+
+inline bool Event::TryWait()
+{
+    ScopedCriticalSection __cs;
+
+    if (m_signaled)
+    {
+        if (!m_manual_reset)
+        {
+            m_signaled = false;
+            __stk_full_memfence();
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 inline void Event::RemoveWaitObject(IWaitObject *wobj)
@@ -204,7 +240,9 @@ inline void Event::RemoveWaitObject(IWaitObject *wobj)
 inline bool Event::Tick()
 {
     // required for multi-core CPU and multiple instances of STK (one per core)
+#if (_STK_ARCH_CPU_COUNT > 1)
     ScopedCriticalSection __cs;
+#endif
 
     return ISyncObject::Tick();
 }

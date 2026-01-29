@@ -66,6 +66,17 @@ static __stk_forceinline void __ISB()
 //! Put core into a low-power state (similar to ARM's __WFI).
 static __stk_forceinline void __WFI() { __asm volatile("wfi"); }
 
+//! Check if caller is in Handler Mode, i.e. inside ISR.
+static __stk_forceinline bool IsHandlerMode()
+{
+    uintptr_t cause;
+    __asm__ volatile("csrr %0, mcause" : "=r"(cause));
+
+    // the most significant bit (MSB) of mcause indicates if the trap was caused by an interrupt (1) or an exception (0)
+    const uintptr_t MSB_MASK = (uintptr_t)1 << (__riscv_xlen - 1);
+    return ((cause & MSB_MASK) != 0);
+}
+
 #define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); __DSB(); __ISB(); } while (0)
 #define STK_RISCV_CRITICAL_SECTION_END(SES) do { __DSB(); __ISB(); ::HW_ExitCriticalSection(SES); } while (0)
 
@@ -832,12 +843,9 @@ STK_RISCV_ISR void _STK_SVC_HANDLER()
 
 static void OnTaskExit()
 {
-    size_t cs;
-    STK_RISCV_CRITICAL_SECTION_START(cs);
-
+    GetContext().EnterCriticalSection();
     GetContext().m_handler->OnTaskExit(GetContext().m_stack_active);
-
-    STK_RISCV_CRITICAL_SECTION_END(cs);
+    GetContext().ExitCriticalSection();
 
     for (;;)
     {
@@ -1023,24 +1031,29 @@ IKernelService *IKernelService::GetInstance()
     return GetContext().m_service;
 }
 
-void stk::EnterCriticalSection()
+void stk::hw::CriticalSection::Enter()
 {
     GetContext().EnterCriticalSection();
 }
 
-void stk::ExitCriticalSection()
+void stk::hw::CriticalSection::Exit()
 {
     GetContext().ExitCriticalSection();
 }
 
-void stk::Spinlock::Lock()
+void stk::hw::SpinLock::Lock()
 {
     STK_RISCV_SPIN_LOCK_LOCK(m_lock);
 }
 
-void stk::Spinlock::Unlock()
+void stk::hw::SpinLock::Unlock()
 {
     STK_RISCV_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::IsInsideISR()
+{
+    return IsHandlerMode();
 }
 
 #endif // _STK_ARCH_RISC_V

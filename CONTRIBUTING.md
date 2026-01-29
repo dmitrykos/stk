@@ -1,17 +1,29 @@
 ## Contributions to SuperTinyKernel (STK)
 
-STK aims to remain freely usable and free from copyright or licensing constraints. For this reason, we generally do not accept direct code patches from unsolicited external contributors.
+STK aims to remain freely usable and free from copyright or licensing constraints. Because the core kernel must remain unencumbered, we maintain a structured approach to external contributions.
 
-There is a defined process by which changes may be incorporated into the project. This process is intentionally careful and may be more involved than is practical for small or incremental changes.
+### 1. Core Kernel & Source Code
+We generally do not accept direct code patches for the core kernel from unsolicited contributors. This ensures long-term maintainability and legal clarity.
 
-We welcome bug reports, design discussions, and change proposals. If you wish to suggest a modification, please begin by opening an Issue that clearly describes the problem or proposed improvement. Discussion and formal approval through the Issue tracker are required before any pull request is submitted.
+* **Proposals:** We welcome bug reports and design discussions. Please open an **Issue** first.
+* **Process:** Once a proposal is approved, maintainers may implement the change independently or use a provided PR as a reference implementation to ensure it meets STK’s specific architectural standards.
 
-Pull requests submitted without prior approval do not follow this policy and will be closed immediately, without review.
+### 2. Unit Tests & Examples
+We are actively looking to expand our test suite and educational resources. We encourage PRs for:
+* **Unit Tests:** Strengthening the reliability of the kernel.
+* **Examples:** Demonstrating STK usage on various hardware or in specific use cases.
 
-Once a proposal has been reviewed and explicitly approved, a pull request may be opened. A patch or reference implementation may be included as a proof of concept. Please note, however, that even approved changes may be implemented independently by the STK maintainers rather than merged verbatim. This helps ensure consistency, long-term maintainability, and the continued unencumbered status of the project.
+While these still require a brief Issue discussion for alignment, they are subject to a more streamlined review process than core kernel modifications.
 
-Proposals related to CI, GitHub Actions, or other tooling that **do not modify the project's source code directly** are welcome and generally easier to approve. They still require prior contact with the maintainers, either via an Issue, e-mail, or another messaging channel.
+### 3. Tooling & CI
+Proposals related to **CI, GitHub Actions, or build tooling** that do not modify the kernel source are highly welcome. These are generally easier to approve but still require prior contact via an Issue or messaging channel.
 
-You can also contact the maintainers privately by writing to **stk@neutroncode.com** or messaging in social media.
+### 4. How to Reach Us
+Before submitting any PR, please ensure there is an associated Issue or that you have received prior approval. Unsolicited PRs for the core source code will be closed without a review.
 
-SuperTinyKernel (STK) Team
+* **Public:** Open an Issue on GitHub.
+* **Private:** Email us at `stk@neutroncode.com` or reach out via social media private messaging.
+
+---
+
+**SuperTinyKernel (STK) Team**

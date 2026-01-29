@@ -17,6 +17,8 @@ TestContext test::g_TestContext;
 void (* g_RelaxCpuHandler)() = NULL;
 IKernelService *test::g_KernelService = NULL;
 int32_t test::g_CriticalSectionState = false;
+bool test::g_InsideISR = false;
+uintptr_t g_Tls = 0;
 
 /*! \fn    STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.
@@ -51,14 +53,36 @@ IKernelService *IKernelService::GetInstance()
     return g_KernelService;
 }
 
-void stk::EnterCriticalSection()
+void stk::hw::CriticalSection::Enter()
 {
     ++g_CriticalSectionState;
 }
-
-void stk::ExitCriticalSection()
+void stk::hw::CriticalSection::Exit()
 {
     --g_CriticalSectionState;
+}
+
+void stk::hw::SpinLock::Lock()
+{
+    m_lock = true;
+}
+void stk::hw::SpinLock::Unlock()
+{
+    m_lock = false;
+}
+
+uintptr_t stk::hw::GetTls()
+{
+    return g_Tls;
+}
+void stk::hw::SetTls(uintptr_t tp)
+{
+    g_Tls = tp;
+}
+
+bool stk::hw::IsInsideISR()
+{
+    return g_InsideISR;
 }
 
 int main(int argc, char **argv)

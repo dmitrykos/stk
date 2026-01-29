@@ -57,7 +57,7 @@ private:
             // toggle LED for this task
             {
                 // protect from preemption during hardware IO
-                stk::ScopedCriticalSection __cs;
+                stk::hw::CriticalSection::ScopedLock __cs;
 
                 Led::Set((Led::Id)m_led_id, led_state);
             }

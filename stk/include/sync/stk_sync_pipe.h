@@ -69,14 +69,11 @@ public:
         \details   Attempts to push an element into the FIFO queue. If pipe is full, the
                    calling task will be suspended until space is made available by a
                    consumer or the timeout expires.
-
         \param[in] data: Reference to the data element to be copied into the pipe.
         \param[in] timeout: Maximum time to wait for space (ticks). Default: \c WAIT_INFINITE.
-
+        \warning   ISR-unsafe.
         \return    \c true if data was successfully written, \c false if timeout expired
                    before space became available.
-
-        \note      This operation is atomic and thread-safe.
     */
     bool Write(const T &data, Timeout timeout = WAIT_INFINITE)
     {
@@ -102,17 +99,12 @@ public:
         \details   Copies a block of data into the FIFO. If the pipe does not have
                    enough space for the entire block, it will block until the full
                    amount can be written or the timeout expires.
-
         \param[in] src: Pointer to the source array.
         \param[in] count: Number of elements to write.
         \param[in] timeout: Maximum time to wait for sufficient space (ticks).
-
+        \warning   ISR-unsafe.
         \return    Number of elements actually written. This will be equal to \c count
                    unless a timeout occurred.
-
-        \note      This operation is atomic. Other tasks will not be able to read
-                   partial data from this bulk write until it completes.
-
         \code
         // Example:
         Sample frame[64];
@@ -130,8 +122,8 @@ public:
         if ((src == nullptr) || (count == 0))
             return 0;
 
-        Mutex::ScopedLock guard(m_mutex);
         size_t written = 0;
+        Mutex::ScopedLock guard(m_mutex);
 
         while (written < count)
         {
@@ -186,15 +178,11 @@ public:
         \details    Attempts to retrieve an element from the FIFO queue. If pipe is empty,
                     the calling task will be suspended until data is provided by a
                     producer or the timeout expires.
-
         \param[out] data: Reference to the variable where the retrieved data will be stored.
         \param[in]  timeout: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
-
+        \warning    ISR-unsafe.
         \return     \c true if data was successfully read, \c false if timeout expired before
                     any data became available.
-
-        \note       This operation is atomic. Upon successful read, the internal \a ConditionVariable
-                    signals a blocked producer (one of many) that a space has become available.
     */
     bool Read(T &data, Timeout timeout = WAIT_INFINITE)
     {
@@ -220,17 +208,12 @@ public:
         \details    Attempts to retrieve a block of data from the FIFO. If pipe does not
                     contain enough elements to satisfy the requested count, it will block
                     until the full amount is read or the timeout expires.
-
         \param[out] dst: Pointer to the destination array.
         \param[in]  count: Number of elements to read.
         \param[in]  timeout: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
-
+        \warning    ISR-unsafe.
         \return     Number of elements actually read. This will be equal to \c count
                     unless a timeout occurred.
-
-        \note       This operation is atomic. Upon processing data, it signals blocked
-                    producers that space has been cleared.
-
         \code
         // Example:
         Sample frame[64];

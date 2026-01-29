@@ -11,6 +11,7 @@
 #define STK_HELPER_H_
 
 #include "stk_common.h"
+#include "stk_arch.h"
 
 /*! \file  stk_helper.h
     \brief Contains helper implementations which simplify user-side code.
@@ -120,11 +121,15 @@ private:
     MemoryType *m_stack; //!< pointer to the wrapped memory region
 };
 
-/*! \brief     Get thread Id.
-    \return    Thread Id.
+/*! \brief     Get task/thread Id.
+    \warning   ISR-unsafe.
+    \return    Id of the calling task/thread.
 */
 __stk_forceinline TId GetTid()
 {
+    // Kernel will not locate a task inside ISR
+    STK_ASSERT(!hw::IsInsideISR());
+
     return IKernelService::GetInstance()->GetTid();
 }
 
@@ -149,6 +154,7 @@ __stk_forceinline int64_t GetTicksFromMsec(int64_t msec, int32_t resolution)
 }
 
 /*! \brief     Get number of ticks elapsed since kernel start.
+    \note      ISR-safe.
     \return    Ticks.
 */
 __stk_forceinline int64_t GetTicks()
@@ -158,6 +164,7 @@ __stk_forceinline int64_t GetTicks()
 
 /*! \brief     Get number of microseconds in one tick.
     \note      Tick is a periodicity of the system timer expressed in microseconds.
+    \note      ISR-safe.
     \return    Microseconds in one tick.
 */
 __stk_forceinline int32_t GetTickResolution()
@@ -166,6 +173,7 @@ __stk_forceinline int32_t GetTickResolution()
 }
 
 /*! \brief     Get current time in milliseconds.
+    \note      ISR-safe.
     \return    Milliseconds.
 */
 __stk_forceinline int64_t GetTimeNowMsec()
@@ -183,9 +191,13 @@ __stk_forceinline int64_t GetTimeNowMsec()
     \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
     \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).
     \param[in] msec: Delay time (milliseconds).
+    \warning   ISR-unsafe.
 */
 __stk_forceinline void Delay(uint32_t msec)
 {
+    // ISR blocks scheduler and will wait indefinitely (deadlock)
+    STK_ASSERT(!hw::IsInsideISR());
+
     IKernelService::GetInstance()->Delay(msec);
 }
 
@@ -193,16 +205,24 @@ __stk_forceinline void Delay(uint32_t msec)
     \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
     \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
     \param[in] msec: Sleep time (milliseconds).
+    \warning   ISR-unsafe.
 */
 __stk_forceinline void Sleep(uint32_t msec)
 {
+    // ISR blocks scheduler and will wait indefinitely (deadlock)
+    STK_ASSERT(!hw::IsInsideISR());
+
     IKernelService::GetInstance()->Sleep(msec);
 }
 
 /*! \brief     Notify scheduler that it can switch to a next task.
+    \warning   ISR-unsafe.
 */
 __stk_forceinline void Yield()
 {
+    // ISR blocks scheduler and will wait indefinitely (deadlock)
+    STK_ASSERT(!hw::IsInsideISR());
+
     IKernelService::GetInstance()->SwitchToNext();
 }
 
@@ -235,12 +255,12 @@ struct PeriodicTimer
     PeriodicTimer() : prev(GetTimeNowMsec()), elapsed(0)
     {}
 
-    /*! \brief Reset the timer state.
-        \note  This method resets the accumulated elapsed time to zero and
-               reinitializes the reference timestamp using the current value
-               returned by stk::GetTimeNowMsec().
-        \note  After calling Reset(), the next callback invocation will occur
-               only after a full period has elapsed.
+    /*! \brief     Reset timer state.
+        \note      This method resets the accumulated elapsed time to zero and
+                   reinitializes the reference timestamp using the current value
+                   returned by stk::GetTimeNowMsec().
+        \note      After calling Reset(), the next callback invocation will occur
+                   only after a full period has elapsed.
     */
     void Reset()
     {
@@ -248,24 +268,21 @@ struct PeriodicTimer
         elapsed = 0;
     }
 
-    /*! \brief              Update the timer and invoke callback when the period is reached.
-        \tparam   _Callback Callable type accepting (int64_t now, uint32_t elapsed).
-        \param[in] cb       User callback invoked when accumulated time reaches the period.
-
-        \note  The callback is called with:
-               - \c now : current timestamp returned by stk::GetTimeNowMsec()
-               - \c elapsed : accumulated elapsed time in milliseconds
-
-        \note  If accumulated time exceeds the period, the remainder is preserved
-               to maintain timing accuracy across updates.
-
-        \warning This method assumes monotonic behavior of stk::GetTimeNowMsec().
+    /*! \brief     Update the timer and invoke callback when the period is reached.
+        \tparam    _Callback: Callable type accepting (int64_t now, uint32_t elapsed).
+        \param[in] cb: User callback invoked when accumulated time reaches the period.
+        \note      The callback is called with:
+                   - \c now: current timestamp returned by stk::GetTimeNowMsec().
+                   - \c elapsed: accumulated elapsed time in milliseconds.
+        \note      If accumulated time exceeds the period, the remainder is preserved
+                   to maintain timing accuracy across updates.
+        \warning   This method assumes monotonic behavior of stk::GetTimeNowMsec().
     */
     template <typename _Callback>
     void Update(_Callback&& cb)
     {
         int64_t now = GetTimeNowMsec();
-        elapsed += static_cast<uint32_t>(now - prev);
+        elapsed += (uint32_t)(now - prev);
         prev = now;
 
         if (elapsed >= PeriodMsec)

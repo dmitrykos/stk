@@ -865,7 +865,7 @@ IKernelService *IKernelService::GetInstance()
     return GetContext().m_service;
 }
 
-void stk::EnterCriticalSection()
+void stk::hw::CriticalSection::Enter()
 {
     // if we are in Handler or Privileged Thread Mode, we can skip the SVC and take the fast path
     if (IsHandlerMode() || IsPrivilegedThreadMode())
@@ -874,7 +874,7 @@ void stk::EnterCriticalSection()
         GetContext().UnprivEnterCriticalSection();
 }
 
-void stk::ExitCriticalSection()
+void stk::hw::CriticalSection::Exit()
 {
     // if we are in Handler or Privileged Thread Mode, we can skip the SVC and take the fast path
     if (IsHandlerMode() || IsPrivilegedThreadMode())
@@ -883,14 +883,19 @@ void stk::ExitCriticalSection()
         GetContext().UnprivExitCriticalSection();
 }
 
-void stk::Spinlock::Lock()
+void stk::hw::SpinLock::Lock()
 {
     STK_CORTEX_M_SPIN_LOCK_LOCK(m_lock);
 }
 
-void stk::Spinlock::Unlock()
+void stk::hw::SpinLock::Unlock()
 {
     STK_CORTEX_M_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::IsInsideISR()
+{
+    return IsHandlerMode();
 }
 
 #endif // _STK_ARCH_ARM_CORTEX_M

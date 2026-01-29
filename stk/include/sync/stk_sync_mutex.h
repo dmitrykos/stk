@@ -22,7 +22,7 @@ namespace sync {
 /*! \class Mutex
     \brief Recursive mutex primitive that allows the same thread to acquire the lock multiple times.
 
-    A recursive mutex tracks ownership and a recursion count. If the owning thread
+    Recursive mutex tracks ownership and a recursion count. If the owning thread
     calls \c Lock() again, the count is incremented and the call returns immediately
     without blocking. The lock is only fully released when \c Unlock() has been
     called an equal number of times.
@@ -48,8 +48,8 @@ namespace sync {
     }
     \endcode
 
-    \note  Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
-    \see   ISyncObject, IWaitObject, IKernelService::StartWaiting
+    \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
+    \see  ISyncObject, IWaitObject, IKernelService::StartWaiting
 */
 class Mutex : public IMutex, public ITraceable, private ISyncObject
 {
@@ -59,28 +59,32 @@ public:
     explicit Mutex() : m_owner_tid(0), m_count(0)
     {}
 
-    /*! \brief Destructor.
-        \note  If tasks are still waiting at destruction time it is considered a logical error (dangling waiters).
-               An assertion is triggered in debug builds.
+    /*! \brief     Destructor.
+        \note      If tasks are still waiting at destruction time it is considered a logical error (dangling waiters).
+                   An assertion is triggered in debug builds.
     */
     ~Mutex() { STK_ASSERT(m_wait_list.IsEmpty()); }
 
     /*! \brief     Acquire lock.
         \param[in] timeout: Maximum time to wait (ticks).
+        \warning   ISR-unsafe.
         \return    True if lock acquired, false if timeout occurred.
     */
     bool TimedLock(Timeout timeout);
 
     /*! \brief     Acquire lock.
+        \warning   ISR-unsafe.
     */
     void Lock() { (void)TimedLock(WAIT_INFINITE); }
 
     /*! \brief     Acquire the lock.
+        \warning   ISR-unsafe.
         \return    True if lock acquired, false if lock is already acquired by another task.
     */
-    bool TryLock() { return TimedLock(0); }
+    bool TryLock() { return TimedLock(NO_WAIT); }
 
     /*! \brief     Release lock.
+        \warning   ISR-unsafe.
     */
     void Unlock();
 
@@ -94,6 +98,9 @@ private:
 
 inline bool Mutex::TimedLock(Timeout timeout)
 {
+    // not supported inside ISR, may call StartWaiting
+    STK_ASSERT(!hw::IsInsideISR());
+
     IKernelService *svc = IKernelService::GetInstance();
     TId current_tid = svc->GetTid();
 
@@ -138,10 +145,13 @@ inline bool Mutex::TimedLock(Timeout timeout)
 
 inline void Mutex::Unlock()
 {
+    // can't be locked by ISR
+    STK_ASSERT(!hw::IsInsideISR());
+
     ScopedCriticalSection __cs;
 
     // ensure the caller actually owns the mutex
-    STK_ASSERT((m_count != 0) && (m_owner_tid == IKernelService::GetInstance()->GetTid()));
+    STK_ASSERT((m_count != 0) && (m_owner_tid == GetTid()));
 
     if (--m_count == 0)
     {
@@ -162,7 +172,9 @@ inline void Mutex::WakeOne()
 inline bool Mutex::Tick()
 {
     // required for multi-core CPU and multiple instances of STK (one per core)
+#if (_STK_ARCH_CPU_COUNT > 1)
     ScopedCriticalSection __cs;
+#endif
 
     return ISyncObject::Tick();
 }
@@ -170,4 +182,4 @@ inline bool Mutex::Tick()
 } // namespace sync
 } // namespace stk
 
-#endif /* STK_SYNC_EVENT_H_ */
+#endif /* STK_SYNC_MUTEX_H_ */

@@ -1,7 +1,7 @@
 ![Logo](docs/img/stk_logo_200px.png)
 # SuperTinyKernel (STK)
 
-Minimalistic C++/C Thread Scheduler for Embedded Systems.
+A minimalistic C++/C Thread Scheduler for Embedded Systems.
 
 ---
 
@@ -14,15 +14,14 @@ Minimalistic C++/C Thread Scheduler for Embedded Systems.
 
 ## Overview
 
-**SuperTinyKernel (STK)** provides a lightweight, preemptive, as well as deterministic thread scheduling layer for bare-metal embedded applications.
+**SuperTinyKernel (STK)** provides a lightweight, preemptive, as well as deterministic thread scheduling for bare-metal embedded applications.
 
-STK is implemented in C++ with a clean **object-oriented design**, while remaining friendly to C developers:
+STK is implemented in C++ with a clean **Object-Oriented Design** while remaining friendly to embedded developers:
 * No aggressive namespace usage
 * No dependency on modern C++ features or STL
+* No dynamic memory allocation
 * Transparent and readable implementation
-* Dedicated C interface
-
-STK delivers RTOS-like concurrency without the overhead (lower run-time performance, bloated binary and code base) of a full RTOS.
+* Fully-featured C interface for C-only development
 
 It is an [open-source project](https://github.com/dmitrykos/stk), navigate its code for more details.
 
@@ -30,25 +29,25 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ## Key Features
 
-| Feature                               | Description                                                                                                   |
-|---------------------------------------|---------------------------------------------------------------------------------------------------------------|
-| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling                      |
-| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring                                                              |
-| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                                 |
-| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                                      |
-| Rich scheduling capabilities          | STK provides many scheduling strategies (priority-less, fixed or automated priorities) which fit any scenario |
-| Extensible via interfaces             | Kernel functionality can be extended by implementing STK’s interfaces, including new scheduling strategies    |
-| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                                         |
-| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                                          |
-| Synchronization API                   | Synchronization primitives for building application of any difficulty level                                   |
-| Tiny footprint                        | Minimal code unrelated to scheduling                                                                          |
-| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                                      |
-| C++ and C API                         | Can be used easily in C++ and C projects                                                                      |
-| Easy porting                          | Requires very small BSP surface                                                                               |
-| Traceable                             | Scheduling is fully traceable with SEGGER SystemView GUI application                                          |
-| Development mode (x86)                | Run the same threaded application on Windows                                                                  |
-| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                                            |
-| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M                  |
+| Feature                               | Description                                                                                        |
+|---------------------------------------|----------------------------------------------------------------------------------------------------|
+| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling           |
+| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring by the kernel                                     |
+| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                      |
+| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                           |
+| Rich scheduling capabilities          | All major scheduling strategies are supported: priority-less, fixed-priority or automatic-priority |
+| Extensible via C++ interfaces         | Kernel functionality can be extended by implementing available C++ interfaces                      |
+| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                              |
+| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                               |
+| Synchronization API                   | Synchronization primitives for building application of any difficulty level                        |
+| Tiny footprint                        | Minimal code unrelated to scheduling                                                               |
+| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                           |
+| C++ and C API                         | Can be used easily in C++ and C projects                                                           |
+| Easy porting                          | Requires very small to none BSP surface                                                            |
+| Traceable                             | Scheduling is fully traceable with a SEGGER SystemView                                             |
+| Development mode (x86)                | Run the same threaded application on Windows                                                       |
+| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                                 |
+| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M       |
 
 ---
 
@@ -58,24 +57,22 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 * Tasks cooperate using `Sleep()` or `Yield()`
 * Timing is a best-effort
-* Tasks can not block execution of other tasks (preemptive scheduling, see **Built-in Scheduling Strategies**)
+* Preemptive scheduling: tasks can not block execution of other tasks even if they do not cooperate (see **Built-in Scheduling Strategies**)
 * Dedicated task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyFixedPriority`, `SwitchStrategySmoothWeightedRoundRobin`)
 
 ### Hard Real-Time (HRT)
 
-* Separate kernel mode of operation set by `KERNEL_HRT` flag
+* Separate kernel mode of operation set by the `KERNEL_HRT` flag
 * Periodic tasks with strict execution windows
 * Tasks must notify kernel when the work is done by using `Yield()`
 * Kernel enforces deadlines
 * Any violation fails the application deterministically (`ITask::OnDeadlineMissed` callback is called)
 * Dedicated HRT task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyRM`, `SwitchStrategyDM`, `SwitchStrategyEDF`)
 
-> HRT use cases: motor control, power electronics, aerospace systems.
-
 ### Static vs Dynamic
 
-* `KERNEL_STATIC` – tasks created once at startup, kernel never returns to `main()`
-* `KERNEL_DYNAMIC` – tasks may exit, kernel returns to `main()` when all tasks exit
+* `KERNEL_STATIC`: tasks are created once at startup, kernel never returns to `main()`.
+* `KERNEL_DYNAMIC`: tasks may exit, kernel returns to `main()` when all tasks exit.
 
 ### Built-in Scheduling Strategies
 
@@ -108,7 +105,7 @@ Modern embedded systems increasingly process **untrusted or complex data** (netw
 By marking tasks that parse potentially attacker-controlled data as `ACCESS_USER`, you get **hardware-enforced isolation**:
 - An erroneous or malicious write to a peripheral register immediately triggers a **hard BusFault** instead of silently corrupting hardware state.
 - Only explicitly trusted tasks (marked `ACCESS_PRIVILEGED`) are allowed to touch GPIO, UART, SPI, DMA, timers, etc.
-- The kernel itself and all STK services remain fully functional for unprivileged tasks (sleep, yield, critical sections, TLS, etc.).
+- The kernel itself and all STK services remain fully functional for unprivileged tasks (`Sleep`, `Yield`, `CriticalSection`, TLS, etc.).
 
 #### Example
 
@@ -122,19 +119,18 @@ class ParserTask : public stk::Task<512, ACCESS_USER> { ... };
 
 ### Multi-Core Support
 
-STK fully supports multicore embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7/M0, or multicore RISC-V devices) through a **per-core instance model** (Asymmetric Multi-Processing). This design delivers maximum performance while keeping the kernel extremely lightweight.
+STK supports multicore embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7/M0, or multicore RISC-V devices) through a **per-core instance model** (Asymmetric Multi-Processing). 
 
-#### Design Philosophy
-
+AMP design delivers maximum performance while keeping STK kernel extremely lightweight:
 - **One independent STK instance per physical CPU core**
 - **No global scheduler or intercore orchestration**
-- Each core manages only its own tasks/threads → zero contention inside the kernel
-- Fully **asynchronous operation** between instances → **no locks, no spinlocks, no cache-line bouncing**
+- Each core manages only its own tasks/threads (zero contention inside the kernel)
+- Fully **asynchronous operation** between instances (**no locks, no spinlocks, no cache-line bouncing**)
 - Highest possible performance and deterministic timing on each individual core
 
-#### Key Advantages
+### STK's AMP Features
 
-| Benefit                    | Description                                                                              |
+| Feature                    | Description                                                                              |
 |----------------------------|------------------------------------------------------------------------------------------|
 | Zero intercore overhead    | No cross-core communication inside STK itself                                            |
 | Minimal latency            | Scheduling decisions are local to the core                                               |
@@ -142,17 +138,7 @@ STK fully supports multicore embedded microcontrollers (e.g., ARM Cortex-M55, du
 | Independent timing domains | One core can run hard real-time tasks while another runs soft real-time or dynamic tasks |
 | Simple and predictable     | No complex SMP synchronization logic required in the kernel                              |
 
-#### Inter-Task Cooperation Across Cores
-
-Tasks running on different cores can safely communicate and synchronize using standard, well-established primitives:
-
-- Atomic operations (`__atomic_*`, `__ATOMIC_*`, LDREX/STREX, RISC-V A-extension)
-- Hardware semaphores or event flags (often provided by the MCU vendor)
-- Message queues or mailboxes in shared (cache-coherent) memory
-- Interrupt-based signaling (core A triggers an inter-processor interrupt on core B)
-- Ring buffers with volatile/head-tail pointers protected by memory barriers
-
-These mechanisms are already part of virtually every multicore embedded SDK.
+STK provides a rich set of synchronization primitives (see [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync)) which are suitable for multicore synchronization with multiple STK instances.
 
 #### Usage Example (Dual-Core System)
 
@@ -182,25 +168,27 @@ void start_core1()
 }
 ```
 
-There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `build/example/project/eclipse/rpi/blinky-smp-rp2350w` folder.
+There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `build/example/project/eclipse/rpi/blinky-smp-rp2350w` directory.
 
 ---
 
 ### Synchronization API
 
-Synchronization API is feature-rich and supports single and multicore systems (STK instance per CPU core), located in `stk/sync` folder.
+Synchronization API is a high-performance framework designed for both single-core and multicore embedded environments. By supporting multiple STK instances (one per core), it provides a robust mechanism for inter-task and inter-core communication. Implementation is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) directory.
 
-| Primitive           | Description                                                                                                                                                 |
-|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `Critical Section`  | Low-level RAII primitive (`ScopedCriticalSection`) that ensures atomicity by preventing preemption. Always available and independent of `KERNEL_SYNC` mode. |
-| `ConditionVariable` | Monitor-pattern signaling used with a `Mutex`. Allows tasks to sleep until a specific condition is met, with atomic unlock/relock semantics.                |
-| `Event`             | State-based signaling object. Supports manual or auto-reset behavior to wake one or multiple tasks upon a specific system occurrence.                       |
-| `Mutex`             | Re-entrant (recursive) mutual exclusion primitive. Ensures exclusive resource access with ownership tracking to prevent unauthorized release.               |
-| `Semaphore`         | Counting primitive for resource throttling. Features a "Direct Handover" policy, passing tokens directly to waiting tasks to ensure deterministic behavior. |
-| `Pipe`              | Thread-safe FIFO ring buffer for inter-task data passing. Supports blocking single and bulk I/O with zero dynamic memory allocation.                        |
-| Custom              | Extensible architecture where any class inheriting from `ISyncObject` can implement custom synchronization logic integrated with the kernel scheduler.      |
+| Primitive                 | Description                                                                                                                                                                                     |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `hw::CriticalSection`     | Low-level primitive (including RAII version `hw::CriticalSection::ScopedLock`) that ensures atomicity by preventing preemption. Always available and independent of `KERNEL_SYNC` mode.         |
+| `hw::SpinLock`            | High-performance non-recursive primitive for short critical sections. A key primitive for inter-core synchronization. Always available and independent of `KERNEL_SYNC` mode.                   |
+| `sync::ConditionVariable` | Monitor-pattern signaling used with a `Mutex`. Allows tasks to sleep until a specific condition is met, with atomic unlock/relock semantics.                                                    |
+| `sync::Event`             | State-based signaling object. Supports manual or auto-reset behavior to wake one or multiple tasks upon a specific system occurrence.                                                           |
+| `sync::Mutex`             | Re-entrant recursive mutual exclusion primitive. Ensures exclusive resource access with ownership tracking to prevent unauthorized release.                                                     |
+| `sync::SpinLock`          | High-performance recursive primitive for short critical sections. Uses atomic busy-waiting with a configurable spin-count threshold that cooperatively yields the CPU to prevent system stalls. |
+| `sync::Semaphore`         | Counting primitive for resource throttling. Features a "Direct Handover" policy, passing tokens directly to waiting tasks to ensure deterministic behavior.                                     |
+| `sync::Pipe`              | Thread-safe FIFO ring buffer for inter-task data passing. Supports blocking single and bulk I/O with zero dynamic memory allocation.                                                            |
+| Custom                    | Extensible architecture where any class inheriting from `ISyncObject` can implement custom synchronization logic integrated with the kernel scheduler.                                          |
 
-Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC` flag. If `KERNEL_SYNC` is not set then synchronization-related implementation is stripped by the compiler.
+Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC` flag. If application does not need `sync` primitives and `KERNEL_SYNC` is not set to the kernel then synchronization-related implementation is stripped by the compiler saving FLASH and RAM.
 
 ---
 
@@ -230,15 +218,15 @@ No other libraries required.
 
 ## Dedicated C interface
 
-For easier integration with C projects STK provides dedicated C interface, see [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) folder.
+For easier integration with C projects STK provides dedicated fully-featured C interface, see [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) folder.
 
 ---
 
 ## Traceable by SEGGER SystemView
 
-Scheduling process is fully traceable with [SEGGER SystemView](https://www.segger.com/products/development-tools/systemview) GUI application.
+Scheduling can be analyzed be the [SEGGER SystemView](https://www.segger.com/products/development-tools/systemview).
 
-There is a ready to use Blinky example with tracing enabled: `build\example\project\eclipse\stm\blinky-stm32f407g-disc1-segger`
+There is a ready to try Blinky example with SEGGER SystemView tracing enabled: `build\example\project\eclipse\stm\blinky-stm32f407g-disc1-segger`
 
 ![SEGGER SystemView](docs/img/SEGGER_SystemView_STK_tasks_screenshot.png)
 
@@ -246,8 +234,7 @@ There is a ready to use Blinky example with tracing enabled: `build\example\proj
 
 ## Development Mode (x86)
 
-STK includes a **full scheduling emulator** for Windows:
-
+STK includes a **full scheduling emulator** for Windows to speed up a prototype development:
 * Run the same embedded application on x86
 * Debug threads using Visual Studio or Eclipse
 * Perform unit testing without hardware
@@ -266,7 +253,7 @@ STK has been tested on the following development boards:
 * NXP MIMXRT1050 EVKB (Cortex-M7)
 * Raspberry Pi Pico 2 W (Cortex-M33 / RISC-V variant)
 
-> **Note:** The list of tested boards does **not** limit STK’s compatibility. STK **does not depend on a specific board** and relies only on the underlying CPU architecture. As long as the target CPU is supported, STK can be integrated with your hardware platform.
+> **Note:** The list of tested boards does **not** limit STK’s compatibility. STK **does not depend on a specific board** and relies only on the underlying CPU architecture. As long as target CPU is supported, STK can be integrated with your hardware platform.
 
 ---
 
@@ -618,15 +605,12 @@ Build your project normally — STK will now be compiled together with it.
 ## Porting & Extending
 
 Porting STK to a new platform is straightforward. Platform-dependent files are located in:
-
 ```
 stk/src/arch
 stk/include/arch
 ```
 
-STK's C++ OOP design allows easy extension of its functionality, for example you can develop and attach your own scheduling algorithm by inheriting `ITaskSwitchStrategy` interface.
-
-[Contributions and patches](https://github.com/dmitrykos/stk) are welcome.
+STK's OOD design allows easy extension of its functionality. For example, you can develop and attach your own scheduling algorithm by inheriting `ITaskSwitchStrategy` interface.
 
 ---
 
@@ -635,11 +619,11 @@ STK's C++ OOP design allows easy extension of its functionality, for example you
 STK is released under the **MIT Open Source License**. 
 
 You may freely use it in projects of any type:
-* commercial
-* closed-source
-* open-source
-* academic
-* etc
+* Commercial
+* Closed-Source
+* Open-Source
+* Academic
+* etc. (if in doubt, please contact us)
 
 ---
 
@@ -649,4 +633,4 @@ Contact `stk@neutroncode.com` for additional requests and services:
 
 * Warranty of Title (if your commercial project requires it)
 * Integration and consulting
-* Dedicated technical support
+* Dedicated technical support and development

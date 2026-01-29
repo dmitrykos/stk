@@ -27,12 +27,41 @@
 #define _STK_ARCH_DEFINED
 #endif
 
-#ifdef _STK_ARCH_DEFINED
-
 namespace stk {
 
-/*! \brief  Get thread-local storage (TLS) pointer.
-    \return TLS pointer of _TyTls type.
+/*! \namespace stk::hw
+    \brief     Hardware Abstraction Layer (HAL) for architecture-specific operations.
+
+    This namespace contains low-level functions that interface directly with the
+    CPU registers and hardware state. These functions are typically implemented
+    in assembly or using compiler intrinsics for maximum performance and
+    minimum jitter.
+
+    \see GetTls, SetTls, CriticalSection, SpinLock
+*/
+namespace hw {
+
+/*! \brief     Check if CPU is currently executing in an interrupt context.
+    \return    \c true if executing inside an ISR; \c false if in Task context.
+*/
+bool IsInsideISR();
+
+#if !_STK_INLINE_TLS_DEFINED
+
+/*! \brief     Get thread-local storage (TLS).
+    \return    TLS value.
+*/
+uintptr_t GetTls();
+
+/*! \brief     Set thread-local storage (TLS).
+    \param[in] tp: TLS value.
+*/
+void SetTls(uintptr_t tp);
+
+#endif // _STK_INLINE_TLS_DEFINED
+
+/*! \brief     Get thread-local storage (TLS) pointer.
+    \return    TLS pointer of _TyTls type.
 */
 template <class _TyTls>
 __stk_forceinline _TyTls *GetTlsPtr()
@@ -49,63 +78,71 @@ __stk_forceinline void SetTlsPtr(const _TyTls *tp)
     SetTls(reinterpret_cast<uintptr_t>(tp));
 }
 
-/*! \brief Enter a critical section.
-    \note  Disables preemption to protect shared resources.
-           Supports nesting: multiple calls from the same context are safe.
-           Use sparingly, as long critical sections can affect real-time behavior.
-*/
-void EnterCriticalSection();
-
-/*! \brief Exit a critical section.
-    \note  Must be called after EnterCriticalSection().
-           Each call to EnterCriticalSection() must be matched with one ExitCriticalSection().
-*/
-void ExitCriticalSection();
-
-/*! \class ScopedCriticalSection
-    \brief Enters critical section and exits from it automatically within the scope of execution.
-
-    Usage example:
-    \code
-    {
-        ScopedCriticalSection __my_cs;
-        
-        // code below is free from race condition
-    }
-    \endcode
-*/
-struct ScopedCriticalSection
-{
-    explicit ScopedCriticalSection() { stk::EnterCriticalSection(); }
-    ~ScopedCriticalSection() { stk::ExitCriticalSection(); }
-};
-
-/*! \class Spinlock
-    \brief Minimal spinlock implementation for short critical sections.
+/*! \class SpinLock
+    \brief Minimal SpinLock implementation for short critical sections.
     \note  Use only for very short, low-latency critical sections.
            Spinning blocks the CPU and may affect real-time behavior.
 */
-class Spinlock
+struct CriticalSection
+{
+    /*! \class ScopedLock
+        \brief Enters critical section and exits from it automatically within the scope of execution.
+
+        Usage example:
+        \code
+        {
+            CriticalSection::ScopedLock __my_cs;
+
+            // code below is free from race condition
+        }
+        \endcode
+    */
+    struct ScopedLock
+    {
+        explicit ScopedLock() { CriticalSection::Enter(); }
+        ~ScopedLock() { CriticalSection::Exit(); }
+    };
+
+    /*! \brief Enter a critical section.
+        \note  Disables preemption to protect shared resources.
+               Supports nesting: multiple calls from the same context are safe.
+               Use sparingly, as long critical sections can affect real-time behavior.
+    */
+    static void Enter();
+
+    /*! \brief Exit a critical section.
+        \note  Must be called after CriticalSection::Enter().
+               Each call to CriticalSection::Enter() must be matched with one CriticalSection::Exit().
+    */
+    static void Exit();
+};
+
+/*! \class     SpinLock
+    \brief     Minimal SpinLock implementation for short critical sections.
+    \note      Use only for very short, low-latency critical sections.
+               Spinning blocks the CPU and may affect real-time behavior.
+*/
+class SpinLock
 {
 public:
-    /*! \brief  Construct a Spinlock (unlocked by default).
+    /*! \brief Construct a SpinLock (unlocked by default).
     */
-    Spinlock() : m_lock(false)
+    SpinLock() : m_lock(false)
     {}
 
-    /*! \brief   Acquire the spinlock.
-        \note    Blocks (busy-waits) until the lock is acquired.
-                 Non-recursive: calling Lock() twice on the same lock from the same thread/core will deadlock.
+    /*! \brief Acquire the SpinLock.
+        \note  Blocks (busy-waits) until the lock is acquired.
+               Non-recursive: calling Lock() twice on the same lock from the same thread/core will deadlock.
     */
     void Lock();
 
-    /*! \brief   Release the spinlock.
-        \note    Must be called after a successful Lock().
-                 Releases the lock immediately, allowing other threads/cores to acquire it.
+    /*! \brief Release the SpinLock.
+        \note  Must be called after a successful Lock().
+               Releases the lock immediately, allowing other threads/cores to acquire it.
     */
     void Unlock();
 
-    /*! \brief  Attempt to acquire the spinlock without blocking.
+    /*! \brief  Attempt to acquire the SpinLock without blocking.
         \return True if the lock was successfully acquired; false otherwise.
         \note   Non-blocking. Does not guarantee acquisition. Use only for short critical sections or retry loops.
     */
@@ -127,8 +164,7 @@ protected:
 #endif
 };
 
+} // namespace hw
 } // namespace stk
-
-#endif // _STK_ARCH_UNDEFINED
 
 #endif /* STK_ARCH_H_ */
