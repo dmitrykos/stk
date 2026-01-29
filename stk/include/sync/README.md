@@ -21,7 +21,7 @@ A recursive mutual exclusion primitive used to protect shared resources.
 - **Features**: Supports `Lock`, `TryLock`, `Unlock`, and `TimedLock`.
 - **Low-Power Aware**: Waiting tasks are suspended by the kernel.
 
-### 2. Spinlock (`sync::Spinlock`)
+### 2. Spinlock (`sync::SpinLock`)
 A high-performance recursive spinlock for very short critical sections.
 - **Configurable Spin Count**: Busy-waits for N iterations before calling `Yield()`, preventing total system stall while waiting for the lock.
 - **Low Latency**: Bypasses the kernel wait-list logic for the "fast path" acquisition.
