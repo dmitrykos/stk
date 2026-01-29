@@ -1,7 +1,7 @@
 ![Logo](docs/img/stk_logo_200px.png)
 # SuperTinyKernel (STK)
 
-A minimalistic C++/C Thread Scheduler for Embedded Systems.
+**Minimalistic C/C++ Thread Scheduler for Embedded Systems**
 
 ---
 
@@ -174,7 +174,7 @@ There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `b
 
 ### Synchronization API
 
-Synchronization API is a high-performance framework designed for both single-core and multicore embedded environments. By supporting multiple STK instances (one per core), it provides a robust mechanism for inter-task and inter-core communication. Implementation is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) directory.
+Synchronization API is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) and resides in its own dedicated namespace `stk::sync`. It is a high-performance framework designed for both single-core and multicore embedded systems and provides a robust mechanism for inter-task and inter-core communication.
 
 | Primitive                 | Description                                                                                                                                                                                     |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
