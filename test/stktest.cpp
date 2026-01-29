@@ -18,9 +18,7 @@ void (* g_RelaxCpuHandler)() = NULL;
 IKernelService *test::g_KernelService = NULL;
 int32_t test::g_CriticalSectionState = false;
 bool test::g_InsideISR = false;
-#if !_STK_INLINE_TLS_DEFINED
 uintptr_t g_Tls = 0;
-#endif // _STK_INLINE_TLS_DEFINED
 
 /*! \fn    STK_ASSERT_IMPL
     \brief Custom assertion handler which intercepts assertions from STK package.
@@ -64,7 +62,15 @@ void stk::hw::CriticalSection::Exit()
     --g_CriticalSectionState;
 }
 
-#if !_STK_INLINE_TLS_DEFINED
+void stk::hw::SpinLock::Lock()
+{
+    m_lock = true;
+}
+void stk::hw::SpinLock::Unlock()
+{
+    m_lock = false;
+}
+
 uintptr_t stk::hw::GetTls()
 {
     return g_Tls;
@@ -73,7 +79,6 @@ void stk::hw::SetTls(uintptr_t tp)
 {
     g_Tls = tp;
 }
-#endif // _STK_INLINE_TLS_DEFINED
 
 bool stk::hw::IsInsideISR()
 {

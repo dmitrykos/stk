@@ -27,9 +27,14 @@ static inline void __stktest_relax_cpu()
 }
 
 // lib: stk
-#define _STK_UNDER_TEST
+#ifndef _STK_UNDER_TEST
+	#define _STK_UNDER_TEST
+#endif
 #define __stk_relax_cpu __stktest_relax_cpu
 #include <stk_config.h>
+#undef _STK_ARCH_ARM_CORTEX_M
+#undef _STK_ARCH_RISC_V
+#undef _STK_ARCH_X86_WIN32
 #include <stk.h>
 #include <arch/stk_arch_common.h>
 #include <sync/stk_sync.h>
