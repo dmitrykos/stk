@@ -571,6 +571,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/sync</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/src/arch</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1464,6 +1469,56 @@
 			<name>deps/stk/include/strategy/stk_strategy_rrobin.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/strategy/stk_strategy_rrobin.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/README.md</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/README.md</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_cs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_cs.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_cv.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_cv.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_event.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_event.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_mutex.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_mutex.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_pipe.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_pipe.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_semaphore.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_semaphore.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_spinlock.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/stk_sync_spinlock.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm</name>
@@ -2704,6 +2759,36 @@
 			<name>deps/stk/include/arch/risc-v/stk_arch_risc-v.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/stk/include/arch/risc-v/stk_arch_risc-v.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/.gitignore</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/.gitignore</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/misc.xml</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/misc.xml</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/modules.xml</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/modules.xml</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/sync.iml</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/sync.iml</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/vcs.xml</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/vcs.xml</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/.idea/workspace.xml</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/stk/include/sync/.idea/workspace.xml</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/src/arch/arm/cortex-m</name>

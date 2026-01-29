@@ -109,6 +109,19 @@
     #define __stk_attr_noinline
 #endif
 
+/*! \def   __stk_attr_deprecated
+    \brief Instruct compiler to mark function or class as deprecated.
+*/
+#ifdef __GNUC__
+    #define __stk_attr_deprecated __attribute__((deprecated))
+#elif defined(__ICCARM__)
+    #define __stk_attr_deprecated __attribute__((deprecated))
+#elif defined(_MSC_VER)
+    #define __stk_attr_deprecated __declspec(deprecated)
+#else
+    #define __stk_attr_deprecated
+#endif
+
 /*! \def   __stk_unreachable
     \brief Instruct compiler that code below it is unreachable (in-code statement).
 */

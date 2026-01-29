@@ -55,8 +55,8 @@ static void IncrementWithCS(void *)
 {
     for (int32_t i = 0; i < ITERATIONS_MAX; ++i)
     {
-        stk::ScopedCriticalSection __cs1;
-        stk::ScopedCriticalSection __cs2; // STK supports nesting of critical sections
+        stk::hw::CriticalSection::ScopedLock __cs1;
+        stk::hw::CriticalSection::ScopedLock __cs2; // STK supports nesting of critical sections
 
         UnsafeIncrement();
     }

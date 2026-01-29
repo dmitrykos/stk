@@ -22,7 +22,7 @@ namespace sync {
 /*! \class Semaphore
     \brief Counting semaphore primitive for resource management and signaling.
 
-    A counting semaphore maintains an internal counter to manage access to a limited
+    Counting semaphore maintains an internal counter to manage access to a limited
     number of resources. Unlike a Condition Variable, a Semaphore is stateful: if
     \c Signal() is called when no tasks are waiting, the signal is "remembered" by
     incrementing the internal counter.
@@ -33,7 +33,7 @@ namespace sync {
            guaranteed ownership of that token upon returning from \c Wait().
 
     \code
-    // Example: Resource Throttling
+    // Example: Resource throttling
     // Initialize with 3 permits (e.g., max 3 concurrent tasks accessing the same resource)
     stk::sync::Semaphore g_Limiter(3);
 
@@ -70,6 +70,7 @@ public:
 
     /*! \brief     Wait for a signal (decrement counter).
         \param[in] timeout: Maximum time to wait (ticks).
+        \warning   ISR-unsafe.
         \return    True if acquired, false if timeout occurred.
     */
     bool Wait(Timeout timeout = WAIT_INFINITE);
@@ -77,10 +78,12 @@ public:
     /*! \brief     Post a signal (increment counter).
         \note      Gives "token" directly to the waking task. The count is not incremented, and
                    the waking task does not decrement it.
+        \note      ISR-safe.
     */
     void Signal();
 
     /*! \brief     Get current counter value.
+        \note      ISR-safe.
     */
     uint32_t GetCount() const { return m_count; }
 
@@ -92,12 +95,15 @@ private:
 
 inline bool Semaphore::Wait(Timeout timeout)
 {
+    // not supported inside ISR, may call StartWaiting
+    STK_ASSERT(!hw::IsInsideISR());
+
     ScopedCriticalSection __cs;
 
     // fast path: resource is available
     if (m_count != 0)
     {
-        m_count--;
+        --m_count;
         __stk_full_memfence();
         return true;
     }
@@ -119,7 +125,7 @@ inline void Semaphore::Signal()
     if (m_wait_list.IsEmpty())
     {
         // no one is waiting, save signal for later
-        m_count++;
+        ++m_count;
         __stk_full_memfence();
     }
     else
@@ -132,7 +138,9 @@ inline void Semaphore::Signal()
 inline bool Semaphore::Tick()
 {
     // required for multi-core CPU and multiple instances of STK (one per core)
+#if (_STK_ARCH_CPU_COUNT > 1)
     ScopedCriticalSection __cs;
+#endif
 
     return ISyncObject::Tick();
 }

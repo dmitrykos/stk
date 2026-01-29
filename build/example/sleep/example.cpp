@@ -45,7 +45,7 @@ private:
         // task 0: sleep 1000 ms
         // task 1: sleep 2000 ms
         // task 2: sleep 3000 ms
-        g_KernelService->Sleep(1000 * (m_task_id + 1));
+        stk::Sleep(1000 * (m_task_id + 1));
 
         switch (m_task_id)
         {

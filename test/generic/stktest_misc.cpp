@@ -319,7 +319,13 @@ namespace stk
         virtual void Delay(Timeout msec) const { (void)msec; }
         virtual void Sleep(Timeout msec) { (void)msec; }
         virtual void SwitchToNext() {}
-        IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout) { return nullptr; }
+        IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout)
+        {
+        	(void)sobj;
+        	(void)mutex;
+        	(void)timeout;
+        	return nullptr;
+		}
     }
     s_KernelServiceMock;
 

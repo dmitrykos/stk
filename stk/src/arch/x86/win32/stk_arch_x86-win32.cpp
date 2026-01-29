@@ -493,12 +493,12 @@ TId PlatformX86Win32::GetTid() const
     return g_Context.GetTid();
 }
 
-uintptr_t stk::GetTls()
+uintptr_t stk::hw::GetTls()
 {
     return g_Context.GetTls();
 }
 
-void stk::SetTls(uintptr_t tp)
+void stk::hw::SetTls(uintptr_t tp)
 {
     return g_Context.SetTls(tp);
 }
@@ -508,24 +508,29 @@ IKernelService *IKernelService::GetInstance()
     return g_Context.m_service;
 }
 
-void stk::EnterCriticalSection()
+void stk::hw::CriticalSection::Enter()
 {
     g_Context.EnterCriticalSection();
 }
 
-void stk::ExitCriticalSection()
+void stk::hw::CriticalSection::Exit()
 {
     g_Context.ExitCriticalSection();
 }
 
-void stk::Spinlock::Lock()
+void stk::hw::SpinLock::Lock()
 {
     STK_X86_WIN32_SPIN_LOCK_LOCK(m_lock);
 }
 
-void stk::Spinlock::Unlock()
+void stk::hw::SpinLock::Unlock()
 {
     STK_X86_WIN32_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::IsInsideISR()
+{
+    return false;
 }
 
 #endif // _STK_ARCH_X86_WIN32

@@ -11,7 +11,6 @@
 #define STK_H_
 
 #include "stk_helper.h"
-#include "stk_arch.h"
 #include "strategy/stk_strategy_rrobin.h"
 #include "strategy/stk_strategy_swrrobin.h"
 #include "strategy/stk_strategy_monotonic.h"

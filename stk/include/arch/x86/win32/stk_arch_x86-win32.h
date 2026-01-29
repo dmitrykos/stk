@@ -41,16 +41,6 @@ public:
 */
 typedef PlatformX86Win32 PlatformDefault;
 
-/*! \brief  Get thread-local storage (TLS).
-    \return TLS value.
-*/
-uintptr_t GetTls();
-
-/*! \brief     Set thread-local storage (TLS).
-    \param[in] tp: TLS value.
-*/
-void SetTls(uintptr_t tp);
-
 } // namespace stk
 
 #endif /* STK_ARCH_X86_WIN32_H_ */

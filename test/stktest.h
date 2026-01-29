@@ -32,17 +32,6 @@ static inline void __stktest_relax_cpu()
 #include <stk_config.h>
 #include <stk.h>
 #include <arch/stk_arch_common.h>
-
-namespace stk {
-
-//! Enter critical section mock.
-void EnterCriticalSection();
-
-//! Exit critical section mock.
-void ExitCriticalSection();
-
-}
-
 #include <sync/stk_sync.h>
 
 #include "stktest_context.h"
@@ -58,6 +47,9 @@ extern IKernelService *g_KernelService;
 
 //! Critical section state.
 extern int32_t g_CriticalSectionState;
+
+//! ISR state.
+extern bool g_InsideISR;
 
 /*! \class TestAssertPassed
     \brief Throwable class for catching assertions from _STK_ASSERT_IMPL().
@@ -285,6 +277,9 @@ public:
 
     IWaitObject *StartWaiting(ISyncObject *sobj, IMutex *mutex, Timeout timeout)
     {
+        (void)sobj;
+        (void)mutex;
+        (void)timeout;
         return nullptr;
     }
 

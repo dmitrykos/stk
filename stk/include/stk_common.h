@@ -93,6 +93,11 @@ enum ETraceEventId
 */
 typedef size_t TId;
 
+/*! \typedef TID_ISR
+    \brief   Task/thread id of ISR routine.
+*/
+const TId TID_ISR = (TId)~0;
+
 /*! \typedef Timeout
     \brief   Timeout time (ticks).
 */
@@ -102,6 +107,11 @@ typedef int32_t Timeout;
     \brief   Infinite timeout time (ticks).
 */
 const Timeout WAIT_INFINITE = INT32_MAX;
+
+/*! \typedef NO_WAIT
+    \brief   No timeout (ticks).
+*/
+const Timeout NO_WAIT = 0;
 
 /*! \class StackMemoryDef
     \brief Stack memory type definition.

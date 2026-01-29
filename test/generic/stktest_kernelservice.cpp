@@ -36,9 +36,17 @@ TEST(KernelService, GetMsecToTicks)
 
 static struct DelayContext
 {
-    DelayContext() : platform(NULL) {}
+    DelayContext() : platform(NULL)
+    {
+        Clear();
+    }
 
     IPlatform *platform;
+
+    void Clear()
+    {
+        platform = nullptr;
+    }
 
     void Process()
     {
@@ -486,6 +494,85 @@ TEST(KernelService, SleepAllAndWake)
     Sleep(3);
 
     g_RelaxCpuHandler = NULL;
+}
+
+// ============================================================================ //
+// =+==================== KernelServiceIsrSafety ============================== //
+// ============================================================================ //
+
+TEST_GROUP(KernelServiceIsrSafety)
+{
+    void setup()
+    {
+        g_RelaxCpuHandler = DelayRelaxCpu;
+        g_InsideISR = true;
+    }
+    void teardown()
+    {
+        g_InsideISR = false;
+        g_DelayContext.Clear();
+        g_RelaxCpuHandler = NULL;
+    }
+};
+
+TEST(KernelServiceIsrSafety, Common)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    g_DelayContext.platform = kernel.GetPlatform();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        Sleep(10);
+        CHECK_TEXT(false, "Sleep is not allowed inside ISR");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        Delay(10);
+        CHECK_TEXT(false, "Delay is not allowed inside ISR");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        Yield();
+        CHECK_TEXT(false, "Yield is not allowed inside ISR");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        GetTid();
+        CHECK_TEXT(false, "GetTid is not allowed inside ISR");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
 
 } // namespace stk

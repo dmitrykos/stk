@@ -60,6 +60,9 @@ __stk_forceinline void SetTls(uintptr_t tp)
     __asm volatile("MOV r9, %0" : /* output: none */ : "r"(tp) : /* clobbers: none */);
 }
 
+// Notify stk_arch.h that we defined inline versions of GetTls/SetTls.
+#define _STK_INLINE_TLS_DEFINED 1
+
 } // namespace stk
 
 #endif /* STK_ARCH_ARM_CORTEX_M_H_ */

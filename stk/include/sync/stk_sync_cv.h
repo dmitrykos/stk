@@ -79,14 +79,17 @@ public:
         \param[in] mutex:   The locked mutex protecting the shared state/condition.
         \param[in] timeout: Maximum time to wait (ticks).
         \return    True if signaled, false if timeout occurred.
+        \warning   ISR-unsafe unless timeout is NO_WAIT.
     */
     bool Wait(IMutex &mutex, Timeout timeout = WAIT_INFINITE);
 
     /*! \brief     Wake one waiting task.
+        \note      ISR-safe.
     */
     void NotifyOne();
 
     /*! \brief     Wake all waiting tasks.
+        \note      ISR-safe.
     */
     void NotifyAll();
 
@@ -96,6 +99,12 @@ private:
 
 inline bool ConditionVariable::Wait(IMutex &mutex, Timeout timeout)
 {
+    if (timeout == NO_WAIT)
+        return false;
+
+    // not supported inside ISR, calls StartWaiting
+    STK_ASSERT(!hw::IsInsideISR());
+
     return !IKernelService::GetInstance()->StartWaiting(this, &mutex, timeout)->IsTimeout();
 }
 
@@ -114,7 +123,9 @@ inline void ConditionVariable::NotifyAll()
 inline bool ConditionVariable::Tick()
 {
     // required for multi-core CPU and multiple instances of STK (one per core)
+#if (_STK_ARCH_CPU_COUNT > 1)
     ScopedCriticalSection __cs;
+#endif
 
     return ISyncObject::Tick();
 }

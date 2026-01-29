@@ -21,20 +21,22 @@ namespace sync {
 
 /*! \class ScopedCriticalSection
     \brief RAII-style low-level synchronization primitive for atomic code execution.
+           Used as building brick for other stk::sync classes, consider using
+           hw::CriticalSection::ScopedLock implementation instead.
 
-    Enters a critical section upon construction and exits automatically when the
-    object goes out of scope. In the context of STK, this typically involves
-    disabling interrupts or locking the scheduler.
+    Disables interrupts on caller's CPU core and guards from access by another CPU
+    core in case of multi-core system. Enters a critical section upon construction
+    and exits automatically when the object goes out of scope.
 
     \code
     // Example: Protecting a global shared variable
     uint32_t g_SharedCounter = 0;
 
     void IncrementCounter() {
-        {                                    // code execution scope starts here
-            stk::ScopedCriticalSection __cs; // critical section starts here
-            g_SharedCounter++;               // atomic update
-        }                                    // critical section ends here (RAII)
+        {                                           // code execution scope starts here
+            sync::CriticalSection::ScopedLock __cs; // critical section starts here
+            g_SharedCounter++;                      // atomic update
+        }                                           // critical section ends here (RAII)
     }
     \endcode
 
@@ -44,7 +46,9 @@ namespace sync {
            their deadlines.
     \note  Unlike higher-level synchronization primitives, this is always available
            and does not depend on the \a KERNEL_SYNC configuration.
-    \see   IMutex, Event, Mutex, Semaphore
+    \note  ISR-safe, the only safe primitive along with hw::CriticalSection for guarding
+           code which can be accessed by ISR or another CPU core.
+    \see   IMutex, hw::CriticalSection
 */
 class ScopedCriticalSection : private IMutex
 {
@@ -62,8 +66,8 @@ public:
     ~ScopedCriticalSection() { Unlock(); }
 
 private:
-    void Lock() { stk::EnterCriticalSection(); }
-    void Unlock() { stk::ExitCriticalSection(); }
+    void Lock() { hw::CriticalSection::Enter(); }
+    void Unlock() { hw::CriticalSection::Exit(); }
 };
 
 } // namespace sync

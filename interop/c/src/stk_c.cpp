@@ -11,6 +11,7 @@
 
 #include <stk_config.h>
 #include <stk.h>
+#include <sync/stk_sync.h>
 #include "stk_c.h"
 
 #define STK_C_TASKS_MAX (STK_C_KERNEL_MAX_TASKS)
@@ -96,7 +97,7 @@ static stk_task_t *AllocateTask(stk_task_entry_t entry,
 {
     stk_task_t *task = nullptr;
 
-    stk::EnterCriticalSection();
+    sync::ScopedCriticalSection __cs;
 
     for (uint32_t i = 0; i < STK_C_TASKS_MAX; ++i)
     {
@@ -110,28 +111,23 @@ static stk_task_t *AllocateTask(stk_task_entry_t entry,
         }
     }
 
-    stk::ExitCriticalSection();
-
     STK_ASSERT(task != nullptr);
     return task;
 }
 
 static void FreeTask(const stk_task_t *task)
 {
-    stk::EnterCriticalSection();
+    sync::ScopedCriticalSection __cs;
 
     for (uint32_t i = 0; i < STK_C_TASKS_MAX; ++i)
     {
         if (s_Tasks[i].busy && (task == &s_Tasks[i].task))
         {
             s_Tasks[i].busy = false;
-
-            stk::ExitCriticalSection();
             return;
         }
     }
 
-    stk::ExitCriticalSection();
     STK_ASSERT(false);
 }
 
@@ -338,12 +334,12 @@ void    stk_yield(void)           { stk::Yield(); }
 // ---------------------------------------------------------------------------
 void *stk_tls_get(void)
 {
-    return stk::GetTlsPtr<void *>();
+    return hw::GetTlsPtr<void *>();
 }
 
 void stk_tls_set(void *ptr)
 {
-    stk::SetTlsPtr(ptr);
+    hw::SetTlsPtr(ptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +347,12 @@ void stk_tls_set(void *ptr)
 // ---------------------------------------------------------------------------
 void stk_critical_section_enter(void)
 {
-    stk::EnterCriticalSection();
+    hw::CriticalSection::Enter();
 }
 
 void stk_critical_section_exit(void)
 {
-    stk::ExitCriticalSection();
+    hw::CriticalSection::Exit();
 }
 
 } // extern "C"

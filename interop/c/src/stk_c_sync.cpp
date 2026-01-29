@@ -57,6 +57,13 @@ void stk_mutex_lock(stk_mutex_t *mtx)
     mtx->handle.Lock();
 }
 
+bool stk_mutex_trylock(stk_mutex_t *mtx)
+{
+    STK_ASSERT(mtx != NULL);
+
+    return mtx->handle.TryLock();
+}
+
 void stk_mutex_unlock(stk_mutex_t *mtx)
 {
     STK_ASSERT(mtx != NULL);
@@ -69,6 +76,48 @@ bool stk_mutex_timed_lock(stk_mutex_t *mtx, int32_t timeout)
     STK_ASSERT(mtx != NULL);
 
     return mtx->handle.TimedLock(timeout);
+}
+
+// ---------------------------------------------------------------------------
+// SpinLock
+// ---------------------------------------------------------------------------
+struct stk_spinlock_t
+{
+    sync::SpinLock handle;
+};
+
+stk_spinlock_t *stk_spinlock_create(stk_spinlock_mem_t *memory, uint32_t memory_size, uint16_t spin_count)
+{
+    STK_ASSERT(memory != nullptr);
+    STK_ASSERT(memory_size >= sizeof(stk_spinlock_t));
+    if (memory_size < sizeof(stk_spinlock_t))
+        return nullptr;
+
+    return (stk_spinlock_t *)new (memory->data) stk_spinlock_t{ sync::SpinLock(spin_count) };
+}
+
+void stk_spinlock_destroy(stk_spinlock_t *lock)
+{
+    if (lock != nullptr)
+        lock->~stk_spinlock_t();
+}
+
+void stk_spinlock_lock(stk_spinlock_t *lock)
+{
+    STK_ASSERT(lock != nullptr);
+    lock->handle.Lock();
+}
+
+bool stk_spinlock_trylock(stk_spinlock_t *lock)
+{
+    STK_ASSERT(lock != nullptr);
+    return lock->handle.TryLock();
+}
+
+void stk_spinlock_unlock(stk_spinlock_t *lock)
+{
+    STK_ASSERT(lock != nullptr);
+    lock->handle.Unlock();
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +196,13 @@ bool stk_event_wait(stk_event_t *ev, int32_t timeout)
     STK_ASSERT(ev != nullptr);
 
     return ev->handle.Wait(timeout);
+}
+
+bool stk_event_trywait(stk_event_t *ev)
+{
+    STK_ASSERT(ev != nullptr);
+
+    return ev->handle.TryWait();
 }
 
 void stk_event_set(stk_event_t *ev)

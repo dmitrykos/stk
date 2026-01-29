@@ -34,25 +34,25 @@ extern "C" {
 // Configuration macros (can be overridden before including this file)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \def   STK_C_KERNEL_MAX_TASKS
-    \brief Maximum number of tasks per kernel instance (default: 4).
-    \note  Increase this value if you need more tasks.
-           Has direct impact on RAM and FLASH usage.
+/*! \def       STK_C_KERNEL_MAX_TASKS
+    \brief     Maximum number of tasks per kernel instance (default: 4).
+    \note      Increase this value if you need more tasks.
+               Has direct impact on RAM and FLASH usage.
 */
 #ifndef STK_C_KERNEL_MAX_TASKS
     #define STK_C_KERNEL_MAX_TASKS 4
 #endif
 
-/*! \def   STK_C_CPU_COUNT
-    \brief Number of kernel instances / CPU cores supported (default: 1)
-    \note  Each core usually gets its own independent kernel instance.
+/*! \def       STK_C_CPU_COUNT
+    \brief     Number of kernel instances / CPU cores supported (default: 1)
+    \note      Each core usually gets its own independent kernel instance.
 */
 #ifndef STK_C_CPU_COUNT
     #define STK_C_CPU_COUNT 1
 #endif
 
-/*! \def   STK_SYNC_DEBUG_NAMES
-    \brief Enable names for synchronization primitives for debugging/tracing purpose.
+/*! \def       STK_SYNC_DEBUG_NAMES
+    \brief     Enable names for synchronization primitives for debugging/tracing purpose.
 */
 #if !defined(STK_SYNC_DEBUG_NAMES) && STK_SEGGER_SYSVIEW
     #define STK_SYNC_DEBUG_NAMES 1
@@ -60,12 +60,12 @@ extern "C" {
     #define STK_SYNC_DEBUG_NAMES 0
 #endif
 
-/*! \def STK_C_ASSERT
-    \brief Assertion macro used inside STK C bindings
+/*! \def       STK_C_ASSERT
+    \brief     Assertion macro used inside STK C bindings
 */
 #define STK_C_ASSERT(e) assert(e)
 
-/*! \def       ____stk_c_stack_attr
+/*! \def       __stk_c_stack_attr
     \brief     Stack attribute (applies required alignment).
 */
 #ifdef __GNUC__
@@ -80,15 +80,15 @@ extern "C" {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief Opaque handle to a kernel instance.
+/*! \brief     Opaque handle to a kernel instance.
 */
 typedef struct stk_kernel_t stk_kernel_t;
 
-/*! \brief Opaque handle to a task instance.
+/*! \brief     Opaque handle to a task instance.
 */
 typedef struct stk_task_t stk_task_t;
 
-/*! \brief Default tick period (1 ms).
+/*! \brief     Default tick period (1 ms).
 */
 #define STK_PERIODICITY_DEFAULT (1000U) /*!< in microseconds */
 
@@ -99,9 +99,13 @@ typedef struct stk_task_t stk_task_t;
 */
 typedef void (*stk_task_entry_t)(void *arg);
 
-/*! \brief Infinite timeout constant.
+/*! \brief     Infinite timeout constant.
 */
 #define STK_WAIT_INFINITE (INT32_MAX)
+
+/*! \brief     No timeout constant.
+*/
+#define STK_NO_WAIT (0)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Kernel factory functions
@@ -146,9 +150,9 @@ Kernel<KERNEL_STATIC  | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, Switch
 Kernel<KERNEL_DYNAMIC | KERNEL_HRT | KERNEL_SYNC, STK_C_KERNEL_MAX_TASKS, SwitchStrategyEDF, PlatformDefault>
 */
 
-/*! \def   STK_C_KERNEL_TYPE_CPU_X
-    \brief Kernel type definition per CPU core.
-    \note  STK_C_KERNEL_TYPE_CPU_X type will be assigned to X core.
+/*! \def       STK_C_KERNEL_TYPE_CPU_X
+    \brief     Kernel type definition per CPU core.
+    \note      STK_C_KERNEL_TYPE_CPU_X type will be assigned to X core.
 
     \code
     // Example of kernel type definition for 8 cores.
@@ -175,25 +179,25 @@ stk_kernel_t *stk_kernel_create(uint8_t core_nr);
 // Kernel control
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief                     Initialize kernel with given tick period.
-    \param[in] k:              Kernel handle.
+/*! \brief     Initialize kernel with given tick period.
+    \param[in] k:  Kernel handle.
     \param[in] tick_period_us: System tick period in microseconds (usually 100–10000).
-    \note                      Must be called exactly once before adding tasks or starting scheduler.
+    \note      Must be called exactly once before adding tasks or starting scheduler.
 */
 void stk_kernel_init(stk_kernel_t *k, uint32_t tick_period_us);
 
 /*! \brief     Add task to non-HRT kernel (static or dynamic).
-    \param[in] k:    Kernel handle.
+    \param[in] k: Kernel handle.
     \param[in] task: Task handle created with one of stk_task_create_* functions.
     \note      For static kernels this must be done before stk_kernel_start().
 */
 void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *task);
 
 /*! \brief     Add task with HRT timing parameters (HRT kernels only).
-    \param[in] k:                 Kernel handle.
-    \param[in] task:              Task handle.
+    \param[in] k: Kernel handle.
+    \param[in] task: Task handle.
     \param[in] periodicity_ticks: Period in ticks.
-    \param[in] deadline_ticks:    Relative deadline in ticks.
+    \param[in] deadline_ticks: Relative deadline in ticks.
     \param[in] start_delay_ticks: Initial offset / phase in ticks (>= 0).
     \note      Must be called after stk_kernel_init() and before stk_kernel_start().
 */
@@ -204,7 +208,7 @@ void stk_kernel_add_task_hrt(stk_kernel_t *k,
                              int32_t start_delay_ticks);
 
 /*! \brief     Remove finished task from dynamic kernel.
-    \param[in] k:    Kernel handle.
+    \param[in] k: Kernel handle.
     \param[in] task: Task that has already returned from its entry function.
     \note      Only valid in dynamic kernels. Task must have exited (returned from entry function).
 */
@@ -235,9 +239,9 @@ bool stk_kernel_is_schedulable(const stk_kernel_t *k);
 // ─────────────────────────────────────────────────────────────────────────────
 
 /*! \brief     Create privileged-mode (kernel-mode) task.
-    \param[in] entry:      Task entry function.
-    \param[in] arg:        Argument passed to entry function.
-    \param[in] stack:      Pointer to stack buffer (array of size_t).
+    \param[in] entry: Task entry function.
+    \param[in] arg: Argument passed to entry function.
+    \param[in] stack: Pointer to stack buffer (array of size_t).
     \param[in] stack_size: Number of elements (words) in the stack buffer.
     \return    Task handle (static storage in static kernels, heap in dynamic).
 */
@@ -247,9 +251,9 @@ stk_task_t *stk_task_create_privileged(stk_task_entry_t entry,
                                        uint32_t stack_size);
 
 /*! \brief     Create user-mode task.
-    \param[in] entry:      Task entry function.
-    \param[in] arg:        Argument passed to entry function.
-    \param[in] stack:      Pointer to stack buffer (array of size_t).
+    \param[in] entry: Task entry function.
+    \param[in] arg: Argument passed to entry function.
+    \param[in] stack: Pointer to stack buffer (array of size_t).
     \param[in] stack_size: Number of elements (words) in the stack buffer.
     \return    Task handle.
 */
@@ -259,7 +263,7 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
                                  uint32_t stack_size);
 
 /*! \brief     Set task weight (used only by Smooth Weighted Round Robin).
-    \param[in] task:   Task handle.
+    \param[in] task: Task handle.
     \param[in] weight: Positive weight value (recommended 1–16777215).
     \note      Must be called before adding task to kernel.
     \see       SwitchStrategySmoothWeightedRoundRobin.
@@ -267,7 +271,7 @@ stk_task_t *stk_task_create_user(stk_task_entry_t entry,
 void stk_task_set_weight(stk_task_t *task, uint32_t weight);
 
 /*! \brief     Set task priority (used only by Fixed Priority scheduler).
-    \param[in] task:     Task handle.
+    \param[in] task: Task handle.
     \param[in] priority: Priority level [0 = lowest … 31 = highest].
     \note      Must be called before adding task to kernel.
 */
@@ -275,12 +279,12 @@ void stk_task_set_priority(stk_task_t *task, uint8_t priority);
 
 /*! \brief     Assign application-defined task ID (for tracing/debugging).
     \param[in] task: Task handle.
-    \param[in] tid:  Arbitrary 32-bit task identifier.
+    \param[in] tid: Arbitrary 32-bit task identifier.
 */
 void stk_task_set_id(stk_task_t *task, uint32_t tid);
 
 /*! \brief     Assign human-readable task name (for tracing/debugging).
-    \param[in] task:  Task handle.
+    \param[in] task: Task handle.
     \param[in] tname: Null-terminated string (may be NULL).
 */
 void stk_task_set_name(stk_task_t *task, const char *tname);
@@ -289,23 +293,23 @@ void stk_task_set_name(stk_task_t *task, const char *tname);
 // Services available from inside tasks
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Returns current task/thread ID (the value set by stk_task_set_id).
-    \return Task identifier (0 if not set).
+/*! \brief     Returns current task/thread ID (the value set by stk_task_set_id).
+    \return    Task identifier (0 if not set).
 */
 size_t stk_tid(void);
 
-/*! \brief  Returns number of ticks elapsed since kernel start.
-    \return Tick count (monotonically increasing).
+/*! \brief     Returns number of ticks elapsed since kernel start.
+    \return    Tick count (monotonically increasing).
 */
 int64_t stk_ticks(void);
 
-/*! \brief  Returns how many microseconds correspond to one kernel tick.
-    \return Tick resolution in microseconds.
+/*! \brief     Returns how many microseconds correspond to one kernel tick.
+    \return    Tick resolution in microseconds.
 */
 int32_t stk_tick_resolution(void);
 
-/*! \brief  Returns current time in milliseconds since kernel start.
-    \return Time in milliseconds.
+/*! \brief     Returns current time in milliseconds since kernel start.
+    \return    Time in milliseconds.
 */
 int64_t stk_time_now_ms(void);
 
@@ -320,7 +324,7 @@ void stk_delay_ms(uint32_t ms);
 */
 void stk_sleep_ms(uint32_t ms);
 
-/*! \brief Voluntarily give up CPU to another ready task (cooperative yield).
+/*! \brief     Voluntarily give up CPU to another ready task (cooperative yield).
 */
 void stk_yield(void);
 
@@ -346,8 +350,8 @@ void stk_task_destroy(stk_task_t *task);
 // Thread-Local Storage (very simple / one pointer per task)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/*! \brief  Get thread-local pointer (platform-specific slot).
-    \return Pointer previously stored with stk_tls_set() (NULL if never set).
+/*! \brief     Get thread-local pointer (platform-specific slot).
+    \return    Pointer previously stored with stk_tls_set() (NULL if never set).
 */
 void *stk_tls_get(void);
 
@@ -356,13 +360,13 @@ void *stk_tls_get(void);
 */
 void stk_tls_set(void *ptr);
 
-/*! \brief Typed helper for getting TLS value.
-    \note  Expands to ((type *)stk_tls_get())
+/*! \brief     Typed helper for getting TLS value.
+    \note      Expands to ((type *)stk_tls_get())
 */
 #define STK_TLS_GET(type) ((type *)stk_tls_get())
 
-/*! \brief Typed helper for setting TLS value.
-    \note  Expands to stk_tls_set((void *)(ptr))
+/*! \brief     Typed helper for setting TLS value.
+    \note      Expands to stk_tls_set((void *)(ptr))
 */
 #define STK_TLS_SET(ptr) stk_tls_set((void *)(ptr))
 
@@ -389,35 +393,35 @@ void stk_tls_set(void *ptr);
 
 // ───── Critical Section ──────────────────────────────────────────────────────
 
-/*! \brief Enter critical section — disable context switches on current core.
-    \note  Supports nesting (number of enter calls must match number of exit calls).
+/*! \brief     Enter critical section — disable context switches on current core.
+    \note      Supports nesting (number of enter calls must match number of exit calls).
 */
 void stk_critical_section_enter(void);
 
-/*! \brief Leave critical section — re-enable context switches.
-    \note  Must be called once for each previous stk_critical_section_enter().
+/*! \brief     Leave critical section — re-enable context switches.
+    \note      Must be called once for each previous stk_critical_section_enter().
 */
 void stk_critical_section_exit(void);
 
 // ───── Mutex ─────────────────────────────────────────────────────────────────
 
-/*! \brief A memory size (multiples of size_t) required for a Mutex instance.
+/*! \brief     A memory size (multiples of size_t) required for a Mutex instance.
 */
 #define STK_MUTEX_IMPL_SIZE (10 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
 
-/*! \brief A memory container for a Mutex instance.
+/*! \brief     Opaque memory container for a Mutex instance.
 */
 typedef struct stk_mutex_mem_t {
     size_t data[STK_MUTEX_IMPL_SIZE] __stk_c_stack_attr;
 } stk_mutex_mem_t;
 
-/*! \brief Opaque handle to a Mutex instance.
+/*! \brief     Opaque handle to a Mutex instance.
 */
 typedef struct stk_mutex_t stk_mutex_t;
 
 /*! \brief     Create a Mutex (using provided memory).
     \param[in] memory: Pointer to static memory container.
-    \param[in] memory_size: Size of the container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_mutex_mem_t)).
     \return    Mutex handle.
 */
 stk_mutex_t *stk_mutex_create(stk_mutex_mem_t *memory, uint32_t memory_size);
@@ -432,6 +436,12 @@ void stk_mutex_destroy(stk_mutex_t *mtx);
 */
 void stk_mutex_lock(stk_mutex_t *mtx);
 
+/*! \brief     Try locking the mutex. Does not block if already locked.
+    \param[in] mtx: Mutex handle.
+    \return    True if locked successfully, False on timeout.
+*/
+bool stk_mutex_trylock(stk_mutex_t *mtx);
+
 /*! \brief     Unlock the mutex.
     \param[in] mtx: Mutex handle.
 */
@@ -444,25 +454,67 @@ void stk_mutex_unlock(stk_mutex_t *mtx);
 */
 bool stk_mutex_timed_lock(stk_mutex_t *mtx, int32_t timeout);
 
+// ───── SpinLock ──────────────────────────────────────────────────────────────
+
+/*! \brief     A memory size (multiples of size_t) required for a SpinLock instance.
+*/
+#define STK_SPINLOCK_IMPL_SIZE (1)
+
+/*! \struct    stk_spinlock_mem_t
+    \brief     Opaque memory container for SpinLock object.
+*/
+typedef struct {
+    size_t data[STK_SPINLOCK_IMPL_SIZE];
+} stk_spinlock_mem_t;
+
+/*! \brief     Opaque handle to a SpinLock instance.
+*/
+typedef struct stk_spinlock_t stk_spinlock_t;
+
+/*! \brief     Create a recursive SpinLock.
+    \param[in] memory: Pointer to static memory container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_spinlock_mem_t)).
+    \param[in] spin_count: Max iterations to spin before yielding (default: 4000).
+    \return    SpinLock handle.
+*/
+stk_spinlock_t *stk_spinlock_create(stk_spinlock_mem_t *memory, uint32_t memory_size, uint16_t spin_count);
+
+/*! \brief     Destroy the SpinLock.
+*/
+void stk_spinlock_destroy(stk_spinlock_t *lock);
+
+/*! \brief     Acquire the SpinLock (recursive).
+*/
+void stk_spinlock_lock(stk_spinlock_t *lock);
+
+/*! \brief     Attempt to acquire the SpinLock immediately.
+    \return    True if locked successfully, False otherwise.
+*/
+bool stk_spinlock_trylock(stk_spinlock_t *lock);
+
+/*! \brief     Release the SpinLock.
+*/
+void stk_spinlock_unlock(stk_spinlock_t *lock);
+
 // ───── Condition Variable ────────────────────────────────────────────────────
 
-/*! \brief A memory size (multiples of size_t) required for a ConditionVariable instance.
+/*! \brief     A memory size (multiples of size_t) required for a ConditionVariable instance.
 */
 #define STK_CV_IMPL_SIZE (7 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
 
-/*! \brief A memory container for a ConditionVariable instance.
+/*! \brief     Opaque memory container for a ConditionVariable instance.
 */
 typedef struct stk_cv_mem_t {
     size_t data[STK_CV_IMPL_SIZE] __stk_c_stack_attr;
 } stk_cv_mem_t;
 
-/*! \brief Opaque handle to a Condition Variable instance.
+/*! \brief     Opaque handle to a Condition Variable instance.
 */
 typedef struct stk_cv_t stk_cv_t;
 
 /*! \brief     Create a Condition Variable (using provided memory).
     \param[in] memory:      Pointer to static memory container.
-    \param[in] memory_size: Size of the container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_cv_mem_t)).
     \return    CV handle.
 */
 stk_cv_t *stk_cv_create(stk_cv_mem_t *memory, uint32_t memory_size);
@@ -494,23 +546,23 @@ void stk_cv_notify_all(stk_cv_t *cv);
 
 // ───── Event ─────────────────────────────────────────────────────────────────
 
-/*! \brief A memory size (multiples of size_t) required for an Event instance.
+/*! \brief     A memory size (multiples of size_t) required for an Event instance.
 */
 #define STK_EVENT_IMPL_SIZE (8 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
 
-/*! \brief A memory container for an Event instance.
+/*! \brief     Opaque memory container for an Event instance.
 */
 typedef struct stk_event_mem_t {
     size_t data[STK_EVENT_IMPL_SIZE] __stk_c_stack_attr;
 } stk_event_mem_t;
 
-/*! \brief Opaque handle to an Event instance.
+/*! \brief     Opaque handle to an Event instance.
 */
 typedef struct stk_event_t stk_event_t;
 
 /*! \brief     Create an Event (using provided memory).
-    \param[in] memory:       Pointer to static memory container.
-    \param[in] memory_size:  Size of the container.
+    \param[in] memory: Pointer to static memory container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_event_mem_t)).
     \param[in] manual_reset: True for manual-reset, False for auto-reset.
     \return    Event handle.
 */
@@ -527,6 +579,12 @@ void stk_event_destroy(stk_event_t *ev);
     \return    True if signaled, False on timeout.
 */
 bool stk_event_wait(stk_event_t *ev, int32_t timeout);
+
+/*! \brief     Wait for the event to become signaled.
+    \param[in] ev: Event handle.
+    \return    True if signaled, False on timeout.
+*/
+bool stk_event_trywait(stk_event_t *ev);
 
 /*! \brief     Set the event to signaled state.
     \param[in] ev: Event handle.
@@ -545,23 +603,23 @@ void stk_event_pulse(stk_event_t *ev);
 
 // ───── Semaphore ─────────────────────────────────────────────────────────────
 
-/*! \brief A memory size (multiples of size_t) required for a Semaphore instance.
+/*! \brief     A memory size (multiples of size_t) required for a Semaphore instance.
 */
 #define STK_SEM_IMPL_SIZE (8 + (STK_SYNC_DEBUG_NAMES ? 1 : 0))
 
-/*! \brief A memory container for a Semaphore instance.
+/*! \brief     Opaque memory container for a Semaphore instance.
 */
 typedef struct stk_sem_mem_t {
     size_t data[STK_SEM_IMPL_SIZE] __stk_c_stack_attr;
 } stk_sem_mem_t;
 
-/*! \brief Opaque handle to a Semaphore instance.
+/*! \brief     Opaque handle to a Semaphore instance.
 */
 typedef struct stk_sem_t stk_sem_t;
 
 /*! \brief     Create a Semaphore (using provided memory).
     \param[in] memory: Pointer to static memory container.
-    \param[in] memory_size: Size of the container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_sem_mem_t)).
     \param[in] initial_count: Starting value of the resource counter.
     \return    Semaphore handle.
 */
@@ -586,29 +644,29 @@ void stk_sem_signal(stk_sem_t *sem);
 
 // ───── Pipe (FIFO) ───────────────────────────────────────────────────────────
 
-/*! \brief Size of the Pipe: Pipe<size_t, STK_PIPE_SIZE>.
-    \note  Adjust if larger or smaller pipe is needed.
+/*! \brief     Size of the Pipe: Pipe<size_t, STK_PIPE_SIZE>.
+    \note      Adjust if larger or smaller pipe is needed.
 */
 #define STK_PIPE_SIZE 16
 
-/*! \brief A memory size (multiples of size_t) required for a Pipe instance.
-    \note  Sized for Pipe<size_t, 16>. Adjust if template parameters change.
+/*! \brief     A memory size (multiples of size_t) required for a Pipe instance.
+    \note      Sized for Pipe<size_t, 16>. Adjust if template parameters change.
 */
 #define STK_PIPE_IMPL_SIZE ((27 + (STK_SYNC_DEBUG_NAMES ? 3 : 0)) + STK_PIPE_SIZE)
 
-/*! \brief A memory container for a Pipe instance.
+/*! \brief     Opaque memory container for a Pipe instance.
 */
 typedef struct stk_pipe_mem_t {
     size_t data[STK_PIPE_IMPL_SIZE] __stk_c_stack_attr;
 } stk_pipe_mem_t;
 
-/*! \brief Opaque handle to a Pipe instance.
+/*! \brief     Opaque handle to a Pipe instance.
 */
 typedef struct stk_pipe_t stk_pipe_t;
 
 /*! \brief     Create a Pipe (using provided memory).
-    \param[in] memory:      Pointer to static memory container.
-    \param[in] memory_size: Size of the container.
+    \param[in] memory: Pointer to static memory container.
+    \param[in] memory_size: Size of the container (must be >= sizeof(stk_pipe_mem_t)).
     \return    Pipe handle.
 */
 stk_pipe_t *stk_pipe_create(stk_pipe_mem_t *memory, uint32_t memory_size);
@@ -619,34 +677,34 @@ stk_pipe_t *stk_pipe_create(stk_pipe_mem_t *memory, uint32_t memory_size);
 void stk_pipe_destroy(stk_pipe_t *pipe);
 
 /*! \brief     Write data to the pipe.
-    \param[in] pipe:    Pipe handle.
-    \param[in] data:    Value to write.
+    \param[in] pipe: Pipe handle.
+    \param[in] data: Value to write.
     \param[in] timeout: Max time to wait in milliseconds.
     \return    True if successful, False on timeout.
 */
 bool stk_pipe_write(stk_pipe_t *pipe, size_t data, int32_t timeout);
 
-/*! \brief     Read data from the pipe.
-    \param[in]  pipe:    Pipe handle.
-    \param[out] data:    Pointer to variable receiving the data.
+/*! \brief      Read data from the pipe.
+    \param[in]  pipe: Pipe handle.
+    \param[out] data: Pointer to variable receiving the data.
     \param[in]  timeout: Max time to wait in milliseconds.
     \return     True if successful, False on timeout.
 */
 bool stk_pipe_read(stk_pipe_t *pipe, size_t *data, int32_t timeout);
 
 /*! \brief     Write multiple elements to the pipe.
-    \param[in] pipe:    Pipe handle.
-    \param[in] src:     Pointer to source array.
-    \param[in] count:   Number of elements to write.
+    \param[in] pipe: Pipe handle.
+    \param[in] src: Pointer to source array.
+    \param[in] count: Number of elements to write.
     \param[in] timeout: Max time to wait in milliseconds.
     \return    Number of elements actually written.
 */
 size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const size_t *src, size_t count, int32_t timeout);
 
-/*! \brief     Read multiple elements from the pipe.
-    \param[in]  pipe:    Pipe handle.
-    \param[out] dst:     Pointer to destination array.
-    \param[in]  count:   Number of elements to read.
+/*! \brief      Read multiple elements from the pipe.
+    \param[in]  pipe: Pipe handle.
+    \param[out] dst: Pointer to destination array.
+    \param[in]  count: Number of elements to read.
     \param[in]  timeout: Max time to wait in milliseconds.
     \return     Number of elements actually read.
 */
