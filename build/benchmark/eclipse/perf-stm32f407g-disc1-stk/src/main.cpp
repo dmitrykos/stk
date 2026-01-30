@@ -15,7 +15,7 @@ using namespace stk;
 
 #define SLEEP_GRANULARITY (_STK_BENCH_WINDOW + 2)
 
-static Kernel<KERNEL_DYNAMIC, _STK_BENCH_TASK_MAX + 1, SwitchStrategyRR, PlatformDefault> g_Kernel;
+static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_BENCH_TASK_MAX + 1, SwitchStrategyRR, PlatformDefault> g_Kernel;
 static volatile uint32_t g_Ticks = 0;
 static volatile bool g_Enable = false;
 
