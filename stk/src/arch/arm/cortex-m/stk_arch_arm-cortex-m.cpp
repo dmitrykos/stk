@@ -845,7 +845,11 @@ void PlatformArmCortexM::ProcessHardFault()
 {
     if ((GetContext().m_overrider == nullptr) || !GetContext().m_overrider->OnHardFault())
     {
+    #ifdef NVIC_SystemReset
+        NVIC_SystemReset();
+    #else
         exit(1);
+    #endif
     }
 }
 
