@@ -1,7 +1,7 @@
 ![Logo](docs/img/stk_logo_200px.png)
 # SuperTinyKernel (STK)
 
-**Minimalistic C/C++ Thread Scheduler for Embedded Systems**
+**Minimalistic High-Performance C/C++ RTOS for Embedded Systems**
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## Overview
 
-**SuperTinyKernel (STK)** provides a lightweight, preemptive, as well as deterministic thread scheduling for bare-metal embedded applications.
+**SuperTinyKernel (STK)** is a high-performance, bare-metal RTOS designed for resource-constrained environments. By focusing on a preemptive and deterministic thread scheduler rather than peripheral abstraction (HAL), STK provides a lightweight yet robust foundation for multitasking embedded applications where timing and minimal overhead are critical.
 
 STK is implemented in C++ with a clean **Object-Oriented Design** while remaining friendly to embedded developers:
 * No aggressive namespace usage
@@ -60,6 +60,11 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 * Preemptive scheduling: tasks can not block execution of other tasks even if they do not cooperate (see **Built-in Scheduling Strategies**)
 * Dedicated task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyFixedPriority`, `SwitchStrategySmoothWeightedRoundRobin`)
 
+```cpp
+// task is added without any time constraints
+void AddTask(ITask *user_task)
+```
+
 ### Hard Real-Time (HRT)
 
 * Separate kernel mode of operation set by the `KERNEL_HRT` flag
@@ -69,22 +74,35 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 * Any violation fails the application deterministically (`ITask::OnDeadlineMissed` callback is called)
 * Dedicated HRT task switching strategies (`SwitchStrategyRoundRobin`, `SwitchStrategyRM`, `SwitchStrategyDM`, `SwitchStrategyEDF`)
 
+```cpp
+// task is added time constraints: periodicity, deadline and start delay
+AddTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc)
+```
+
 ### Static vs Dynamic
 
 * `KERNEL_STATIC`: tasks are created once at startup, kernel never returns to `main()`.
 * `KERNEL_DYNAMIC`: tasks may exit, kernel returns to `main()` when all tasks exit.
 
+---
+
 ### Built-in Scheduling Strategies
 
-| Strategy Name                            | Mode       | Description                                                                                                                                                               |
-|------------------------------------------|------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SwitchStrategyRoundRobin`               | Soft / HRT | Round-Robin scheduling strategy (Default). Allows 100% CPU utilization by tasks.                                                                                          |
-| `SwitchStrategySmoothWeightedRoundRobin` | Soft       | Smooth Weighted Round-Robin (SWRR). Distributes CPU time proportionally to task weights and avoids execution bursts.                                                      |
-| `SwitchStrategyFixedPriority`            | Soft       | Fixed-Priority Round-Robin. Tasks have fixed priorities assigned, same priority tasks are scheduled in a Round-Robin manner. Behavior is similar to FreeRTOS's scheduler. |
-| `SwitchStrategyRM`                       | HRT        | Rate-Monotonic (RM). Prioritizes tasks based on their periodicity (rate).                                                                                                 |
-| `SwitchStrategyDM`                       | HRT        | Deadline-Monotonic (DM). Prioritizes tasks based on their deadlines.                                                                                                      |
-| `SwitchStrategyEDF`                      | HRT        | Earliest Deadline First (EDF). Allows 100% CPU utilization by tasks with less context switches than `SwitchStrategyRoundRobin`.                                           |
-| Custom                                   | Soft / HRT | Custom algorithm implemented via the `ITaskSwitchStrategy` interface.                                                                                                     |
+STK is the only one known RTOS which offers all popular switching strategies which can match any usage scenario:
+
+| Strategy Name                            | Mode       | Description                                                                                                                                                                        |
+|------------------------------------------|------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `SwitchStrategyRoundRobin`               | Soft / HRT | Round-Robin scheduling strategy (Default). Allows 100% CPU utilization by tasks.                                                                                                   |
+| `SwitchStrategySmoothWeightedRoundRobin` | Soft       | Smooth Weighted Round-Robin (SWRR). Distributes CPU time proportionally to task weights and avoids execution bursts.                                                               |
+| `SwitchStrategyFixedPriority`            | Soft       | Fixed-Priority Round-Robin. Tasks have fixed priorities assigned, same priority tasks are scheduled in a Round-Robin manner. Behavior is similar to FreeRTOS's scheduler.          |
+| `SwitchStrategyRM`                       | HRT        | Rate-Monotonic (RM). Prioritizes tasks based on their periodicity (rate).                                                                                                          |
+| `SwitchStrategyDM`                       | HRT        | Deadline-Monotonic (DM). Prioritizes tasks based on their deadlines.                                                                                                               |
+| `SwitchStrategyEDF`                      | HRT        | Earliest Deadline First (EDF). If a set of tasks can be scheduled to meet their deadlines, EDF will find the way. Supports unpredictable task arrival times with strict deadlines. |
+| Custom                                   | Soft / HRT | Custom algorithm implemented via the `ITaskSwitchStrategy` interface.                                                                                                              |
+
+By implementing `ITaskSwitchStrategy` interface you can provide your own unique scheduling strategy without changing anything inside the kernel.
+
+---
 
 ### Task Privilege Separation
 
@@ -98,11 +116,7 @@ Starting with ARM Cortex-M3 and all newer cores (M3/M4/M7/M33/M55/...) that impl
 | Ability to execute privileged instructions (CPS, MRS/MSR for control regs, etc.) | Yes                                                         | No                                                                 |
 | Typical use case                                                                 | Drivers, hardware abstraction, critical infrastructure code | Application logic, protocol parsers, third-party or untrusted code |
 
-#### Why this matters
-
-Modern embedded systems increasingly process **untrusted or complex data** (network/USB packets, sensor data, firmware updates, etc.). A single bug in data parsing code can corrupt peripheral registers, disable interrupts, or even brick the device.
-
-By marking tasks that parse potentially attacker-controlled data as `ACCESS_USER`, you get **hardware-enforced isolation**:
+Modern embedded systems increasingly process untrusted or complex data (network/USB packets, sensor data, firmware updates, etc.). By marking tasks that parse potentially attacker-controlled data as `ACCESS_USER`, you get **hardware-enforced isolation**:
 - An erroneous or malicious write to a peripheral register immediately triggers a **hard BusFault** instead of silently corrupting hardware state.
 - Only explicitly trusted tasks (marked `ACCESS_PRIVILEGED`) are allowed to touch GPIO, UART, SPI, DMA, timers, etc.
 - The kernel itself and all STK services remain fully functional for unprivileged tasks (`Sleep`, `Yield`, `CriticalSection`, TLS, etc.).
@@ -117,18 +131,13 @@ class DriverTask : public stk::Task<256, ACCESS_PRIVILEGED> { ... };
 class ParserTask : public stk::Task<512, ACCESS_USER> { ... };
 ```
 
+---
+
 ### Multi-Core Support
 
 STK supports multicore embedded microcontrollers (e.g., ARM Cortex-M55, dual-core Cortex-M33/M7/M0, or multicore RISC-V devices) through a **per-core instance model** (Asymmetric Multi-Processing). 
 
 AMP design delivers maximum performance while keeping STK kernel extremely lightweight:
-- **One independent STK instance per physical CPU core**
-- **No global scheduler or intercore orchestration**
-- Each core manages only its own tasks/threads (zero contention inside the kernel)
-- Fully **asynchronous operation** between instances (**no locks, no spinlocks, no cache-line bouncing**)
-- Highest possible performance and deterministic timing on each individual core
-
-### STK's AMP Features
 
 | Feature                    | Description                                                                              |
 |----------------------------|------------------------------------------------------------------------------------------|
@@ -137,6 +146,7 @@ AMP design delivers maximum performance while keeping STK kernel extremely light
 | Full cache efficiency      | All kernel data structures stay in the local core’s L1 cache                             |
 | Independent timing domains | One core can run hard real-time tasks while another runs soft real-time or dynamic tasks |
 | Simple and predictable     | No complex SMP synchronization logic required in the kernel                              |
+| No core congestion         | Highest possible performance and deterministic timing on each individual core            |
 
 STK provides a rich set of synchronization primitives (see [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync)) which are suitable for multicore synchronization with multiple STK instances.
 
@@ -172,26 +182,6 @@ There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `b
 
 ---
 
-### Synchronization API
-
-Synchronization API is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) and resides in its own dedicated namespace `stk::sync`. It is a high-performance framework designed for both single-core and multicore embedded systems and provides a robust mechanism for inter-task and inter-core communication.
-
-| Primitive                 | Description                                                                                                                                                                                     |
-|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `hw::CriticalSection`     | Low-level primitive (including RAII version `hw::CriticalSection::ScopedLock`) that ensures atomicity by preventing preemption. Always available and independent of `KERNEL_SYNC` mode.         |
-| `hw::SpinLock`            | High-performance non-recursive primitive for short critical sections. A key primitive for inter-core synchronization. Always available and independent of `KERNEL_SYNC` mode.                   |
-| `sync::ConditionVariable` | Monitor-pattern signaling used with a `Mutex`. Allows tasks to sleep until a specific condition is met, with atomic unlock/relock semantics.                                                    |
-| `sync::Event`             | State-based signaling object. Supports manual or auto-reset behavior to wake one or multiple tasks upon a specific system occurrence.                                                           |
-| `sync::Mutex`             | Re-entrant recursive mutual exclusion primitive. Ensures exclusive resource access with ownership tracking to prevent unauthorized release.                                                     |
-| `sync::SpinLock`          | High-performance recursive primitive for short critical sections. Uses atomic busy-waiting with a configurable spin-count threshold that cooperatively yields the CPU to prevent system stalls. |
-| `sync::Semaphore`         | Counting primitive for resource throttling. Features a "Direct Handover" policy, passing tokens directly to waiting tasks to ensure deterministic behavior.                                     |
-| `sync::Pipe`              | Thread-safe FIFO ring buffer for inter-task data passing. Supports blocking single and bulk I/O with zero dynamic memory allocation.                                                            |
-| Custom                    | Extensible architecture where any class inheriting from `ISyncObject` can implement custom synchronization logic integrated with the kernel scheduler.                                          |
-
-Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC` flag. If application does not need `sync` primitives and `KERNEL_SYNC` is not set to the kernel then synchronization-related implementation is stripped by the compiler saving FLASH and RAM.
-
----
-
 ## Hardware Support
 
 ### CPU Architectures
@@ -212,13 +202,33 @@ Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC`
 * CMSIS (ARM platforms only)
 * MCU vendor BSP (NXP, STM, RPI, etc.)
 
-No other libraries required.
+> **Note:** A minimal set of CMSIS/BSP API is used by STK.
 
 ---
 
 ## Dedicated C interface
 
-For easier integration with C projects STK provides dedicated fully-featured C interface, see [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) folder.
+For a seamless integration with C projects STK provides a dedicated, fully-featured C interface. See [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) for more details and example.
+
+---
+
+## Synchronization API
+
+STK provides a feature-rich synchronization API which is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) and resides in a dedicated namespace `stk::sync`. It is a high-performance framework designed for both single-core and multicore embedded systems and provides a robust mechanism for inter-task and inter-core communication.
+
+| Primitive                 | Description                                                                                                                                                                                     |
+|---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `hw::CriticalSection`     | Low-level primitive (including RAII version `hw::CriticalSection::ScopedLock`) that ensures atomicity by preventing preemption. Always available and independent of `KERNEL_SYNC` mode.         |
+| `hw::SpinLock`            | High-performance non-recursive primitive for short critical sections. A key primitive for inter-core synchronization. Always available and independent of `KERNEL_SYNC` mode.                   |
+| `sync::ConditionVariable` | Monitor-pattern signaling used with a `Mutex`. Allows tasks to sleep until a specific condition is met, with atomic unlock/relock semantics.                                                    |
+| `sync::Event`             | State-based signaling object. Supports manual or auto-reset behavior to wake one or multiple tasks upon a specific system occurrence.                                                           |
+| `sync::Mutex`             | Re-entrant recursive mutual exclusion primitive. Ensures exclusive resource access with ownership tracking to prevent unauthorized release.                                                     |
+| `sync::SpinLock`          | High-performance recursive primitive for short critical sections. Uses atomic busy-waiting with a configurable spin-count threshold that cooperatively yields the CPU to prevent system stalls. |
+| `sync::Semaphore`         | Counting primitive for resource throttling. Features a "Direct Handover" policy, passing tokens directly to waiting tasks to ensure deterministic behavior.                                     |
+| `sync::Pipe`              | Thread-safe FIFO ring buffer for inter-task data passing. Supports blocking single and bulk I/O with zero dynamic memory allocation.                                                            |
+| Custom                    | Extensible architecture where any class inheriting from `ISyncObject` can implement custom synchronization logic integrated with the kernel scheduler.                                          |
+
+> **Note:** Synchronization can be enabled in the kernel selectively by adding `KERNEL_SYNC` flag. If application does not need `sync` primitives and `KERNEL_SYNC` is not set to the kernel then synchronization-related implementation is stripped by the compiler saving FLASH and RAM.
 
 ---
 
@@ -234,7 +244,7 @@ There is a ready to try Blinky example with SEGGER SystemView tracing enabled: `
 
 ## Development Mode (x86)
 
-STK includes a **full scheduling emulator** for Windows to speed up a prototype development:
+STK includes a full scheduling emulator for Windows to speed up a prototype development:
 * Run the same embedded application on x86
 * Debug threads using Visual Studio or Eclipse
 * Perform unit testing without hardware
@@ -253,7 +263,49 @@ STK has been tested on the following development boards:
 * NXP MIMXRT1050 EVKB (Cortex-M7)
 * Raspberry Pi Pico 2 W (Cortex-M33 / RISC-V variant)
 
-> **Note:** The list of tested boards does **not** limit STK’s compatibility. STK **does not depend on a specific board** and relies only on the underlying CPU architecture. As long as target CPU is supported, STK can be integrated with your hardware platform.
+> **Note:** The list of tested boards does not limit STK’s compatibility. STK does not depend on a specific board and relies only on the underlying CPU architecture. As long as target CPU is supported, STK can be integrated with your hardware platform.
+
+---
+
+## Test Coverage
+
+| Coverage                  | Description                                       |
+|---------------------------|---------------------------------------------------|
+| Platform-independent code | 100% unit test coverage                           |
+| Platform-dependent code   | tested under QEMU for each supported architecture |
+
+---
+
+## Benchmark
+
+Board: STM32F407G-DISC1, MCU: STM32F407VG (Cortex-M4 168MHz).
+
+This table compares **SuperTinyKernel (STK) v.1.04.0** and **FreeRTOS V10.3.1** across two compiler optimization levels: `-Os` and `-Ofast`. The workload consists of a CRC32-based synthetic task running across multiple tasks/threads to measure scheduling overhead and timing determinism. Benchmark projects are located in `build/benchmark/eclipse` and the benchmark suite is located in `build/benchmark/perf`.
+
+The benchmark suite uses CRC32 hash calculations as the task payload. The score represents the number of CRC32 calculations performed by the task within a fixed time window. A higher score indicates a more efficient scheduler, meaning the tasks have more available CPU time.
+
+| Kernel       | Tasks | Opt      | Total Sum (Throughput) | Average | Jitter  | Flash Size  | RAM Used   |
+|--------------|-------|----------|------------------------|---------|---------|-------------|------------|
+| **STK**      | 16    | `-Ofast` | **992,949**            | 62,059  | **754** | 24.2 KB     | 8.9 KB     |
+| **FreeRTOS** | 16    | `-Ofast` | 965,991                | 60,374  | 908     | 13.7 KB     | **8.8 KB** |
+| **STK**      | 16    | `-Os`    | **752,119**            | 47,007  | **425** | 18.4 KB     | 11.2 KB    |
+| **FreeRTOS** | 16    | `-Os`    | 731,957                | 45,747  | 471     | **12.2 KB** | 11.0 KB    |
+| ---          | ---   | ---      | ---                    | ---     | ---     | ---         | ---        |
+| **STK**      | 8     | `-Ofast` | **988,802**            | 123,600 | 866     | 24.2 KB     | 8.9 KB     |
+| **FreeRTOS** | 8     | `-Ofast` | 932,579                | 116,572 | **615** | 13.7 KB     | **8.8 KB** |
+| **STK**      | 8     | `-Os`    | **752,838**            | 94,104  | 660     | 18.4 KB     | 11.2 KB    |
+| **FreeRTOS** | 8     | `-Os`    | 710,090                | 88,761  | **466** | **12.2 KB** | 11.0 KB    |
+| ---          | ---   | ---      | ---                    | ---     | ---     | ---         | ---        |
+| **STK**      | 4     | `-Ofast` | **989,431**            | 247,357 | 742     | 24.2 KB     | 8.9 KB     |
+| **FreeRTOS** | 4     | `-Ofast` | 881,079                | 220,269 | **690** | 13.7 KB     | **8.8 KB** |
+| **STK**      | 4     | `-Os`    | **753,232**            | 188,308 | 565     | 18.4 KB     | 11.2 KB    |
+| **FreeRTOS** | 4     | `-Os`    | 670,867                | 167,716 | **504** | **12.2 KB** | 11.0 KB    |
+
+### Conclusion
+* **Throughput:** STK tasks consistently outperform FreeRTOS tasks, achieving up to 31% higher throughput in low-task counts and maintaining a lead even at 16 tasks.
+* **Scheduling Overhead:** STK's total throughput remains remarkably flat as task count increases, showing minimal context-switching friction compared to FreeRTOS.
+* **Determinism:** In high-stress scenarios (16 tasks, `-Ofast`), STK provides ~17% lower jitter, making it superior for timing-sensitive applications.
+* **Memory Usage:** While STK has a larger FLASH footprint due to its C++ template architecture, it provides a highly specialized and faster execution path. `-Ofast` reduces RAM usage for both kernels compared to `-Os`.
 
 ---
 
@@ -590,48 +642,6 @@ SRCS += \
 #### 4. Build
 
 Build your project normally — STK will now be compiled together with it.
-
----
-
-## Test Coverage
-
-| Coverage                  | Description                                       |
-|---------------------------|---------------------------------------------------|
-| Platform-independent code | **100% unit test coverage**                       |
-| Platform-dependent code   | tested under QEMU for each supported architecture |
-
----
-
-## Benchmark
-
-Board: STM32F407G-DISC1, MCU: STM32F407VG (Cortex-M4 168MHz).
-
-This table compares **SuperTinyKernel (STK) v.1.04.0** and **FreeRTOS V10.3.1** across two compiler optimization levels: `-Os` and `-Ofast`. The workload consists of a CRC32-based synthetic task running across multiple tasks/threads to measure scheduling overhead and timing determinism. Benchmark projects are located in `build/benchmark/eclipse` and the benchmark suite is located in `build/benchmark/perf`.
-
-Benchmark suite is using CRC32 calculation as a payload for the task. The benchmark result number means a number of CRC32 calculations completed by the task. Higher number means the efficiency of the scheduler's implementation, i.e. tasks have more CPU time available.
-
-| Kernel | Tasks | Opt | Total Sum (Throughput) | Average | Jitter | Flash Size | RAM Used |
-| :--- | :---: | :---: | :--- | :--- | :--- | :--- | :--- |
-| **STK** | 16 | `-Ofast` | **992,949** | 62,059 | **754** | 24.2 KB | 8.9 KB |
-| **FreeRTOS** | 16 | `-Ofast` | 965,991 | 60,374 | 908 | 13.7 KB | **8.8 KB** |
-| **STK** | 16 | `-Os` | **752,119** | 47,007 | **425** | 18.4 KB | 11.2 KB |
-| **FreeRTOS** | 16 | `-Os` | 731,957 | 45,747 | 471 | **12.2 KB** | 11.0 KB |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **STK** | 8 | `-Ofast` | **988,802** | 123,600 | 866 | 24.2 KB | 8.9 KB |
-| **FreeRTOS** | 8 | `-Ofast` | 932,579 | 116,572 | **615** | 13.7 KB | **8.8 KB** |
-| **STK** | 8 | `-Os` | **752,838** | 94,104 | 660 | 18.4 KB | 11.2 KB |
-| **FreeRTOS** | 8 | `-Os` | 710,090 | 88,761 | **466** | **12.2 KB** | 11.0 KB |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **STK** | 4 | `-Ofast` | **989,431** | 247,357 | 742 | 24.2 KB | 8.9 KB |
-| **FreeRTOS** | 4 | `-Ofast` | 881,079 | 220,269 | **690** | 13.7 KB | **8.8 KB** |
-| **STK** | 4 | `-Os` | **753,232** | 188,308 | 565 | 18.4 KB | 11.2 KB |
-| **FreeRTOS** | 4 | `-Os` | 670,867 | 167,716 | **504** | **12.2 KB** | 11.0 KB |
-
-### Conclusion
-* **Throughput:** STK tasks consistently outperform FreeRTOS tasks, achieving up to 31% higher throughput in low-task counts and maintaining a lead even at 16 tasks.
-* **Scheduling Overhead:** STK's total throughput remains remarkably flat as task count increases, showing minimal context-switching friction compared to FreeRTOS.
-* **Determinism:** In high-stress scenarios (16 tasks, `-Ofast`), STK provides ~17% lower jitter, making it superior for timing-sensitive applications.
-* **Memory Usage:** While STK has a larger FLASH footprint due to its C++ template architecture, it provides a highly specialized and faster execution path. `-Ofast` reduces RAM usage for both kernels compared to `-Os`.
 
 ---
 

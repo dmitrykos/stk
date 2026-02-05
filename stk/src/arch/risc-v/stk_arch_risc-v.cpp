@@ -843,9 +843,12 @@ STK_RISCV_ISR void _STK_SVC_HANDLER()
 
 static void OnTaskExit()
 {
-    GetContext().EnterCriticalSection();
+    size_t cs;
+    STK_RISCV_CRITICAL_SECTION_START(cs);
+
     GetContext().m_handler->OnTaskExit(GetContext().m_stack_active);
-    GetContext().ExitCriticalSection();
+
+    STK_RISCV_CRITICAL_SECTION_END(cs);
 
     for (;;)
     {

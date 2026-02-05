@@ -660,9 +660,12 @@ extern "C" __stk_attr_naked void _STK_SVC_HANDLER()
 
 static void OnTaskExit()
 {
-    GetContext().EnterCriticalSection();
+    uint32_t cs;
+    STK_CORTEX_M_CRITICAL_SECTION_START(cs);
+
     GetContext().m_handler->OnTaskExit(GetContext().m_stack_active);
-    GetContext().ExitCriticalSection();
+
+    STK_CORTEX_M_CRITICAL_SECTION_END(cs);
 
     for (;;)
     {
