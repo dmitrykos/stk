@@ -710,11 +710,11 @@ size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const size_t *src, size_t count, in
 */
 size_t stk_pipe_read_bulk(stk_pipe_t *pipe, size_t *dst, size_t count, int32_t timeout);
 
-/*! \brief     Get the current number of elements in the pipe.
+/*! \brief     Get current number of elements in the pipe.
     \param[in] pipe: Pipe handle.
     \return    Current element count.
 */
-size_t stk_pipe_get_count(stk_pipe_t *pipe);
+size_t stk_pipe_get_size(stk_pipe_t *pipe);
 
 #ifdef __cplusplus
 }

@@ -10,7 +10,7 @@
 #ifndef STK_SYNC_SEMAPHORE_H_
 #define STK_SYNC_SEMAPHORE_H_
 
-#include "stk_common.h"
+#include "stk_sync_cs.h"
 
 /*! \file  stk_sync_semaphore.h
     \brief Implementation of synchronization primitive: Semaphore.

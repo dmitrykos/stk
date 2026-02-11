@@ -10,7 +10,7 @@
 #ifndef STK_SYNC_CV_H_
 #define STK_SYNC_CV_H_
 
-#include "stk_common.h"
+#include "stk_sync_cs.h"
 
 /*! \file  stk_sync_cv.h
     \brief Implementation of synchronization primitive: ConditionVariable.
@@ -74,9 +74,9 @@ public:
     ~ConditionVariable() { STK_ASSERT(m_wait_list.IsEmpty()); }
 
     /*! \brief     Wait for a signal.
-        \details   Atomically releases the mutex and blocks the task.
+        \details   Atomically releases mutex and blocks the task.
                    The mutex is re-acquired before the function returns.
-        \param[in] mutex:   The locked mutex protecting the shared state/condition.
+        \param[in] mutex: Locked mutex protecting the shared state/condition.
         \param[in] timeout: Maximum time to wait (ticks).
         \return    True if signaled, false if timeout occurred.
         \warning   ISR-unsafe unless timeout is NO_WAIT.

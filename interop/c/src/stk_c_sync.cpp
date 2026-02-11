@@ -319,11 +319,11 @@ size_t stk_pipe_read_bulk(stk_pipe_t *pipe, size_t *dst, size_t count, int32_t t
     return pipe->handle.ReadBulk(dst, count, timeout);
 }
 
-size_t stk_pipe_get_count(stk_pipe_t *pipe)
+size_t stk_pipe_get_size(stk_pipe_t *pipe)
 {
     STK_ASSERT(pipe != nullptr);
 
-    return pipe->handle.GetCount();
+    return pipe->handle.GetSize();
 }
 
 } // extern "C"

@@ -13,8 +13,6 @@
 #include <type_traits>
 #include <cstring> // for memcpy
 
-#include "stk_common.h"
-#include "stk_sync_mutex.h"
 #include "stk_sync_cv.h"
 
 /*! \file  stk_sync_pipe.h
@@ -62,7 +60,7 @@ class Pipe
 public:
     /*! \brief     Constructor.
     */
-    explicit Pipe() : m_buffer(), m_head(0), m_tail(0), m_count(0), m_mutex(), m_cv_empty(), m_cv_full()
+    explicit Pipe() : m_buffer(), m_head(0), m_tail(0), m_count(0), m_cv_empty(), m_cv_full()
     {}
 
     /*! \brief     Write data to the pipe.
@@ -77,11 +75,11 @@ public:
     */
     bool Write(const T &data, Timeout timeout = WAIT_INFINITE)
     {
-        Mutex::ScopedLock guard(m_mutex);
+        ScopedCriticalSection __cs;
 
         while (m_count == N)
         {
-            if (!m_cv_full.Wait(m_mutex, timeout))
+            if (!m_cv_full.Wait(__cs, timeout))
                 return false;
         }
 
@@ -123,14 +121,14 @@ public:
             return 0;
 
         size_t written = 0;
-        Mutex::ScopedLock guard(m_mutex);
+        ScopedCriticalSection __cs;
 
         while (written < count)
         {
             // wait until there is at least 1 slot available
             while (m_count == N)
             {
-                if (!m_cv_full.Wait(m_mutex, timeout))
+                if (!m_cv_full.Wait(__cs, timeout))
                     return written; // Return partial count on timeout
             }
 
@@ -186,11 +184,11 @@ public:
     */
     bool Read(T &data, Timeout timeout = WAIT_INFINITE)
     {
-        Mutex::ScopedLock guard(m_mutex);
+        ScopedCriticalSection __cs;
 
         while (m_count == 0)
         {
-            if (!m_cv_empty.Wait(m_mutex, timeout))
+            if (!m_cv_empty.Wait(__cs, timeout))
                 return false;
         }
 
@@ -234,14 +232,14 @@ public:
 
         size_t read_count = 0;
 
-        Mutex::ScopedLock guard(m_mutex);
+        ScopedCriticalSection __cs;
 
         while (read_count < count)
         {
             // wait until there is at least 1 element available
             while (m_count == 0)
             {
-                if (!m_cv_empty.Wait(m_mutex, timeout))
+                if (!m_cv_empty.Wait(__cs, timeout))
                     return read_count; // return partial count on timeout
             }
 
@@ -288,17 +286,25 @@ public:
         \return    The number of elements currently stored in the FIFO buffer.
 
         \note      The returned value is a point-in-time snapshot. In a multi-tasking
-                   environment, the count may change immediately after function returns if
+                   environment, queue size may change immediately after function returns if
                    a producer or consumer is active in another task.
     */
-    size_t GetCount() const { return m_count; }
+    size_t GetSize() const { return m_count; }
+
+    /*! \brief     Check if queue is currently empty.
+        \return    True if empty, otherwise false.
+
+        \note      The returned value is a point-in-time snapshot. In a multi-tasking
+                   environment, queue size may change immediately after function returns if
+                   a producer or consumer is active in another task.
+    */
+    bool IsEmpty() const { return (GetSize() == 0); }
 
 private:
     T                 m_buffer[N]; //!< static storage for FIFO elements
     size_t            m_head;      //!< index of the next slot to be written (producer)
     size_t            m_tail;      //!< index of the next slot to be read (consumer)
     size_t            m_count;     //!< current number of elements stored in the pipe
-    Mutex             m_mutex;     //!< mutex protecting the internal buffer state and pointers
     ConditionVariable m_cv_empty;  //!< condition variable signaled when the pipe is no longer empty
     ConditionVariable m_cv_full;   //!< condition variable signaled when the pipe is no longer full
 };
