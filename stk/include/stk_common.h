@@ -180,6 +180,11 @@ public:
     */
     typedef DLEntryType ListEntryType;
 
+    /*! \brief     Get thread Id of this task.
+        \return    Thread Id.
+    */
+    virtual TId GetTid() const = 0;
+
     /*! \brief     Wake task.
         \param[in] timeout: Set \a true if task is waking due to a timeout, otherwise \a false.
     */
@@ -798,10 +803,15 @@ public:
         \note      Unlike Delay this function does not waste CPU cycles and allows kernel to put CPU into a low-power state.
         \note      Unsupported in HRT mode (see stk::KERNEL_HRT), instead task will sleep automatically according its periodicity and workload.
         \param[in] msec: Sleep time (milliseconds).
+        \warning   Caller must lock the hw::CriticalSection with hw::CriticalSection::Enter() before calling this function.
+                   Kernel will exit the hw::CriticalSection with hw::CriticalSection::Exit() upon return from this function.
     */
     virtual void Sleep(Timeout msec) = 0;
 
-    /*! \brief     Notify scheduler that it can switch to a next task.
+    /*! \brief     Notify scheduler to switch to the next task (yield).
+        \note      A cooperation mechanism in HRT mode (see stk::KERNEL_HRT).
+        \warning   Caller must lock the hw::CriticalSection with hw::CriticalSection::Enter() before calling this function.
+                   Kernel will exit the hw::CriticalSection with hw::CriticalSection::Exit() upon return from this function.
     */
     virtual void SwitchToNext() = 0;
 

@@ -10,7 +10,7 @@
 #ifndef STK_SYNC_CS_H_
 #define STK_SYNC_CS_H_
 
-#include "stk_common.h"
+#include "stk_helper.h"
 
 /*! \file  stk_sync_cs.h
     \brief Implementation of critical section primitive: ScopedCriticalSection.

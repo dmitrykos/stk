@@ -60,6 +60,8 @@ void stk::hw::CriticalSection::Enter()
 void stk::hw::CriticalSection::Exit()
 {
     --g_CriticalSectionState;
+
+    CHECK_TRUE(g_CriticalSectionState >= 0);
 }
 
 void stk::hw::SpinLock::Lock()

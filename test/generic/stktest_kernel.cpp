@@ -1245,6 +1245,7 @@ TEST(Kernel, SyncWait)
 
     IWaitObject *wo = IKernelService::GetInstance()->StartWaiting(&sobj, &mutex, 2);
 
+    CHECK_EQUAL(GetTid(), wo->GetTid()); // expect the same thread id as WaitObject belongs to the caller's task
     CHECK_TRUE_TEXT(wo != nullptr, "expect wait object in return after timeout");
     CHECK_TRUE_TEXT(wo->IsTimeout(), "expect timeout");
     CHECK_EQUAL_TEXT(2, g_SyncWaitRelaxCpuContext.counter, "expect 2 ticks after timeout");
