@@ -1,0 +1,606 @@
+/*
+ * SuperTinyKernel (STK): minimalistic C++ thread scheduling kernel for Embedded Systems.
+ *
+ * Source: http://github.com/dmitrykos/stk
+ *
+ * Copyright (c) 2022-2026 Neutron Code Limited <stk@neutroncode.com>
+ * License: MIT License, see LICENSE for a full text.
+ */
+
+#include <stk_config.h>
+#include <stk.h>
+#include <sync/stk_sync_mutex.h>
+#include <assert.h>
+#include <string.h>
+
+#include "stktest_context.h"
+
+using namespace stk;
+using namespace stk::test;
+
+STK_TEST_DECL_ASSERT;
+
+#define _STK_MUTEX_TEST_TASKS_MAX   5
+#define _STK_MUTEX_TEST_TIMEOUT     1000
+#define _STK_MUTEX_TEST_SHORT_SLEEP 10
+#define _STK_MUTEX_TEST_LONG_SLEEP  100
+
+namespace stk {
+namespace test {
+
+/*! \namespace stk::test::mutex
+    \brief     Namespace of Mutex test.
+ */
+namespace mutex {
+
+// Test results storage
+static volatile int32_t g_TestResult = 0;
+static volatile int32_t g_SharedCounter = 0;
+static volatile int32_t g_AcquisitionOrder[_STK_MUTEX_TEST_TASKS_MAX] = {0};
+static volatile int32_t g_OrderIndex = 0;
+static volatile bool    g_TestComplete = false;
+
+// Test mutex
+static sync::Mutex g_TestMutex;
+
+/*! \class BasicLockUnlockTask
+    \brief Tests basic lock/unlock functionality.
+    \note  Verifies that mutex provides mutual exclusion.
+*/
+template <EAccessMode _AccessMode>
+class BasicLockUnlockTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_iterations;
+
+public:
+    BasicLockUnlockTask(uint8_t task_id, int32_t iterations) : m_task_id(task_id), m_iterations(iterations)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&BasicLockUnlockTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        for (int32_t i = 0; i < m_iterations; ++i)
+        {
+            g_TestMutex.Lock();
+            
+            // Critical section - increment shared counter
+            int32_t temp = g_SharedCounter;
+            stk::Delay(1); // Small delay to increase chance of race if mutex broken
+            g_SharedCounter = temp + 1;
+            
+            g_TestMutex.Unlock();
+            
+            stk::Yield(); // Yield to other tasks
+        }
+
+        // Task 0 acts as verifier: waits for all other tasks to finish then checks
+        // that the counter equals exactly tasks_count * iterations, confirming that
+        // no increment was lost or doubled due to a broken mutual exclusion.
+        if (m_task_id == 0)
+        {
+            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+
+            int32_t expected = _STK_MUTEX_TEST_TASKS_MAX * m_iterations;
+
+            printf("basic lock/unlock: counter=%d (expected %d)\n",
+                   (int)g_SharedCounter, (int)expected);
+
+            if (g_SharedCounter == expected)
+                g_TestResult = 1;
+        }
+    }
+};
+
+/*! \class RecursiveLockTask
+    \brief Tests recursive locking capability.
+    \note  Verifies that same thread can acquire mutex multiple times.
+*/
+template <EAccessMode _AccessMode>
+class RecursiveLockTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+
+public:
+    RecursiveLockTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&RecursiveLockTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        g_TestMutex.Lock();
+        {
+            g_TestMutex.Lock(); // Recursive acquisition
+            {
+                g_TestMutex.Lock(); // Third level
+                {
+                    g_SharedCounter++;
+                }
+                g_TestMutex.Unlock();
+            }
+            g_TestMutex.Unlock();
+        }
+        g_TestMutex.Unlock();
+        
+        // Verify counter was incremented exactly once per task
+        if (m_task_id == 0)
+        {
+            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+
+            int32_t expected = _STK_MUTEX_TEST_TASKS_MAX;
+
+            printf("recursive lock/unlock: counter=%d (expected %d)\n",
+                   (int)g_SharedCounter, (int)expected);
+
+            if (g_SharedCounter == _STK_MUTEX_TEST_TASKS_MAX)
+                g_TestResult = 1;
+        }
+    }
+};
+
+/*! \class TryLockTask
+    \brief Tests TryLock() non-blocking behavior.
+    \note  Verifies that TryLock() returns immediately without blocking.
+*/
+template <EAccessMode _AccessMode>
+class TryLockTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+
+public:
+    TryLockTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&TryLockTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        if (m_task_id == 0)
+        {
+            // Task 0: Hold the lock
+            g_TestMutex.Lock();
+            g_SharedCounter = 1;
+            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+            g_TestMutex.Unlock();
+        }
+        else
+        {
+            // Task 1: Try to acquire while held
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP); // Let task 0 acquire first
+            
+            int64_t start = GetTimeNowMsec();
+            bool acquired = g_TestMutex.TryLock();
+            int64_t elapsed = GetTimeNowMsec() - start;
+            
+            if (!acquired && (elapsed < _STK_MUTEX_TEST_SHORT_SLEEP)) // Should fail immediately
+            {
+                g_TestResult = 1;
+            }
+            else
+            {
+                g_TestResult = 0;
+            }
+            
+            if (acquired)
+                g_TestMutex.Unlock();
+        }
+    }
+};
+
+/*! \class TimedLockTask
+    \brief Tests TimedLock() timeout behavior.
+    \note  Verifies that TimedLock() respects timeout values.
+*/
+template <EAccessMode _AccessMode>
+class TimedLockTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+
+public:
+    TimedLockTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&TimedLockTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        if (m_task_id == 0)
+        {
+            // Task 0: Hold the lock for extended period
+            g_TestMutex.Lock();
+            stk::Sleep(200); // Hold for 200ms
+            g_TestMutex.Unlock();
+        }
+        else if (m_task_id == 1)
+        {
+            // Task 1: Try to acquire with timeout
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP); // Let task 0 acquire first
+            
+            int64_t start = GetTimeNowMsec();
+            bool acquired = g_TestMutex.TimedLock(50); // 50ms timeout
+            int64_t elapsed = GetTimeNowMsec() - start;
+            
+            // Should timeout after ~50ms
+            if (!acquired && elapsed >= 45 && elapsed <= 60)
+            {
+                g_SharedCounter++;
+            }
+            
+            if (acquired)
+                g_TestMutex.Unlock();
+        }
+        else if (m_task_id == 2)
+        {
+            // Task 2: Successfully acquire after task 0 releases
+            stk::Sleep(250); // Wait for task 0 to release
+            
+            if (g_TestMutex.TimedLock(100))
+            {
+                g_SharedCounter++;
+                g_TestMutex.Unlock();
+            }
+        }
+        
+        // Final check
+        if (m_task_id == 2)
+        {
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            if (g_SharedCounter == 2)
+                g_TestResult = 1;
+        }
+    }
+};
+
+/*! \class FIFOOrderTask
+    \brief Tests FIFO ordering of waiting threads.
+    \note  Verifies that threads are woken in the order they blocked.
+*/
+template <EAccessMode _AccessMode>
+class FIFOOrderTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+
+public:
+    FIFOOrderTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&FIFOOrderTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        if (m_task_id == 0)
+        {
+            // Task 0: Acquire lock first
+            g_TestMutex.Lock();
+            stk::Sleep(50); // Hold to let others queue up
+            g_TestMutex.Unlock();
+        }
+        else
+        {
+            // Tasks 1-4: Wait in order
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP * m_task_id); // Stagger start times
+            
+            g_TestMutex.Lock();
+            {
+                // Record acquisition order
+                int32_t idx = g_OrderIndex++;
+                g_AcquisitionOrder[idx] = m_task_id;
+            }
+            g_TestMutex.Unlock();
+        }
+        
+        // Task 4 verifies order
+        if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
+        {
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            
+            // Check if tasks acquired in FIFO order (1, 2, 3, 4)
+            bool ordered = true;
+            for (int32_t i = 0; i < (_STK_MUTEX_TEST_TASKS_MAX - 1); ++i)
+            {
+                if (g_AcquisitionOrder[i] != (i + 1))
+                {
+                    ordered = false;
+                    printf("Order violation: position %d has task %d (expected %d)\n",
+                           i, (int)g_AcquisitionOrder[i], i + 1);
+                    break;
+                }
+            }
+            
+            if (ordered)
+                g_TestResult = 1;
+        }
+    }
+};
+
+/*! \class StressTestTask
+    \brief Stress test with many lock/unlock cycles.
+    \note  Verifies mutex stability under heavy contention.
+*/
+template <EAccessMode _AccessMode>
+class StressTestTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_iterations;
+
+public:
+    StressTestTask(uint8_t task_id, int32_t iterations) : m_task_id(task_id), m_iterations(iterations)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&StressTestTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        for (int32_t i = 0; i < m_iterations; ++i)
+        {
+            // Mix of operations
+            if (i % 3 == 0)
+            {
+                // Regular lock
+                g_TestMutex.Lock();
+                g_SharedCounter++;
+                g_TestMutex.Unlock();
+            }
+            else
+            if (i % 3 == 1)
+            {
+                // Try lock
+                if (g_TestMutex.TryLock())
+                {
+                    g_SharedCounter++;
+                    g_TestMutex.Unlock();
+                }
+            }
+            else
+            {
+                // Timed lock
+                if (g_TestMutex.TimedLock(10))
+                {
+                    g_SharedCounter++;
+                    g_TestMutex.Unlock();
+                }
+            }
+            
+            if ((i % 10) == 0)
+                stk::Delay(1);
+        }
+        
+        // Last task verifies total
+        if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
+        {
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            
+            // All increments should be accounted for (may be less if TryLock failed)
+            if (g_SharedCounter > 0)
+                g_TestResult = 1;
+            
+            printf("Stress test: counter=%d\n", (int)g_SharedCounter);
+        }
+    }
+};
+
+/*! \class RecursiveDepthTask
+    \brief Tests deep recursive locking.
+    \note  Verifies mutex handles multiple recursion levels correctly.
+*/
+template <EAccessMode _AccessMode>
+class RecursiveDepthTask : public Task<1024, _AccessMode>
+{
+    uint8_t m_task_id;
+    enum { DEPTH = 25 };
+
+public:
+    RecursiveDepthTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&RecursiveDepthTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RecursiveLock(int32_t depth)
+    {
+        if (depth == 0)
+            return;
+
+        g_TestMutex.Lock();
+        RecursiveLock(depth - 1);
+        g_SharedCounter++;
+        g_TestMutex.Unlock();
+    }
+    
+    void RunInner()
+    {
+        // Recursive lock to depth 50
+        RecursiveLock(DEPTH);
+        
+        if (m_task_id == 0)
+        {
+            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+
+            int32_t expected = _STK_MUTEX_TEST_TASKS_MAX * DEPTH;
+
+            printf("recursive depth: counter=%d (expected %d)\n",
+                   (int)g_SharedCounter, (int)expected);
+
+            if (g_SharedCounter == expected)
+                g_TestResult = 1;
+        }
+    }
+};
+
+/*! \class InterTaskCoordinationTask
+    \brief Tests mutex for coordinating work between tasks.
+    \note  Verifies mutex correctly synchronizes shared state updates.
+*/
+template <EAccessMode _AccessMode>
+class InterTaskCoordinationTask : public Task<512, _AccessMode>
+{
+    uint8_t m_task_id;
+
+public:
+    InterTaskCoordinationTask(uint8_t task_id, int32_t) : m_task_id(task_id)
+    {}
+    
+    RunFuncType GetFunc() { return forced_cast<RunFuncType>(&InterTaskCoordinationTask::RunInner); }
+    void *GetFuncUserData() { return this; }
+
+private:
+    void RunInner()
+    {
+        for (int32_t round = 0; round < 10; ++round)
+        {
+            g_TestMutex.Lock();
+            {
+                // Each task increments in sequence
+                while ((g_SharedCounter % _STK_MUTEX_TEST_TASKS_MAX) != m_task_id)
+                {
+                    g_TestMutex.Unlock();
+                    stk::Delay(1);
+                    g_TestMutex.Lock();
+                }
+                
+                g_SharedCounter++;
+            }
+            g_TestMutex.Unlock();
+        }
+        
+        // Last task verifies
+        if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
+        {
+            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            
+            // Should be exactly 10 rounds * number of tasks
+            if (g_SharedCounter == 10 * _STK_MUTEX_TEST_TASKS_MAX)
+                g_TestResult = 1;
+            
+            printf("Coordination test: counter=%d (expected %d)\n", 
+                   (int)g_SharedCounter, 10 * _STK_MUTEX_TEST_TASKS_MAX);
+        }
+    }
+};
+
+// Helper function to reset test state
+static void ResetTestState()
+{
+    g_TestResult = 0;
+    g_SharedCounter = 0;
+    g_OrderIndex = 0;
+    g_TestComplete = false;
+    
+    for (int32_t i = 0; i < _STK_MUTEX_TEST_TASKS_MAX; ++i)
+        g_AcquisitionOrder[i] = 0;
+}
+
+} // namespace mutex
+} // namespace test
+} // namespace stk
+
+/*! \fn    RunTest
+    \brief Helper function to run a single test case.
+*/
+template <class TaskType>
+static int32_t RunTest(const char *test_name, int32_t param = 0)
+{
+    using namespace stk;
+    using namespace stk::test;
+    using namespace stk::test::mutex;
+    
+    printf("\n=== Running: %s ===\n", test_name);
+    
+    ResetTestState();
+    
+    static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_MUTEX_TEST_TASKS_MAX, SwitchStrategyRR, PlatformDefault> kernel;
+    
+    // Create tasks based on test type
+    static TaskType task0(0, param);
+    static TaskType task1(1, param);
+    static TaskType task2(2, param);
+    static TaskType task3(3, param);
+    static TaskType task4(4, param);
+    
+    kernel.Initialize();
+    
+    kernel.AddTask(&task0);
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+    kernel.AddTask(&task4);
+    
+    kernel.Start();
+    
+    int32_t result = (g_TestResult ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
+    
+    printf("Result: %s\n", result == TestContext::SUCCESS_EXIT_CODE ? "PASS" : "FAIL");
+    
+    return result;
+}
+
+/*! \fn    main
+    \brief Entry to the test suite.
+*/
+int main(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    
+    using namespace stk::test::mutex;
+
+    TestContext::ShowTestSuitePrologue();
+    
+    int32_t total_failures = 0;
+    
+    // Test 1: Basic Lock/Unlock with mutual exclusion
+    if (RunTest<BasicLockUnlockTask<ACCESS_PRIVILEGED>>("BasicLockUnlock", 100) != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 2: Recursive locking
+    if (RunTest<RecursiveLockTask<ACCESS_PRIVILEGED>>("RecursiveLock") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 3: TryLock non-blocking behavior
+    if (RunTest<TryLockTask<ACCESS_PRIVILEGED>>("TryLock") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 4: TimedLock timeout behavior
+    if (RunTest<TimedLockTask<ACCESS_PRIVILEGED>>("TimedLock") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 5: FIFO ordering
+    if (RunTest<FIFOOrderTask<ACCESS_PRIVILEGED>>("FIFOOrder") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 6: Stress test
+    if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 7: Deep recursion
+    if (RunTest<RecursiveDepthTask<ACCESS_PRIVILEGED>>("RecursiveDepth") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    // Test 8: Inter-task coordination
+    if (RunTest<InterTaskCoordinationTask<ACCESS_PRIVILEGED>>("InterTaskCoordination") != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    
+    int32_t final_result = (total_failures == 0 ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
+    
+    printf("\n=== Test Suite Summary ===\n");
+    printf("Total tests: 8\n");
+    printf("Failures: %d\n", (int)total_failures);
+    
+    TestContext::ShowTestSuiteEpilogue(final_result);
+    return final_result;
+}

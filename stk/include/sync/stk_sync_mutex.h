@@ -89,7 +89,6 @@ public:
     void Unlock();
 
 private:
-    void WakeOne();
     bool Tick();
 
     TId      m_owner_tid; //!< thread id of the current owner
@@ -109,15 +108,16 @@ inline bool Mutex::TimedLock(Timeout timeout)
     // already owned by the calling thread (recursive path)
     if ((m_count != 0) && (m_owner_tid == current_tid))
     {
-        m_count++;
+        ++m_count;
+        STK_ASSERT(m_count <= UINT16_MAX);
         return true;
     }
 
     // mutex is free (fast path)
     if (m_count == 0)
     {
-        m_owner_tid = current_tid;
         m_count     = 1;
+        m_owner_tid = current_tid;
         __stk_full_memfence();
 
         return true;
@@ -134,11 +134,9 @@ inline bool Mutex::TimedLock(Timeout timeout)
     if (wo->IsTimeout())
         return false;
 
-    // upon waking, we are guaranteed by the Monitor pattern in StartWaiting that
-    // mutex state is now ours and we are inside the critical section
-    m_owner_tid = current_tid;
-    m_count     = 1;
-    __stk_full_memfence();
+    // mutex has been taken via Mutex::Unlock()
+    STK_ASSERT(m_count == 1);
+    STK_ASSERT(m_owner_tid == current_tid);
 
     return true;
 }
@@ -155,18 +153,25 @@ inline void Mutex::Unlock()
 
     if (--m_count == 0)
     {
-        m_owner_tid = 0;
-        __stk_full_memfence();
+        if (!m_wait_list.IsEmpty())
+        {
+            // pass ownership directly to the first waiter (FIFO order)
+            IWaitObject *waiter = static_cast<IWaitObject *>(m_wait_list.GetFirst());
 
-        // if there are waiters, wake the first one (FIFO order)
-        WakeOne();
+            // transfer ownership to the waiter
+            m_count     = 1;
+            m_owner_tid = waiter->GetTid();
+            __stk_full_memfence();
+
+            waiter->Wake(false);
+        }
+        else
+        {
+            // free completely if there are no waiters
+            m_owner_tid = 0;
+            __stk_full_memfence();
+        }
     }
-}
-
-inline void Mutex::WakeOne()
-{
-    if (!m_wait_list.IsEmpty())
-        static_cast<IWaitObject *>(m_wait_list.GetFirst())->Wake(false);
 }
 
 inline bool Mutex::Tick()

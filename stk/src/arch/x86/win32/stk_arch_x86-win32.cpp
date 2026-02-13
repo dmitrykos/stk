@@ -358,8 +358,26 @@ void Context::SwitchContext()
 
 size_t Context::GetCallerSP() const
 {
-    const TaskContext *active_task = reinterpret_cast<TaskContext *>(m_stack_active->SP);
-    return reinterpret_cast<size_t>(STK_X86_WIN32_GET_SP(active_task->m_task->GetStack()));
+    size_t caller_sp = 0;
+    DWORD calling_tid = GetCurrentThreadId();
+
+    STK_X86_WIN32_CRITICAL_SECTION_START(const_cast<STK_X86_WIN32_CRITICAL_SECTION *>(&m_cs));
+
+    for (std::list<TaskContext *>::const_iterator itr = m_tasks.begin(), end = m_tasks.end(); itr != end; ++itr)
+    {
+        if ((*itr)->m_thread_id == calling_tid)
+        {
+            caller_sp = reinterpret_cast<size_t>(STK_X86_WIN32_GET_SP((*itr)->m_task->GetStack()));
+            break;
+        }
+    }
+
+    STK_X86_WIN32_CRITICAL_SECTION_END(const_cast<STK_X86_WIN32_CRITICAL_SECTION *>(&m_cs));
+
+    // expect to find the calling task inside  m_tasks
+    STK_ASSERT(caller_sp != 0);
+
+    return caller_sp;
 }
 
 TId Context::GetTid() const

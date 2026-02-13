@@ -212,6 +212,8 @@ __stk_forceinline void Sleep(uint32_t msec)
     // ISR blocks scheduler and will wait indefinitely (deadlock)
     STK_ASSERT(!hw::IsInsideISR());
 
+    hw::CriticalSection::Enter();
+
     IKernelService::GetInstance()->Sleep(msec);
 }
 
@@ -222,6 +224,8 @@ __stk_forceinline void Yield()
 {
     // ISR blocks scheduler and will wait indefinitely (deadlock)
     STK_ASSERT(!hw::IsInsideISR());
+
+    hw::CriticalSection::Enter();
 
     IKernelService::GetInstance()->SwitchToNext();
 }

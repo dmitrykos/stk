@@ -108,6 +108,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
 
         bool IsSleeping() const { return (m_time_sleep < 0); }
 
+        TId GetTid() const { return reinterpret_cast<TId>(m_user); }
+
         void Wake()
         {
             STK_ASSERT(IsSleeping());
@@ -209,6 +211,8 @@ class Kernel : public IKernel, private IPlatform::IEventHandler
             {
                 ISyncObject *sync_obj; //!< sync object to register
             };
+
+            TId GetTid() const { return m_task->GetTid(); }
 
             bool IsTimeout() const { return m_timeout; }
 
@@ -954,6 +958,9 @@ protected:
 
         task->ScheduleSleep(ticks);
 
+        // caller entered critical section before calling Sleep/Yield, we can exit it now and wait
+        hw::CriticalSection::Exit();
+
         // note: we do not spin long here, kernel will switch this task out from scheduling on the next tick
         while (task->IsSleeping())
         {
@@ -1025,7 +1032,7 @@ protected:
         KernelTask *task = FindTaskBySP(caller_SP);
         STK_ASSERT(task != nullptr);
 
-        return reinterpret_cast<TId>(task->GetUserTask());
+        return task->GetTid();
     }
 
     /*! \brief     Update tasks (sleep, requests).
