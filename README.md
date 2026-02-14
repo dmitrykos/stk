@@ -29,25 +29,26 @@ It is an [open-source project](https://github.com/dmitrykos/stk), navigate its c
 
 ## Key Features
 
-| Feature                               | Description                                                                                        |
-|---------------------------------------|----------------------------------------------------------------------------------------------------|
-| Soft real-time                        | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling           |
-| Hard real-time (`KERNEL_HRT`)         | Guaranteed execution window, deadline monitoring by the kernel                                     |
-| Static task model (`KERNEL_STATIC`)   | Tasks created once at startup                                                                      |
-| Dynamic task model (`KERNEL_DYNAMIC`) | Tasks can be created and exit at runtime                                                           |
-| Rich scheduling capabilities          | All major scheduling strategies are supported: priority-less, fixed-priority or automatic-priority |
-| Extensible via C++ interfaces         | Kernel functionality can be extended by implementing available C++ interfaces                      |
-| Multi-core support (AMP)              | One STK instance per physical core for optimal, lock-free performance                              |
-| Low-power aware                       | MCU enters sleep when no task is runnable (sleeping)                                               |
-| Synchronization API                   | Synchronization primitives for building application of any difficulty level                        |
-| Tiny footprint                        | Minimal code unrelated to scheduling                                                               |
-| Safety-critical systems ready         | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                           |
-| C++ and C API                         | Can be used easily in C++ and C projects                                                           |
-| Easy porting                          | Requires very small to none BSP surface                                                            |
-| Traceable                             | Scheduling is fully traceable with a SEGGER SystemView                                             |
-| Development mode (x86)                | Run the same threaded application on Windows                                                       |
-| 100% test coverage                    | Every source-code line of scheduler logic is covered by unit tests                                 |
-| QEMU test coverage                    | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M       |
+| Feature                                | Description                                                                                        |
+|----------------------------------------|----------------------------------------------------------------------------------------------------|
+| Soft real-time                         | No strict time slots, mixed cooperative (by tasks) and preemptive (by kernel) scheduling           |
+| Hard real-time (`KERNEL_HRT`)          | Guaranteed execution window, deadline monitoring by the kernel                                     |
+| Static task model (`KERNEL_STATIC`)    | Tasks created once at startup                                                                      |
+| Dynamic task model (`KERNEL_DYNAMIC`)  | Tasks can be created and exit at runtime                                                           |
+| Rich scheduling capabilities           | All major scheduling strategies are supported: priority-less, fixed-priority or automatic-priority |
+| Extensible via C++ interfaces          | Kernel functionality can be extended by implementing available C++ interfaces                      |
+| Multi-core support (AMP)               | One STK instance per physical core for optimal, lock-free performance                              |
+| Memory Protection Unit (MPU) support   | Supports privileged `ACCESS_PRIVILEGED` and non-privileged tasks `ACCESS_USER`                     |
+| Low-power aware                        | MCU enters sleep when no task is runnable (sleeping)                                               |
+| Synchronization API                    | Synchronization primitives for building application of any difficulty level                        |
+| Tiny footprint                         | Minimal code unrelated to scheduling                                                               |
+| Safety-critical systems ready          | No dynamic heap memory allocation (satisfies MISRA C++:2008 Rule 18-4-1)                           |
+| C++ and C API                          | Can be used easily in C++ and C projects                                                           |
+| Easy porting                           | Requires very small to none BSP surface                                                            |
+| Traceable                              | Scheduling is fully traceable with a SEGGER SystemView                                             |
+| Development mode (x86)                 | Run the same threaded application on Windows                                                       |
+| 100% test coverage                     | Every source-code line of scheduler logic is covered by unit tests                                 |
+| QEMU test coverage                     | All repository commits are automatically covered by unit tests executed on QEMU for Cortex-M       |
 
 ---
 
@@ -678,14 +679,17 @@ While **SuperTinyKernel (STK)** is provided under the permissive MIT license, we
 * **Warranty of Title:** Full intellectual property (IP) indemnification and provenance guarantees required by corporate legal departments.
 * **Safety-Critical Compliance:** Expert assistance in achieving **ISO 26262** (Automotive), **IEC 61508** (Industrial), or **DO-178C** (Aerospace) certification for STK-based systems.
 * **Custom Licensing:** Tailored Enterprise License Agreements (ELA) for organizations with strict open-source procurement policies.
+* **Audit & Due Diligence:** Code audit and licensing assessment to satisfy corporate or regulatory requirements.
 
 ### 🛠️ Engineering & Optimization
-* **Architecture Porting:** Custom development for specialized ARM, RISC-V, or other architectures.
-* **Real-Time Performance Tuning:** Hard real-time optimization and latency profiling for jitter-sensitive applications.
-* **Custom Driver Development:** Integration of STK with complex peripherals (High-Speed USB, I2S/TDM audio interfaces, and networking stacks).
+* **Architecture Porting:** Custom development for specialized ARM, RISC-V, or other architectures, including embedded SoCs and microcontrollers.
+* **Real-Time Performance Tuning:** Hard real-time optimization, latency profiling, and jitter reduction for mission-critical applications.
+* **Custom Driver & Peripheral Integration:** STK integration with complex peripherals (High-Speed USB, I2S/TDM audio, networking stacks, DMA engines, etc.).
 
-### 📞 Enterprise Support
-* **SLA-Backed Support:** Guaranteed response times for technical inquiries and critical bug fixes.
-* **Architectural Consulting:** Deep-dive code reviews and system design guidance to ensure maximum reliability of your firmware.
+### 📞 Enterprise Support & Maintenance
+* **SLA-Backed Support:** Guaranteed response times for technical inquiries and critical bug fixes, with priority escalation paths.
+* **Architectural Consulting:** Deep-dive code reviews, system design guidance, and reliability analysis for your firmware.
+* **Long-Term Maintenance Contracts:** Versioned updates, patch management, and minor feature requests for commercial products.
+* **Training & Knowledge Transfer:** Remote workshops, RTOS best practices, and team training for engineers working with STK.
 
 **For inquiries, contact:** [stk@neutroncode.com](mailto:stk@neutroncode.com)
