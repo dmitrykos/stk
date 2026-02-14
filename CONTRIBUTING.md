@@ -22,7 +22,15 @@ Proposals related to **CI, GitHub Actions, or build tooling** that do not modify
 Before submitting any PR, please ensure there is an associated Issue or that you have received prior approval. Unsolicited PRs for the core source code will be closed without a review.
 
 * **Public:** Open an Issue on GitHub.
-* **Private:** Email us at `stk@neutroncode.com` or reach out via social media private messaging.
+* **Private:** Email us at [stk@neutroncode.com](mailto:stk@neutroncode.com).
+
+### 5. Contributor License Agreement (CLA)
+
+By submitting a Pull Request (PR) for any part of the STK repository (including Unit Tests, Examples, or Tooling), you agree to the following:
+
+* **License Grant:** You grant Neutron Code Limited a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, sublicense, and distribute your contribution.
+* **Commercial Assurance:** You acknowledge that your contribution may be included in versions of STK used for commercial services, including certified safety-critical environments (ISO 26262, IEC 61508) or products requiring a Warranty of Title.
+* **Original Work:** You represent that the contribution is your original work and that you have the legal right to grant these permissions.
 
 ---
 

@@ -670,10 +670,22 @@ You may freely use it in projects of any type:
 
 ---
 
-## Extended technical support
+## 🚀 Professional Services & Commercial Licensing
 
-Contact `stk@neutroncode.com` for additional requests and services:
+While **SuperTinyKernel (STK)** is provided under the permissive MIT license, we offer dedicated professional services for organizations integrating STK into production-grade, mission-critical, or regulated environments.
 
-* Warranty of Title (if your commercial project requires it)
-* Integration and consulting
-* Dedicated technical support and development
+### 🛡️ Legal & Compliance
+* **Warranty of Title:** Full intellectual property (IP) indemnification and provenance guarantees required by corporate legal departments.
+* **Safety-Critical Compliance:** Expert assistance in achieving **ISO 26262** (Automotive), **IEC 61508** (Industrial), or **DO-178C** (Aerospace) certification for STK-based systems.
+* **Custom Licensing:** Tailored Enterprise License Agreements (ELA) for organizations with strict open-source procurement policies.
+
+### 🛠️ Engineering & Optimization
+* **Architecture Porting:** Custom development for specialized ARM, RISC-V, or other architectures.
+* **Real-Time Performance Tuning:** Hard real-time optimization and latency profiling for jitter-sensitive applications.
+* **Custom Driver Development:** Integration of STK with complex peripherals (High-Speed USB, I2S/TDM audio interfaces, and networking stacks).
+
+### 📞 Enterprise Support
+* **SLA-Backed Support:** Guaranteed response times for technical inquiries and critical bug fixes.
+* **Architectural Consulting:** Deep-dive code reviews and system design guidance to ensure maximum reliability of your firmware.
+
+**For inquiries, contact:** [stk@neutroncode.com](mailto:stk@neutroncode.com)
