@@ -40,6 +40,9 @@ static volatile int32_t g_AcquisitionOrder[_STK_MUTEX_TEST_TASKS_MAX] = {0};
 static volatile int32_t g_OrderIndex = 0;
 static volatile bool    g_TestComplete = false;
 
+// Kernel
+static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_MUTEX_TEST_TASKS_MAX, SwitchStrategyRR, PlatformDefault> g_Kernel;
+
 // Test mutex
 static sync::Mutex g_TestMutex;
 
@@ -86,8 +89,7 @@ private:
 
             int32_t expected = _STK_MUTEX_TEST_TASKS_MAX * m_iterations;
 
-            printf("basic lock/unlock: counter=%d (expected %d)\n",
-                   (int)g_SharedCounter, (int)expected);
+            printf("basic lock/unlock: counter=%d (expected %d)\n", (int)g_SharedCounter, (int)expected);
 
             if (g_SharedCounter == expected)
                 g_TestResult = 1;
@@ -135,8 +137,7 @@ private:
 
             int32_t expected = _STK_MUTEX_TEST_TASKS_MAX;
 
-            printf("recursive lock/unlock: counter=%d (expected %d)\n",
-                   (int)g_SharedCounter, (int)expected);
+            printf("recursive lock/unlock: counter=%d (expected %d)\n", (int)g_SharedCounter, (int)expected);
 
             if (g_SharedCounter == _STK_MUTEX_TEST_TASKS_MAX)
                 g_TestResult = 1;
@@ -181,13 +182,9 @@ private:
             int64_t elapsed = GetTimeNowMsec() - start;
             
             if (!acquired && (elapsed < _STK_MUTEX_TEST_SHORT_SLEEP)) // Should fail immediately
-            {
                 g_TestResult = 1;
-            }
             else
-            {
                 g_TestResult = 0;
-            }
             
             if (acquired)
                 g_TestMutex.Unlock();
@@ -314,7 +311,7 @@ private:
                 {
                     ordered = false;
                     printf("Order violation: position %d has task %d (expected %d)\n",
-                           i, (int)g_AcquisitionOrder[i], i + 1);
+                        (int)i, (int)g_AcquisitionOrder[i], (int)(i + 1));
                     break;
                 }
             }
@@ -433,8 +430,7 @@ private:
 
             int32_t expected = _STK_MUTEX_TEST_TASKS_MAX * DEPTH;
 
-            printf("recursive depth: counter=%d (expected %d)\n",
-                   (int)g_SharedCounter, (int)expected);
+            printf("recursive depth: counter=%d (expected %d)\n", (int)g_SharedCounter, (int)expected);
 
             if (g_SharedCounter == expected)
                 g_TestResult = 1;
@@ -488,7 +484,7 @@ private:
                 g_TestResult = 1;
             
             printf("Coordination test: counter=%d (expected %d)\n", 
-                   (int)g_SharedCounter, 10 * _STK_MUTEX_TEST_TASKS_MAX);
+                (int)g_SharedCounter, 10 * _STK_MUTEX_TEST_TASKS_MAX);
         }
     }
 };
@@ -519,32 +515,29 @@ static int32_t RunTest(const char *test_name, int32_t param = 0)
     using namespace stk::test;
     using namespace stk::test::mutex;
     
-    printf("\n=== Running: %s ===\n", test_name);
+    printf("Test: %s\n", test_name);
     
     ResetTestState();
-    
-    static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_MUTEX_TEST_TASKS_MAX, SwitchStrategyRR, PlatformDefault> kernel;
-    
+
     // Create tasks based on test type
     static TaskType task0(0, param);
     static TaskType task1(1, param);
     static TaskType task2(2, param);
     static TaskType task3(3, param);
     static TaskType task4(4, param);
+
+    g_Kernel.AddTask(&task0);
+    g_Kernel.AddTask(&task1);
+    g_Kernel.AddTask(&task2);
+    g_Kernel.AddTask(&task3);
+    g_Kernel.AddTask(&task4);
     
-    kernel.Initialize();
-    
-    kernel.AddTask(&task0);
-    kernel.AddTask(&task1);
-    kernel.AddTask(&task2);
-    kernel.AddTask(&task3);
-    kernel.AddTask(&task4);
-    
-    kernel.Start();
+    g_Kernel.Start();
     
     int32_t result = (g_TestResult ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
-    
+
     printf("Result: %s\n", result == TestContext::SUCCESS_EXIT_CODE ? "PASS" : "FAIL");
+    printf("--------------\n");
     
     return result;
 }
@@ -563,6 +556,10 @@ int main(int argc, char **argv)
     
     int32_t total_failures = 0;
     
+    printf("--------------\n");
+
+    g_Kernel.Initialize();
+
     // Test 1: Basic Lock/Unlock with mutual exclusion
     if (RunTest<BasicLockUnlockTask<ACCESS_PRIVILEGED>>("BasicLockUnlock", 100) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
@@ -597,7 +594,7 @@ int main(int argc, char **argv)
     
     int32_t final_result = (total_failures == 0 ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
     
-    printf("\n=== Test Suite Summary ===\n");
+    printf("##############\n");
     printf("Total tests: 8\n");
     printf("Failures: %d\n", (int)total_failures);
     

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>test-mutex</name>
+	<name>test-semaphore</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -51,9 +51,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
 		</link>
 		<link>
-			<name>deps/test/test_mutex.cpp</name>
+			<name>deps/test/test_semaphore.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/mutex/test_mutex.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/test/semaphore/test_semaphore.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch</name>
