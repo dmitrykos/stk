@@ -43,6 +43,20 @@ static timeBeginPeriodF timeBeginPeriod = NULL;
 #define STK_X86_WIN32_SPIN_LOCK_UNLOCK(LOCK) \
     InterlockedExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 0);
 
+struct Win32ScopedCriticalSection
+{
+    STK_X86_WIN32_CRITICAL_SECTION &m_sec;
+
+    explicit Win32ScopedCriticalSection(STK_X86_WIN32_CRITICAL_SECTION &sec) : m_sec(sec)
+    {
+        STK_X86_WIN32_CRITICAL_SECTION_START(&sec);
+    }
+    ~Win32ScopedCriticalSection()
+    {
+        STK_X86_WIN32_CRITICAL_SECTION_END(&m_sec);
+    }
+};
+
 using namespace stk;
 
 //! Internal context.
@@ -58,6 +72,7 @@ static struct Context : public PlatformContext
         m_winmm_dll    = NULL;
         m_timer_thread = NULL;
         m_started      = false;
+        m_stop_signal  = false;
         m_csu_nesting  = 0;
         m_timer_tid    = 0;
 
@@ -165,7 +180,7 @@ static struct Context : public PlatformContext
     
     __stk_forceinline void EnterCriticalSection()
     {
-        STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+        Win32ScopedCriticalSection __cs(m_cs);
 
         if (m_csu_nesting == 0)
         {
@@ -175,13 +190,11 @@ static struct Context : public PlatformContext
         }
 
         ++m_csu_nesting;
-
-        STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
     }
     
     __stk_forceinline void ExitCriticalSection()
     {
-        STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+        Win32ScopedCriticalSection __cs(m_cs);
 
         STK_ASSERT(m_csu_nesting != 0);
 
@@ -193,8 +206,6 @@ static struct Context : public PlatformContext
             if (GetCurrentThreadId() != m_timer_tid)
                 ResumeThread(m_timer_thread);
         }
-
-        STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
     }
 
     IPlatform::IEventOverrider    *m_overrider;
@@ -209,6 +220,7 @@ static struct Context : public PlatformContext
     DWORD                          m_csu_nesting;   //!< depth of user critical session nesting
     DWORD                          m_timer_tid;     //!< timer thread id
     bool                           m_started;       //!< started state's flag
+    volatile bool                  m_stop_signal;   //!< stop signal for a timer thread
 }
 g_Context;
 
@@ -221,6 +233,9 @@ static DWORD WINAPI TimerThread(LPVOID param)
 
     while (WaitForSingleObject(g_Context.m_timer_thread, wait_ms) == WAIT_TIMEOUT)
     {
+        if (g_Context.m_stop_signal)
+            break;
+
         g_Context.ProcessTick();
     }
 
@@ -265,7 +280,7 @@ void Context::CreateTimerThreadAndJoin()
         STK_ASSERT(result != WAIT_ABANDONED);
         STK_ASSERT(result != WAIT_FAILED);
 
-        STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+        Win32ScopedCriticalSection __cs(m_cs);
 
         uint32_t i = 0;
         for (std::vector<HANDLE>::iterator itr = m_task_threads.begin(); itr != m_task_threads.end(); ++itr)
@@ -291,12 +306,12 @@ void Context::CreateTimerThreadAndJoin()
 
             ++i;
         }
-
-        STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
     }
 
-    // join (never returns to the caller from here unless thread is terminated, see KERNEL_DYNAMIC)
-    WaitForSingleObject(m_timer_thread, INFINITE);
+    // join (never returns to the caller from here unless thread is terminated, see KERNEL_DYNAMIC),
+    // a stop signal is sent by IPlatform::Stop() by the last exiting task
+    if (m_timer_thread != NULL)
+        WaitForSingleObject(m_timer_thread, INFINITE);
 }
 
 void Context::Cleanup()
@@ -311,16 +326,17 @@ void Context::Cleanup()
     // close timer thread
     CloseHandle(m_timer_thread);
     m_timer_thread = NULL;
+
+    // reset stop signal
+    m_stop_signal = false;
 }
 
 void Context::ProcessTick()
 {
-    STK_X86_WIN32_CRITICAL_SECTION_START(&m_cs);
+    Win32ScopedCriticalSection __cs(m_cs);
 
     if (m_handler->OnTick(&m_stack_idle, &m_stack_active))
         g_Context.SwitchContext();
-
-    STK_X86_WIN32_CRITICAL_SECTION_END(&m_cs);
 }
 
 void Context::SwitchContext()
@@ -361,7 +377,7 @@ size_t Context::GetCallerSP() const
     size_t caller_sp = 0;
     DWORD calling_tid = GetCurrentThreadId();
 
-    STK_X86_WIN32_CRITICAL_SECTION_START(const_cast<STK_X86_WIN32_CRITICAL_SECTION *>(&m_cs));
+    Win32ScopedCriticalSection __cs(const_cast<STK_X86_WIN32_CRITICAL_SECTION &>(m_cs));
 
     for (std::list<TaskContext *>::const_iterator itr = m_tasks.begin(), end = m_tasks.end(); itr != end; ++itr)
     {
@@ -371,8 +387,6 @@ size_t Context::GetCallerSP() const
             break;
         }
     }
-
-    STK_X86_WIN32_CRITICAL_SECTION_END(const_cast<STK_X86_WIN32_CRITICAL_SECTION *>(&m_cs));
 
     // expect to find the calling task inside  m_tasks
     STK_ASSERT(caller_sp != 0);
@@ -402,8 +416,7 @@ IWaitObject *Context::StartWaiting(ISyncObject *sync_obj, IMutex *mutex, Timeout
 
 void Context::Stop()
 {
-    TerminateThread(m_timer_thread, 0);
-
+    m_stop_signal = true;
     m_started = false;
 }
 
