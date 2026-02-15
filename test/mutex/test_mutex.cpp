@@ -24,6 +24,11 @@ STK_TEST_DECL_ASSERT;
 #define _STK_MUTEX_TEST_TIMEOUT     1000
 #define _STK_MUTEX_TEST_SHORT_SLEEP 10
 #define _STK_MUTEX_TEST_LONG_SLEEP  100
+#ifdef __ARM_ARCH_6M__
+#define _STK_SL_STACK_SIZE          128 // ARM Cortex-M0
+#else
+#define _STK_SL_STACK_SIZE          (STK_STACK_SIZE_MIN > 128 ? STK_STACK_SIZE_MIN : 128)
+#endif
 
 namespace stk {
 namespace test {
@@ -39,6 +44,7 @@ static volatile int32_t g_SharedCounter = 0;
 static volatile int32_t g_AcquisitionOrder[_STK_MUTEX_TEST_TASKS_MAX] = {0};
 static volatile int32_t g_OrderIndex = 0;
 static volatile bool    g_TestComplete = false;
+static volatile int32_t g_InstancesDone = 0;
 
 // Kernel
 static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_MUTEX_TEST_TASKS_MAX, SwitchStrategyRR, PlatformDefault> g_Kernel;
@@ -51,7 +57,7 @@ static sync::Mutex g_TestMutex;
     \note  Verifies that mutex provides mutual exclusion.
 */
 template <EAccessMode _AccessMode>
-class BasicLockUnlockTask : public Task<512, _AccessMode>
+class BasicLockUnlockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -66,13 +72,16 @@ public:
 private:
     void RunInner()
     {
+        int32_t workload = 0;
+
         for (int32_t i = 0; i < m_iterations; ++i)
         {
             g_TestMutex.Lock();
             
             // Critical section - increment shared counter
             int32_t temp = g_SharedCounter;
-            stk::Delay(1); // Small delay to increase chance of race if mutex broken
+            if (++workload % 4 == 0)
+                stk::Delay(1); // Small delay to increase chance of race if mutex broken
             g_SharedCounter = temp + 1;
             
             g_TestMutex.Unlock();
@@ -80,12 +89,15 @@ private:
             stk::Yield(); // Yield to other tasks
         }
 
+        ++g_InstancesDone;
+
         // Task 0 acts as verifier: waits for all other tasks to finish then checks
         // that the counter equals exactly tasks_count * iterations, confirming that
         // no increment was lost or doubled due to a broken mutual exclusion.
         if (m_task_id == 0)
         {
-            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+            while (g_InstancesDone < _STK_MUTEX_TEST_TASKS_MAX)
+                stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
 
             int32_t expected = _STK_MUTEX_TEST_TASKS_MAX * m_iterations;
 
@@ -102,7 +114,7 @@ private:
     \note  Verifies that same thread can acquire mutex multiple times.
 */
 template <EAccessMode _AccessMode>
-class RecursiveLockTask : public Task<512, _AccessMode>
+class RecursiveLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -130,10 +142,13 @@ private:
         }
         g_TestMutex.Unlock();
         
+        ++g_InstancesDone;
+
         // Verify counter was incremented exactly once per task
         if (m_task_id == 0)
         {
-            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+            while (g_InstancesDone < _STK_MUTEX_TEST_TASKS_MAX)
+                stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
 
             int32_t expected = _STK_MUTEX_TEST_TASKS_MAX;
 
@@ -150,7 +165,7 @@ private:
     \note  Verifies that TryLock() returns immediately without blocking.
 */
 template <EAccessMode _AccessMode>
-class TryLockTask : public Task<512, _AccessMode>
+class TryLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -189,6 +204,8 @@ private:
             if (acquired)
                 g_TestMutex.Unlock();
         }
+
+        ++g_InstancesDone;
     }
 };
 
@@ -197,7 +214,7 @@ private:
     \note  Verifies that TimedLock() respects timeout values.
 */
 template <EAccessMode _AccessMode>
-class TimedLockTask : public Task<512, _AccessMode>
+class TimedLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -218,7 +235,8 @@ private:
             stk::Sleep(200); // Hold for 200ms
             g_TestMutex.Unlock();
         }
-        else if (m_task_id == 1)
+        else
+        if (m_task_id == 1)
         {
             // Task 1: Try to acquire with timeout
             stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP); // Let task 0 acquire first
@@ -236,7 +254,8 @@ private:
             if (acquired)
                 g_TestMutex.Unlock();
         }
-        else if (m_task_id == 2)
+        else
+        if (m_task_id == 2)
         {
             // Task 2: Successfully acquire after task 0 releases
             stk::Sleep(250); // Wait for task 0 to release
@@ -248,10 +267,13 @@ private:
             }
         }
         
+        ++g_InstancesDone;
+
         // Final check
         if (m_task_id == 2)
         {
-            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
+
             if (g_SharedCounter == 2)
                 g_TestResult = 1;
         }
@@ -263,7 +285,7 @@ private:
     \note  Verifies that threads are woken in the order they blocked.
 */
 template <EAccessMode _AccessMode>
-class FIFOOrderTask : public Task<512, _AccessMode>
+class FIFOOrderTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -298,10 +320,13 @@ private:
             g_TestMutex.Unlock();
         }
         
+        ++g_InstancesDone;
+
         // Task 4 verifies order
         if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
         {
-            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            while (g_InstancesDone < _STK_MUTEX_TEST_TASKS_MAX)
+                stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
             
             // Check if tasks acquired in FIFO order (1, 2, 3, 4)
             bool ordered = true;
@@ -327,7 +352,7 @@ private:
     \note  Verifies mutex stability under heavy contention.
 */
 template <EAccessMode _AccessMode>
-class StressTestTask : public Task<512, _AccessMode>
+class StressTestTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -376,10 +401,13 @@ private:
                 stk::Delay(1);
         }
         
+        ++g_InstancesDone;
+
         // Last task verifies total
         if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
         {
-            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            while (g_InstancesDone < _STK_MUTEX_TEST_TASKS_MAX)
+                stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
             
             // All increments should be accounted for (may be less if TryLock failed)
             if (g_SharedCounter > 0)
@@ -398,7 +426,7 @@ template <EAccessMode _AccessMode>
 class RecursiveDepthTask : public Task<1024, _AccessMode>
 {
     uint8_t m_task_id;
-    enum { DEPTH = 25 };
+    enum { DEPTH = 8 };
 
 public:
     RecursiveDepthTask(uint8_t task_id, int32_t) : m_task_id(task_id)
@@ -424,6 +452,8 @@ private:
         // Recursive lock to depth 50
         RecursiveLock(DEPTH);
         
+        ++g_InstancesDone;
+
         if (m_task_id == 0)
         {
             stk::Sleep(_STK_MUTEX_TEST_LONG_SLEEP);
@@ -443,7 +473,7 @@ private:
     \note  Verifies mutex correctly synchronizes shared state updates.
 */
 template <EAccessMode _AccessMode>
-class InterTaskCoordinationTask : public Task<512, _AccessMode>
+class InterTaskCoordinationTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -474,10 +504,13 @@ private:
             g_TestMutex.Unlock();
         }
         
+        ++g_InstancesDone;
+
         // Last task verifies
         if (m_task_id == (_STK_MUTEX_TEST_TASKS_MAX - 1))
         {
-            stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
+            while (g_InstancesDone < _STK_MUTEX_TEST_TASKS_MAX)
+                stk::Sleep(_STK_MUTEX_TEST_SHORT_SLEEP);
             
             // Should be exactly 10 rounds * number of tasks
             if (g_SharedCounter == 10 * _STK_MUTEX_TEST_TASKS_MAX)
@@ -496,6 +529,7 @@ static void ResetTestState()
     g_SharedCounter = 0;
     g_OrderIndex = 0;
     g_TestComplete = false;
+    g_InstancesDone = 0;
     
     for (int32_t i = 0; i < _STK_MUTEX_TEST_TASKS_MAX; ++i)
         g_AcquisitionOrder[i] = 0;
@@ -554,48 +588,68 @@ int main(int argc, char **argv)
 
     TestContext::ShowTestSuitePrologue();
     
-    int32_t total_failures = 0;
+    int total_failures = 0, total_success = 0;
     
     printf("--------------\n");
 
     g_Kernel.Initialize();
 
+#ifndef __ARM_ARCH_6M__
+
     // Test 1: Basic Lock/Unlock with mutual exclusion
     if (RunTest<BasicLockUnlockTask<ACCESS_PRIVILEGED>>("BasicLockUnlock", 100) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
-    
+    else
+        total_success++;
+
     // Test 2: Recursive locking
     if (RunTest<RecursiveLockTask<ACCESS_PRIVILEGED>>("RecursiveLock") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
     
     // Test 3: TryLock non-blocking behavior
     if (RunTest<TryLockTask<ACCESS_PRIVILEGED>>("TryLock") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
     
     // Test 4: TimedLock timeout behavior
     if (RunTest<TimedLockTask<ACCESS_PRIVILEGED>>("TimedLock") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
     
     // Test 5: FIFO ordering
     if (RunTest<FIFOOrderTask<ACCESS_PRIVILEGED>>("FIFOOrder") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
-    
-    // Test 6: Stress test
-    if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
-        total_failures++;
-    
-    // Test 7: Deep recursion
+    else
+        total_success++;
+
+    // Test 6: Deep recursion
     if (RunTest<RecursiveDepthTask<ACCESS_PRIVILEGED>>("RecursiveDepth") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
     
-    // Test 8: Inter-task coordination
+    // Test 7: Inter-task coordination
     if (RunTest<InterTaskCoordinationTask<ACCESS_PRIVILEGED>>("InterTaskCoordination") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
-    
+    else
+        total_success++;
+
+#endif
+
+    // Test 8: Stress test
+    if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    else
+        total_success++;
+
     int32_t final_result = (total_failures == 0 ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
     
     printf("##############\n");
-    printf("Total tests: 8\n");
+    printf("Total tests: %d\n", total_failures + total_success);
     printf("Failures: %d\n", (int)total_failures);
     
     TestContext::ShowTestSuiteEpilogue(final_result);

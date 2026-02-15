@@ -80,20 +80,29 @@ static __stk_forceinline bool IsHandlerMode()
 #define STK_RISCV_CRITICAL_SECTION_START(SES) do { SES = ::HW_EnterCriticalSection(); __DSB(); __ISB(); } while (0)
 #define STK_RISCV_CRITICAL_SECTION_END(SES) do { __DSB(); __ISB(); ::HW_ExitCriticalSection(SES); } while (0)
 
-#define STK_RISCV_SPIN_LOCK_LOCK(LOCK) \
-    uint32_t timeout = 0xFFFFFF; \
-    while (__atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE)) { \
-        if (--timeout == 0) { \
-            /* if we hit this, the lock was never released by the previous owner */ \
-            __stk_debug_break(); \
-        } \
-        __stk_relax_cpu(); \
+static __stk_forceinline bool STK_RISCV_SPIN_LOCK_TRYLOCK(volatile bool &LOCK)
+{
+    return __atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE);
+}
+static __stk_forceinline void STK_RISCV_SPIN_LOCK_LOCK(volatile bool &LOCK)
+{
+    uint32_t timeout = 0xFFFFFF;
+    while (STK_RISCV_SPIN_LOCK_TRYLOCK(LOCK))
+    {
+        if (--timeout == 0)
+        {
+            /* if we hit this, the lock was never released by the previous owner */
+            __stk_debug_break();
+        }
+        __stk_relax_cpu();
     }
-#define STK_RISCV_SPIN_LOCK_UNLOCK(LOCK) do { \
-        /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */ \
-        __asm volatile("fence rw, w" ::: "memory"); \
-        __atomic_clear(&LOCK, __ATOMIC_RELEASE); \
-    } while (0)
+}
+static __stk_forceinline void STK_RISCV_SPIN_LOCK_UNLOCK(volatile bool &LOCK)
+{
+    /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */
+    __asm volatile("fence rw, w" ::: "memory");
+    __atomic_clear(&LOCK, __ATOMIC_RELEASE);
+}
 
 #define STK_RISCV_DISABLE_INTERRUPTS() ::HW_DisableIrq()
 #define STK_RISCV_ENABLE_INTERRUPTS() ::HW_EnableIrq()
@@ -1052,6 +1061,11 @@ void stk::hw::SpinLock::Lock()
 void stk::hw::SpinLock::Unlock()
 {
     STK_RISCV_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::SpinLock::TryLock()
+{
+    return !STK_RISCV_SPIN_LOCK_TRYLOCK(m_lock);
 }
 
 bool stk::hw::IsInsideISR()

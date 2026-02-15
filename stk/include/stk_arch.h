@@ -125,9 +125,15 @@ struct CriticalSection
 class SpinLock
 {
 public:
+    enum EState
+    {
+        UNLOCKED = 0,
+        LOCKED
+    };
+
     /*! \brief Construct a SpinLock (unlocked by default).
     */
-    SpinLock() : m_lock(false)
+    SpinLock() : m_lock(UNLOCKED)
     {}
 
     /*! \brief Acquire the SpinLock.
@@ -146,21 +152,19 @@ public:
         \return True if the lock was successfully acquired; false otherwise.
         \note   Non-blocking. Does not guarantee acquisition. Use only for short critical sections or retry loops.
     */
-    bool TryLock()
-    {
-        if (!m_lock)
-        {
-            Lock();
-            return true;
-        }
-        return false;
-    }
+    bool TryLock();
+
+    /*! \brief  Check if locked.
+        \return True if locked.
+        \note   The value may change at any time.
+    */
+    bool IsLocked() const { return (m_lock == LOCKED); }
 
 protected:
 #ifdef _STK_ARCH_X86_WIN32
-    volatile long m_lock; //! lock flag: true = locked, false = unlocked
+    volatile long m_lock; //! lock state (see EState)
 #else
-    volatile bool m_lock __stk_aligned(8); //! lock flag: true = locked, false = unlocked
+    volatile bool m_lock __stk_aligned(8); //! lock state (see EState)
 #endif
 };
 

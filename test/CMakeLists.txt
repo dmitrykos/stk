@@ -16,6 +16,8 @@ option(TEST_SLEEP     "build test: Sleep (platform-dependent)"      OFF)
 option(TEST_HRT       "build test: HRT (platform-dependent)"        OFF)
 option(TEST_MUTEX     "build test: Mutex (platform-dependent)"      OFF)
 option(TEST_SEMAPHORE "build test: Semaphore (platform-dependent)"  OFF)
+option(TEST_EVENT     "build test: Event (platform-dependent)"      OFF)
+option(TEST_SPINLOCK  "build test: SpinLock (platform-dependent)"   OFF)
 
 if (TEST_GENERIC)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
@@ -43,4 +45,12 @@ endif()
 
 if (TEST_SEMAPHORE)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/semaphore)
+endif()
+
+if (TEST_EVENT)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/event)
+endif()
+
+if (TEST_SPINLOCK)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/spinlock)
 endif()
