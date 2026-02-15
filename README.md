@@ -307,6 +307,7 @@ The benchmark suite uses CRC32 hash calculations as the task payload. The score 
 * **Memory Usage:** STK leads in RAM optimization, utilizing only ~7 KB of RAM compared to FreeRTOS's ~9-11 KB that is **25-55% lower RAM usage** in general. Although the C++ template architecture results in a larger FLASH footprint (~25 KB vs ~13 KB), this trade-off is what enables the highly specialized, zero-overhead execution path that defines STK's speed. `-Ofast` reduces RAM usage for both kernels compared to `-Os`.
 * **Scheduling Overhead:** STK's total throughput remains remarkably **flat** as task count increases, showing **minimal context-switching friction** compared to FreeRTOS.
 * **Determinism:** In high-stress scenarios (16 tasks, `-Ofast`), STK provides **~17% lower jitter**, making it superior for timing-sensitive applications.
+
 ---
 
 ## Quick Start (1 minute)
