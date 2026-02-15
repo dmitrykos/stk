@@ -49,10 +49,15 @@ namespace stk {
 template <int32_t _Mode, uint32_t _Size, class _TyStrategy, class _TyPlatform>
 class Kernel : public IKernel, private IPlatform::IEventHandler
 {
-    /*! \typedef TrapStackMemory
-        \brief   Stack memory wrapper type of the Exit trap.
+    /*! \typedef SleepTrapStackMemory
+        \brief   Stack memory wrapper type for a Sleep trap.
     */
-    typedef StackMemoryWrapper<STACK_SIZE_MIN> TrapStackMemory;
+    typedef StackMemoryWrapper<STK_SLEEP_TRAP_STACK_SIZE> SleepTrapStackMemory;
+
+    /*! \typedef ExitTrapStackMemory
+        \brief   Stack memory wrapper type for an Exit trap.
+    */
+    typedef StackMemoryWrapper<STACK_SIZE_MIN> ExitTrapStackMemory;
 
     /*! \enum  ERequest
         \brief Request flags.
@@ -672,9 +677,9 @@ protected:
     {
         // init stack for a Sleep trap
         {
-            TrapStack &sleep = m_sleep_trap[0];
+            SleepTrapStack &sleep = m_sleep_trap[0];
 
-            TrapStackMemory wrapper(&sleep.memory);
+            SleepTrapStackMemory wrapper(&sleep.memory);
             sleep.stack.mode = ACCESS_PRIVILEGED;
         #if STK_NEED_TASK_ID
             sleep.stack.tid  = SYS_TASK_ID_SLEEP;
@@ -686,9 +691,9 @@ protected:
         // init stack for an Exit trap
         if (_Mode & KERNEL_DYNAMIC)
         {
-            TrapStack &exit = m_exit_trap[0];
+            ExitTrapStack &exit = m_exit_trap[0];
 
-            TrapStackMemory wrapper(&exit.memory);
+            ExitTrapStackMemory wrapper(&exit.memory);
             exit.stack.mode = ACCESS_PRIVILEGED;
         #if STK_NEED_TASK_ID
             exit.stack.tid  = SYS_TASK_ID_EXIT;
@@ -1445,18 +1450,29 @@ protected:
     */
     typedef KernelTask TaskStorageType[TASKS_MAX];
 
-    /*! \class TrapStack
-        \brief Trap stack is used to execute exit, sleep traps when required.
+    /*! \class SleepTrapStack
+        \brief Trap stack is used to execute the sleep trap when required.
+
+        \note  Sleep trap - used to execute a sleep procedure of the driver when all user tasks are currently
+               in a sleep state.
+    */
+    struct SleepTrapStack
+    {
+        typedef SleepTrapStackMemory::MemoryType Memory;
+
+        Stack  stack;  //!< stack information
+        Memory memory; //!< stack memory
+    };
+
+    /*! \class ExitTrapStack
+        \brief Trap stack is used to execute the exit trap when required.
 
         \note  Exit trap - used for an exit into the main process from which IKernel::Start() was called
                when all tasks completed their processing and exited by returning from their Run function.
-
-               Sleep trap - used to execute a sleep procedure of the driver when all user tasks are currently
-               in a sleep state.
     */
-    struct TrapStack
+    struct ExitTrapStack
     {
-        typedef TrapStackMemory::MemoryType Memory;
+        typedef ExitTrapStackMemory::MemoryType Memory;
 
         Stack  stack;  //!< stack information
         Memory memory; //!< stack memory
@@ -1472,8 +1488,8 @@ protected:
     _TyStrategy       m_strategy;        //!< task switching strategy
     KernelTask       *m_task_now;        //!< current task task
     TaskStorageType   m_task_storage;    //!< task storage
-    TrapStack         m_sleep_trap[1];   //!< sleep trap
-    TrapStack         m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
+    SleepTrapStack    m_sleep_trap[1];   //!< sleep trap
+    ExitTrapStack     m_exit_trap[STK_ALLOCATE_COUNT(_Mode, KERNEL_DYNAMIC, 1, 0)]; //!< exit trap (does not occupy memory if kernel operation mode is not KERNEL_DYNAMIC)
     EFsmState         m_fsm_state;       //!< FSM state
     volatile uint32_t m_request;         //!< pending requests from the tasks
     SyncObjectList    m_sync_list[STK_ALLOCATE_COUNT(_Mode, KERNEL_SYNC, 1, 0)]; //!< list of sync objects

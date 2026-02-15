@@ -238,6 +238,15 @@
     #endif
 #endif
 
+/*! \def   STK_SLEEP_TRAP_STACK_SIZE
+    \brief Stack size for a sleep trap (number of size_t).
+    \see   Kernel::SleepTrapStackMemory
+    \note  Increase size to the required if sleep trap is overridden with IEventOverrider::OnSleep().
+*/
+#ifndef STK_SLEEP_TRAP_STACK_SIZE
+    #define STK_SLEEP_TRAP_STACK_SIZE (STK_STACK_SIZE_MIN)
+#endif
+
 /*! \def   STK_ALLOCATE_COUNT
     \brief Get count of objects to be allocated statically within the array.
     \note  Microsoft compiler does not support zero sized arrays unlike GCC or Clang, thus always allocate.
