@@ -38,10 +38,12 @@ static timeBeginPeriodF timeBeginPeriod = NULL;
 #define STK_X86_WIN32_CRITICAL_SECTION_END(SES) ::LeaveCriticalSection(SES)
 #define STK_X86_WIN32_MIN_RESOLUTION (1000)
 #define STK_X86_WIN32_GET_SP(STACK) (STACK + 2) // +2 to overcome stack filler check inside Kernel (adjusting to +2 preserves 8-byte alignment)
-#define STK_X86_WIN32_SPIN_LOCK_LOCK(LOCK) \
-    while (InterlockedCompareExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 1, 0) != 0) { Yield(); }
+#define SLK_UNLOCKED hw::SpinLock::UNLOCKED
+#define SLK_LOCKED hw::SpinLock::LOCKED
+#define STK_X86_WIN32_SPIN_LOCK_TRYLOCK(LOCK) \
+    InterlockedCompareExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), SLK_LOCKED, SLK_UNLOCKED)
 #define STK_X86_WIN32_SPIN_LOCK_UNLOCK(LOCK) \
-    InterlockedExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), 0);
+    InterlockedExchange(reinterpret_cast<volatile LONG *>(&(LOCK)), SLK_UNLOCKED);
 
 struct Win32ScopedCriticalSection
 {
@@ -551,12 +553,34 @@ void stk::hw::CriticalSection::Exit()
 
 void stk::hw::SpinLock::Lock()
 {
-    STK_X86_WIN32_SPIN_LOCK_LOCK(m_lock);
+    uint8_t sleep_time = 0;
+
+test:
+    while (STK_X86_WIN32_SPIN_LOCK_TRYLOCK(m_lock) != SLK_UNLOCKED)
+    {
+        for (volatile int32_t spin = 100; (spin != 0); spin--)
+        {
+            __stk_relax_cpu();
+
+            // check if became unlocked then try locking atomically again
+            if (m_lock == SLK_UNLOCKED)
+                goto test;
+        }
+
+        // avoid priority inversion
+        ::Sleep(sleep_time);
+        sleep_time ^= 1;
+    }
 }
 
 void stk::hw::SpinLock::Unlock()
 {
     STK_X86_WIN32_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::SpinLock::TryLock()
+{
+    return (STK_X86_WIN32_SPIN_LOCK_TRYLOCK(m_lock) == SLK_UNLOCKED);
 }
 
 bool stk::hw::IsInsideISR()

@@ -227,14 +227,14 @@
            stk_config.h file.
 */
 #ifndef STK_STACK_SIZE_MIN
-    #if (__riscv_32e != 1)
+    #if (__riscv_32e == 0)
+        #define STK_STACK_SIZE_MIN 32
+    #else
         #if (__riscv_flen == 0)
             #define STK_STACK_SIZE_MIN 256 // note: smaller size causes memory corruption on RP2350
         #else
             #define STK_STACK_SIZE_MIN 512
         #endif
-    #else
-        #define STK_STACK_SIZE_MIN 32
     #endif
 #endif
 
@@ -258,9 +258,14 @@ namespace stk {
  */
 namespace util {}
 
-/*! \fn    forced_cast
-    \brief Force-cast value of one type to another. Overcomes compiler error or warning when trying
-           to cast in normal way.
+/*! \fn        forced_cast
+    \brief     Perform low-level type punning to reinterpret raw bits as another type.
+               Bypasses compiler restrictions/warnings where static_cast or reinterpret_cast might fail.
+    \warning   Use with care.
+    \tparam    _To: Target type to convert to.
+    \tparam    _From: Source type being converted.
+    \param[in] from: Reference to the source value.
+    \return    Value reinterpreted as type _To.
 */
 template <class _To, class _From>
 static __stk_forceinline _To forced_cast(const _From &from)

@@ -36,41 +36,88 @@ using namespace stk;
     do { __DSB(); __ISB(); __set_PRIMASK(SES); } while (0)
 
 #ifdef CONTROL_nPRIV_Msk
-    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK) \
-        uint32_t timeout = 0xFFFFFF; \
-        while (__atomic_test_and_set(&(LOCK), __ATOMIC_ACQUIRE)) { \
-            if (--timeout == 0) { \
-                /* if we hit this, the lock was never released by the previous owner */ \
-                __stk_debug_break(); \
-            } \
-            __stk_relax_cpu(); \
+    static __stk_forceinline bool STK_CORTEX_M_SPIN_LOCK_TRYLOCK(volatile bool &LOCK)
+    {
+        return __atomic_test_and_set(&LOCK, __ATOMIC_ACQUIRE);
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_LOCK(volatile bool &LOCK)
+    {
+        uint32_t timeout = 0xFFFFFF;
+        while (STK_CORTEX_M_SPIN_LOCK_TRYLOCK(LOCK))
+        {
+            if (--timeout == 0)
+            {
+                /* if we hit this, the lock was never released by the previous owner */
+                __stk_debug_break();
+            }
+            __stk_relax_cpu();
         }
-    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
-            /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */ \
-            __asm volatile("dmb ishst" ::: "memory"); \
-            __atomic_clear(&(LOCK), __ATOMIC_RELEASE); \
-        } while (0)
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_UNLOCK(volatile bool &LOCK)
+    {
+        /* ensure all data writes (like scheduling metadata) are flushed before the lock is released */
+        __asm volatile("dmb ishst" ::: "memory");
+        __atomic_clear(&LOCK, __ATOMIC_RELEASE);
+    }
 #elif defined(RP2040_H)
     // Raspberry RP2040 dual-core M0+ implementation, using Hardware Spinlock 0 (SIO base 0xd0000000 + offset)
-    #define SIO_SPINLOCK SIO->SPINLOCK31
-
-    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK) \
-        uint32_t timeout = 0xFFFFFF; \
-        while (SIO_SPINLOCK == 0) { \
-            if (--timeout == 0) { \
-            /* if we hit this, the lock was never released by the previous owner */ \
-            __stk_debug_break(); \
-        } \
-        (LOCK) = true;
-    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { \
-            __asm volatile("" ::: "memory"); \
-            (LOCK) = false; \
-            SIO_SPINLOCK = 1; /* writing any value releases the hardware lock */ \
-        } while (0)
+    #define STK_SIO_SPINLOCK SIO->SPINLOCK31
+    static __stk_forceinline bool STK_CORTEX_M_SPIN_LOCK_TRYLOCK(volatile bool &LOCK)
+    {
+        return (STK_SIO_SPINLOCK == 0 ? true : ((LOCK) = true, false));
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_LOCK(volatile bool &LOCK)
+    {
+        uint32_t timeout = 0xFFFFFF;
+        while (STK_CORTEX_M_SPIN_LOCK_TRYLOCK(LOCK))
+        {
+            if (--timeout == 0)
+            {
+                /* if we hit this, the lock was never released by the previous owner */
+                __stk_debug_break();
+            }
+            __stk_relax_cpu();
+        }
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_UNLOCK(volatile bool &LOCK)
+    {
+        __DMB();
+        (LOCK) = false;
+        STK_SIO_SPINLOCK = 1; /* writing any value releases the hardware lock */
+    }
+    #undef STK_SIO_SPINLOCK
 #else
     // Standard single-core Cortex-M0 implementation:
-    #define STK_CORTEX_M_SPIN_LOCK_LOCK(LOCK)   do { (LOCK) = true; } while (0)
-    #define STK_CORTEX_M_SPIN_LOCK_UNLOCK(LOCK) do { (LOCK) = false; __asm volatile("" ::: "memory"); } while (0)
+    static __stk_forceinline bool STK_CORTEX_M_SPIN_LOCK_TRYLOCK(volatile bool &LOCK)
+    {
+        if (LOCK)
+            return true;
+
+        LOCK = true;
+        __DMB();
+
+        return false;
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_LOCK(volatile bool &LOCK)
+    {
+        uint32_t timeout = 0xFFFFFF;
+        while (LOCK == true)
+        {
+            if (--timeout == 0)
+            {
+                /* if we hit this, the lock was never released by the previous owner */
+                __stk_debug_break();
+            }
+            __stk_relax_cpu();
+        }
+
+        LOCK = true;
+    }
+    static __stk_forceinline void STK_CORTEX_M_SPIN_LOCK_UNLOCK(volatile bool &LOCK)
+    {
+        __DMB();
+        LOCK = false;
+    }
 #endif
 
 #ifdef CONTROL_nPRIV_Msk
@@ -898,6 +945,11 @@ void stk::hw::SpinLock::Lock()
 void stk::hw::SpinLock::Unlock()
 {
     STK_CORTEX_M_SPIN_LOCK_UNLOCK(m_lock);
+}
+
+bool stk::hw::SpinLock::TryLock()
+{
+    return !STK_CORTEX_M_SPIN_LOCK_TRYLOCK(m_lock);
 }
 
 bool stk::hw::IsInsideISR()
