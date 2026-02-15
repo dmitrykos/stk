@@ -1,4 +1,4 @@
-name: Test - Mutex (QEMU, Arm Cortex-M4)
+name: Test - sync::Mutex (QEMU, Arm Cortex-M4)
 
 on:
   push:
@@ -67,5 +67,5 @@ jobs:
     - name: Prepare
       run: chmod +x build/test/qemu/stk-qemu.sh && chmod +x build/test/qemu/test.sh
 
-    - name: Test (Mutex)
+    - name: Test (sync::Mutex)
       run: sh build/test/qemu/test.sh ${{matrix.cpu}} ${{matrix.board}} ${{github.workspace}}/build/test/mutex test-mutex.elf
