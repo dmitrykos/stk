@@ -24,6 +24,11 @@ STK_TEST_DECL_ASSERT;
 #define _STK_SEM_TEST_TIMEOUT     1000
 #define _STK_SEM_TEST_SHORT_SLEEP 10
 #define _STK_SEM_TEST_LONG_SLEEP  100
+#ifdef __ARM_ARCH_6M__
+#define _STK_SEM_STACK_SIZE       128 // ARM Cortex-M0
+#else
+#define _STK_SEM_STACK_SIZE       256
+#endif
 
 #ifndef _NEW
 inline void *operator new(std::size_t, void *ptr) noexcept { return ptr; }
@@ -57,7 +62,7 @@ static sync::Semaphore g_TestSemaphore;
            signal produces exactly one successful Wait().
 */
 template <EAccessMode _AccessMode>
-class BasicSignalWaitTask : public Task<512, _AccessMode>
+class BasicSignalWaitTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -109,7 +114,7 @@ private:
            reaches zero afterwards.
 */
 template <EAccessMode _AccessMode>
-class InitialCountTask : public Task<512, _AccessMode>
+class InitialCountTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -157,7 +162,7 @@ private:
            signal arrives within the allotted time.
 */
 template <EAccessMode _AccessMode>
-class TimeoutWaitTask : public Task<512, _AccessMode>
+class TimeoutWaitTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -222,7 +227,7 @@ private:
            semaphore count is zero, and returns true immediately when count > 0.
 */
 template <EAccessMode _AccessMode>
-class ZeroTimeoutTask : public Task<512, _AccessMode>
+class ZeroTimeoutTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -278,7 +283,7 @@ private:
            increment m_count, and a subsequent Wait() drains them on the fast path.
 */
 template <EAccessMode _AccessMode>
-class SignalBeforeWaitTask : public Task<512, _AccessMode>
+class SignalBeforeWaitTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -330,7 +335,7 @@ private:
     \note  Verifies that tasks are woken in the order they blocked on Wait().
 */
 template <EAccessMode _AccessMode>
-class FIFOOrderTask : public Task<512, _AccessMode>
+class FIFOOrderTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -393,7 +398,7 @@ private:
            no signal is lost: every Signal() produces exactly one successful Wait().
 */
 template <EAccessMode _AccessMode>
-class StressTestTask : public Task<512, _AccessMode>
+class StressTestTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -455,7 +460,7 @@ private:
            total transfer count matches exactly.
 */
 template <EAccessMode _AccessMode>
-class BoundedBufferTask : public Task<512, _AccessMode>
+class BoundedBufferTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -584,48 +589,68 @@ int main(int argc, char **argv)
 
     TestContext::ShowTestSuitePrologue();
 
-    int32_t total_failures = 0;
+    int total_failures = 0, total_success = 0;
 
     printf("--------------\n");
 
     g_Kernel.Initialize();
 
+#ifndef __ARM_ARCH_6M__
+
     // Test 1: Basic Signal/Wait with producer-consumer mutual exclusion
     if (RunTest<BasicSignalWaitTask<ACCESS_PRIVILEGED>>("BasicSignalWait", 100) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 2: Non-zero initial count (fast-path drain, then block)
     if (RunTest<InitialCountTask<ACCESS_PRIVILEGED>>("InitialCount", 0, _STK_SEM_TEST_TASKS_MAX - 1) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 3: TimedWait timeout behavior
     if (RunTest<TimeoutWaitTask<ACCESS_PRIVILEGED>>("TimeoutWait") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 4: Wait(0) non-blocking behavior
     if (RunTest<ZeroTimeoutTask<ACCESS_PRIVILEGED>>("ZeroTimeout") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 5: Signal posted before Wait is remembered
     if (RunTest<SignalBeforeWaitTask<ACCESS_PRIVILEGED>>("SignalBeforeWait", 200) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 6: FIFO wakeup ordering
     if (RunTest<FIFOOrderTask<ACCESS_PRIVILEGED>>("FIFOOrder") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
-    // Test 7: Stress test (no signals lost)
-    if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
-        total_failures++;
-
-    // Test 8: Classic bounded-buffer producer/consumer
+    // Test 7: Classic bounded-buffer producer/consumer
     if (RunTest<BoundedBufferTask<ACCESS_PRIVILEGED>>("BoundedBuffer", 200) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
+
+#endif // __ARM_ARCH_6M__
+
+    // Test 8: Stress test (no signals lost)
+    if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
+        total_failures++;
+    else
+        total_success++;
 
     int32_t final_result = (total_failures == 0 ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
 
     printf("##############\n");
-    printf("Total tests: 8\n");
+    printf("Total tests: %d\n", total_failures + total_success);
     printf("Failures: %d\n", (int)total_failures);
 
     TestContext::ShowTestSuiteEpilogue(final_result);

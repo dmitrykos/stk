@@ -25,9 +25,9 @@ STK_TEST_DECL_ASSERT;
 #define _STK_MUTEX_TEST_SHORT_SLEEP 10
 #define _STK_MUTEX_TEST_LONG_SLEEP  100
 #ifdef __ARM_ARCH_6M__
-#define _STK_SL_STACK_SIZE          128 // ARM Cortex-M0
+#define _STK_MUTEX_STACK_SIZE       128 // ARM Cortex-M0
 #else
-#define _STK_SL_STACK_SIZE          (STK_STACK_SIZE_MIN > 128 ? STK_STACK_SIZE_MIN : 128)
+#define _STK_MUTEX_STACK_SIZE       256
 #endif
 
 namespace stk {
@@ -57,7 +57,7 @@ static sync::Mutex g_TestMutex;
     \note  Verifies that mutex provides mutual exclusion.
 */
 template <EAccessMode _AccessMode>
-class BasicLockUnlockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class BasicLockUnlockTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -114,7 +114,7 @@ private:
     \note  Verifies that same thread can acquire mutex multiple times.
 */
 template <EAccessMode _AccessMode>
-class RecursiveLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class RecursiveLockTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -165,7 +165,7 @@ private:
     \note  Verifies that TryLock() returns immediately without blocking.
 */
 template <EAccessMode _AccessMode>
-class TryLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class TryLockTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -214,7 +214,7 @@ private:
     \note  Verifies that TimedLock() respects timeout values.
 */
 template <EAccessMode _AccessMode>
-class TimedLockTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class TimedLockTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -285,7 +285,7 @@ private:
     \note  Verifies that threads are woken in the order they blocked.
 */
 template <EAccessMode _AccessMode>
-class FIFOOrderTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class FIFOOrderTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -352,7 +352,7 @@ private:
     \note  Verifies mutex stability under heavy contention.
 */
 template <EAccessMode _AccessMode>
-class StressTestTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class StressTestTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -473,7 +473,7 @@ private:
     \note  Verifies mutex correctly synchronizes shared state updates.
 */
 template <EAccessMode _AccessMode>
-class InterTaskCoordinationTask : public Task<_STK_SL_STACK_SIZE, _AccessMode>
+class InterTaskCoordinationTask : public Task<_STK_MUTEX_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -638,7 +638,7 @@ int main(int argc, char **argv)
     else
         total_success++;
 
-#endif
+#endif // __ARM_ARCH_6M__
 
     // Test 8: Stress test
     if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)

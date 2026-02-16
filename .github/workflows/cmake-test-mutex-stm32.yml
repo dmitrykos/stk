@@ -1,4 +1,4 @@
-name: Test - sync::Mutex (QEMU, Arm Cortex-M4)
+name: Test - sync::Mutex (QEMU, Arm Cortex-M0,M4)
 
 on:
   push:

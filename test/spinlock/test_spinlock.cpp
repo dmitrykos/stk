@@ -25,9 +25,9 @@ STK_TEST_DECL_ASSERT;
 #define _STK_SL_TEST_LONG_SLEEP  100
 #define _STK_SL_TEST_SPIN_COUNT  10 // low spin count forces cooperative Yield() quickly
 #ifdef __ARM_ARCH_6M__
-#define _STK_SL_STACK_SIZE       256 // ARM Cortex-M0
+#define _STK_SL_STACK_SIZE       128 // ARM Cortex-M0
 #else
-#define _STK_SL_STACK_SIZE       (STK_STACK_SIZE_MIN > 128 ? STK_STACK_SIZE_MIN : 128)
+#define _STK_SL_STACK_SIZE       256
 #endif
 
 namespace stk {
@@ -654,7 +654,7 @@ int main(int argc, char **argv)
     else
         total_success++;
 
-#endif
+#endif // __ARM_ARCH_6M__
 
     // Test 8: Stress test mixing blocking Lock() and non-blocking TryLock()
     if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)

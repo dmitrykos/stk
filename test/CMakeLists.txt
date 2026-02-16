@@ -18,6 +18,7 @@ option(TEST_MUTEX     "build test: Mutex (platform-dependent)"      OFF)
 option(TEST_SEMAPHORE "build test: Semaphore (platform-dependent)"  OFF)
 option(TEST_EVENT     "build test: Event (platform-dependent)"      OFF)
 option(TEST_SPINLOCK  "build test: SpinLock (platform-dependent)"   OFF)
+option(TEST_CONDVAR   "build test: SpinLock (platform-dependent)"   OFF)
 
 if (TEST_GENERIC)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
@@ -53,4 +54,8 @@ endif()
 
 if (TEST_SPINLOCK)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/spinlock)
+endif()
+
+if (TEST_CONDVAR)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/condvar)
 endif()

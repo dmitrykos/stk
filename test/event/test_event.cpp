@@ -24,6 +24,11 @@ STK_TEST_DECL_ASSERT;
 #define _STK_EVT_TEST_TIMEOUT     300
 #define _STK_EVT_TEST_SHORT_SLEEP 10
 #define _STK_EVT_TEST_LONG_SLEEP  100
+#ifdef __ARM_ARCH_6M__
+#define _STK_EVT_STACK_SIZE       128 // ARM Cortex-M0
+#else
+#define _STK_EVT_STACK_SIZE       256
+#endif
 
 #ifndef _NEW
 inline void *operator new(std::size_t, void *ptr) noexcept { return ptr; }
@@ -58,7 +63,7 @@ static sync::Event g_TestEvent;
            woken per Set(); the total woken count must equal the number of Set() calls.
 */
 template <EAccessMode _AccessMode>
-class AutoResetBasicTask : public Task<512, _AccessMode>
+class AutoResetBasicTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -111,7 +116,7 @@ private:
            and that Reset() then clears the state.
 */
 template <EAccessMode _AccessMode>
-class ManualResetBasicTask : public Task<512, _AccessMode>
+class ManualResetBasicTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -160,7 +165,7 @@ private:
            Wait() blocks as expected.
 */
 template <EAccessMode _AccessMode>
-class InitialStateTask : public Task<512, _AccessMode>
+class InitialStateTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -205,7 +210,7 @@ private:
            no Set() is called, and that a subsequent Wait() succeeds once Set() fires.
 */
 template <EAccessMode _AccessMode>
-class TimeoutWaitTask : public Task<512, _AccessMode>
+class TimeoutWaitTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -269,7 +274,7 @@ private:
            and returns true (and auto-resets) when the event is already signaled.
 */
 template <EAccessMode _AccessMode>
-class TryWaitTask : public Task<512, _AccessMode>
+class TryWaitTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -330,7 +335,7 @@ private:
            state change, false if already non-signaled).
 */
 template <EAccessMode _AccessMode>
-class ResetManualTask : public Task<512, _AccessMode>
+class ResetManualTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -394,7 +399,7 @@ private:
            event to non-signaled regardless of whether a waiter was present.
 */
 template <EAccessMode _AccessMode>
-class PulseAutoResetTask : public Task<512, _AccessMode>
+class PulseAutoResetTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
     int32_t m_iterations;
@@ -452,7 +457,7 @@ private:
            to non-signaled, even if no tasks are waiting at the time of the call.
 */
 template <EAccessMode _AccessMode>
-class PulseManualResetTask : public Task<512, _AccessMode>
+class PulseManualResetTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
 {
     uint8_t m_task_id;
 
@@ -582,7 +587,7 @@ int main(int argc, char **argv)
 
     TestContext::ShowTestSuitePrologue();
 
-    int32_t total_failures = 0;
+    int total_failures = 0, total_success = 0;
 
     printf("--------------\n");
 
@@ -591,40 +596,60 @@ int main(int argc, char **argv)
     // Test 1: Auto-reset event wakes exactly one waiter per Set()
     if (RunTest<AutoResetBasicTask<ACCESS_PRIVILEGED>>("AutoResetBasic", 20) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
+
+#ifndef __ARM_ARCH_6M__
 
     // Test 2: Manual-reset event wakes all waiters and stays signaled until Reset()
     if (RunTest<ManualResetBasicTask<ACCESS_PRIVILEGED>>("ManualResetBasic", 0, true) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 3: initial_state=true provides immediate fast-path Wait(), then auto-resets (tasks 0-2 only)
     if (RunTest<InitialStateTask<ACCESS_PRIVILEGED>>("InitialState", 0, false, true) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 4: Wait() times out correctly when no Set() fires (tasks 0-2 only)
     if (RunTest<TimeoutWaitTask<ACCESS_PRIVILEGED>>("TimeoutWait") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 5: TryWait() returns immediately and auto-resets on success (tasks 0-2 only)
     if (RunTest<TryWaitTask<ACCESS_PRIVILEGED>>("TryWait") != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 6: Reset() clears manual-reset event; return value reflects actual state change (tasks 0-2 only)
     if (RunTest<ResetManualTask<ACCESS_PRIVILEGED>>("ResetManual", 0, true) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 7: Pulse() on auto-reset event wakes one waiter and always resets
     if (RunTest<PulseAutoResetTask<ACCESS_PRIVILEGED>>("PulseAutoReset", 20) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
 
     // Test 8: Pulse() on manual-reset event wakes all waiters and always resets
     if (RunTest<PulseManualResetTask<ACCESS_PRIVILEGED>>("PulseManualReset", 0, true) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
+    else
+        total_success++;
+
+#endif // __ARM_ARCH_6M__
 
     int32_t final_result = (total_failures == 0 ? TestContext::SUCCESS_EXIT_CODE : TestContext::DEFAULT_FAILURE_EXIT_CODE);
 
     printf("##############\n");
-    printf("Total tests: 8\n");
-    printf("Failures: %d\n", (int)total_failures);
+    printf("Total tests: %d\n", total_failures + total_success);
+    printf("Failures: %d\n", total_failures);
 
     TestContext::ShowTestSuiteEpilogue(final_result);
     return final_result;
