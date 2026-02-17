@@ -5,10 +5,10 @@
 
 ---
 
-[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/dmitrykos/stk/blob/main/LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/dmitrykos/stk/cmake-test-generic-stm32.yml)](https://github.com/dmitrykos/stk/actions)
-[![Test Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/dmitrykos/stk)
-[![membrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/dmitrykos/stk)
+[![MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/SuperTinyKernel-RTOS/stk/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/SuperTinyKernel-RTOS/stk/cmake-test-generic-stm32.yml)](https://github.com/SuperTinyKernel-RTOS/stk/actions)
+[![Test Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/SuperTinyKernel-RTOS/stk)
+[![membrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/supertinykernel-rtos/stk)
 
 ---
 
@@ -23,7 +23,7 @@ STK is implemented in C++ with a clean **Object-Oriented Design** while remainin
 * Transparent and readable implementation
 * Fully-featured C interface for C-only development
 
-It is an [open-source project](https://github.com/dmitrykos/stk), navigate its code for more details.
+It is an [open-source project](https://github.com/SuperTinyKernel-RTOS), navigate its code for more details.
 
 ---
 
@@ -149,7 +149,7 @@ AMP design delivers maximum performance while keeping STK kernel extremely light
 | Simple and predictable     | No complex SMP synchronization logic required in the kernel                              |
 | No core congestion         | Highest possible performance and deterministic timing on each individual core            |
 
-STK provides a rich set of synchronization primitives (see [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync)) which are suitable for multicore synchronization with multiple STK instances.
+STK provides a rich set of synchronization primitives (see [stk/sync](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/stk/include/sync)) which are suitable for multicore synchronization with multiple STK instances.
 
 #### Usage Example (Dual-Core System)
 
@@ -209,13 +209,13 @@ There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `b
 
 ## Dedicated C interface
 
-For a seamless integration with C projects STK provides a dedicated, fully-featured C interface. See [interop/c](https://github.com/dmitrykos/stk/tree/main/interop/c) for more details and example.
+For a seamless integration with C projects STK provides a dedicated, fully-featured C interface. See [interop/c](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/interop/c) for more details and example.
 
 ---
 
 ## Synchronization API
 
-STK provides a feature-rich synchronization API which is located in [stk/sync](https://github.com/dmitrykos/stk/tree/main/stk/include/sync) and resides in a dedicated namespace `stk::sync`. It is a high-performance framework designed for both single-core and multicore embedded systems and provides a robust mechanism for inter-task and inter-core communication.
+STK provides a feature-rich synchronization API which is located in [stk/sync](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/stk/include/sync) and resides in a dedicated namespace `stk::sync`. It is a high-performance framework designed for both single-core and multicore embedded systems and provides a robust mechanism for inter-task and inter-core communication.
 
 | Primitive                 | Description                                                                                                                                                                                     |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -277,9 +277,10 @@ STK has been tested on the following development boards:
 
 ---
 
-## Benchmark: STK vs. FreeRTOS (Cortex-M4 168MHz) - Feb 2026 Update
+## Benchmark
 
 Board: STM32F407G-DISC1, MCU: STM32F407VG (Cortex-M4 168MHz).
+Update: Feb 2026
 
 This table compares **SuperTinyKernel (STK) v.1.04.2** and **FreeRTOS V10.3.1** across two compiler optimization levels: `-Os` and `-Ofast`. The workload consists of a CRC32-based synthetic task running across multiple tasks/threads to measure scheduling overhead and timing determinism. Benchmark projects are located in `build/benchmark/eclipse` and the benchmark suite is located in `build/benchmark/perf`.
 
@@ -315,7 +316,7 @@ The benchmark suite uses CRC32 hash calculations as the task payload. The score 
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/dmitrykos/stk.git
+git clone https://github.com/SuperTinyKernel-RTOS/stk.git
 cd stk
 ```
 
@@ -507,7 +508,7 @@ You can include STK in your project using `git submodule` or by copying the sour
 ```bash
 # Example: using git submodule
 cd your-project
-git submodule add https://github.com/dmitrykos/stk.git libs/stk_scheduler
+git submodule add https://github.com/SuperTinyKernel-RTOS/stk.git libs/stk_scheduler
 git submodule update --init
 ```
 
