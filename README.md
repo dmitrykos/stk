@@ -286,22 +286,22 @@ This table compares **SuperTinyKernel (STK) v.1.04.2** and **FreeRTOS V10.3.1** 
 
 The benchmark suite uses CRC32 hash calculations as the task payload. The score represents the number of CRC32 calculations performed by the task within a fixed time window. A higher score indicates a more efficient scheduler, meaning the tasks have more available CPU time.
 
-| Kernel       | Tasks | Opt      | Total Sum (Throughput) | Average (AVR) | Jitter  | Flash Size  | RAM Used   |
-|--------------|-------|----------|------------------------|---------------|---------|-------------|------------|
-| **STK**      | 16    | `-Ofast` | **993,057**            | 62,066        | **753** | 25.3 KB     | **7.0 KB** |
-| **FreeRTOS** | 16    | `-Ofast` | 965,991                | 60,374        | 908     | 13.7 KB     | 8.8 KB     |
-| **STK**      | 16    | `-Os`    | **752,040**            | 47,002        | **425** | 18.5 KB     | **7.1 KB** |
-| **FreeRTOS** | 16    | `-Os`    | 731,957                | 45,747        | 471     | **12.2 KB** | 11.0 KB    |
-| ---          | ---   | ---      | ---                    | ---           | ---     | ---         | ---        |
-| **STK**      | 8     | `-Ofast` | **989,026**            | 123,628       | 867     | 25.3 KB     | **7.0 KB** |
-| **FreeRTOS** | 8     | `-Ofast` | 932,579                | 116,572       | **615** | 13.7 KB     | 8.8 KB     |
-| **STK**      | 8     | `-Os`    | **752,875**            | 94,109        | 660     | 18.5 KB     | **7.1 KB** |
-| **FreeRTOS** | 8     | `-Os`    | 710,090                | 88,761        | **466** | **12.2 KB** | 11.0 KB    |
-| ---          | ---   | ---      | ---                    | ---           | ---     | ---         | ---        |
-| **STK**      | 4     | `-Ofast` | **989,705**            | 247,426       | 742     | 25.3 KB     | **7.0 KB** |
-| **FreeRTOS** | 4     | `-Ofast` | 881,079                | 220,269       | **690** | 13.7 KB     | 8.8 KB     |
-| **STK**      | 4     | `-Os`    | **753,302**            | 188,325       | 565     | 18.5 KB     | **7.1 KB** |
-| **FreeRTOS** | 4     | `-Os`    | 670,867                | 167,716       | **504** | **12.2 KB** | 11.0 KB    |
+| Kernel       | Tasks | Opt      | Throughput  | Average  | Jitter  | Flash Size  | RAM Used   |
+|--------------|-------|----------|-------------|----------|---------|-------------|------------|
+| **STK**      | 16    | `-Ofast` | **993,057** | 62,066   | **753** | 25.3 KB     | **7.0 KB** |
+| **FreeRTOS** | 16    | `-Ofast` | 965,991     | 60,374   | 908     | 13.7 KB     | 8.8 KB     |
+| **STK**      | 16    | `-Os`    | **752,040** | 47,002   | **425** | 18.5 KB     | **7.1 KB** |
+| **FreeRTOS** | 16    | `-Os`    | 731,957     | 45,747   | 471     | **12.2 KB** | 11.0 KB    |
+| ---          | ---   | ---      | ---         | ---      | ---     | ---         | ---        |
+| **STK**      | 8     | `-Ofast` | **989,026** | 123,628  | 867     | 25.3 KB     | **7.0 KB** |
+| **FreeRTOS** | 8     | `-Ofast` | 932,579     | 116,572  | **615** | 13.7 KB     | 8.8 KB     |
+| **STK**      | 8     | `-Os`    | **752,875** | 94,109   | 660     | 18.5 KB     | **7.1 KB** |
+| **FreeRTOS** | 8     | `-Os`    | 710,090     | 88,761   | **466** | **12.2 KB** | 11.0 KB    |
+| ---          | ---   | ---      | ---         | ---      | ---     | ---         | ---        |
+| **STK**      | 4     | `-Ofast` | **989,705** | 247,426  | 742     | 25.3 KB     | **7.0 KB** |
+| **FreeRTOS** | 4     | `-Ofast` | 881,079     | 220,269  | **690** | 13.7 KB     | 8.8 KB     |
+| **STK**      | 4     | `-Os`    | **753,302** | 188,325  | 565     | 18.5 KB     | **7.1 KB** |
+| **FreeRTOS** | 4     | `-Os`    | 670,867     | 167,716  | **504** | **12.2 KB** | 11.0 KB    |
 
 ### Conclusion
 * **Throughput:** STK tasks consistently outperform FreeRTOS tasks, achieving up to **31% higher throughput** in low-task counts and maintaining a lead even at 16 tasks.
