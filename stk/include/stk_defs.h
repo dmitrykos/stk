@@ -257,6 +257,16 @@
     #define STK_ALLOCATE_COUNT(MODE, FLAG, ONTRUE, ONFALSE) ((MODE) & (FLAG) ? (ONTRUE) : (ONFALSE))
 #endif
 
+/*! \def   STK_MIN
+    \brief Get min value.
+*/
+#define STK_MIN(A, B) ((A) < (B) ? (A) : (B))
+
+/*! \def   STK_MAX
+    \brief Get max value.
+*/
+#define STK_MAX(A, B) ((A) > (B) ? (A) : (B))
+
 /*! \namespace stk
     \brief     Namespace of STK package.
  */
