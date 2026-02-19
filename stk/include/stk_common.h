@@ -30,6 +30,7 @@ typedef void (*RunFuncType) (void *user_data);
 
 /*! \enum  EAccessMode
     \brief Hardware access mode by the user task.
+    \warning Type is explicitly 32-bit to be compatible with platform implementations.
 */
 enum EAccessMode : int32_t
 {

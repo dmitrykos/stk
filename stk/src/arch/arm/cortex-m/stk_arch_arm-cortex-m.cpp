@@ -27,8 +27,13 @@
 
 using namespace stk;
 
+#if defined(__clang__) && defined(__ARMCOMPILER_VERSION)
+#define STK_CORTEX_M_DISABLE_INTERRUPTS() __asm volatile("cpsid i" : : : "memory")
+#define STK_CORTEX_M_ENABLE_INTERRUPTS() __asm volatile("cpsie i" : : : "memory")
+#else
 #define STK_CORTEX_M_DISABLE_INTERRUPTS() __disable_irq()
 #define STK_CORTEX_M_ENABLE_INTERRUPTS() __enable_irq()
+#endif
 
 #define STK_CORTEX_M_CRITICAL_SECTION_START(SES)\
     do { SES = __get_PRIMASK(); STK_CORTEX_M_DISABLE_INTERRUPTS(); __DSB(); __ISB(); } while (0)
@@ -124,8 +129,8 @@ using namespace stk;
     #define STK_CORTEX_M_PRIVILEGED_MODE_ON() __set_CONTROL(__get_CONTROL() & ~CONTROL_nPRIV_Msk)
     #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() __set_CONTROL(__get_CONTROL() | CONTROL_nPRIV_Msk)
 #else
-    #define STK_CORTEX_M_PRIVILEGED_MODE_ON() ((void)0)
-    #define STK_CORTEX_M_PRIVILEGED_MODE_OFF() ((void)0)
+    #define STK_CORTEX_M_PRIVILEGED_MODE_ON()
+    #define STK_CORTEX_M_PRIVILEGED_MODE_OFF()
 #endif
 
 #define STK_CORTEX_M_EXC_RETURN_HANDLR_MSP 0xFFFFFFF1 // Handler mode, MSP stack (non-secure)
@@ -210,7 +215,9 @@ __stk_attr_naked uint32_t SVC_EnterCritical()
 {
     STK_CORTEX_M_UNPRIV_ENTER_CRITICAL();
     STK_CORTEX_M_EXIT_FUNCTION();
+#if !(defined(__clang__) && defined(__ARMCOMPILER_VERSION))
     __builtin_unreachable();
+#endif
 }
 
 /*! \brief     Exit critical section.
@@ -218,9 +225,8 @@ __stk_attr_naked uint32_t SVC_EnterCritical()
     \note      Unprivileged mode only. Input 'state' is passed in R0; no return value.
     \see       SVC_EnterCritical
 */
-__stk_attr_naked void SVC_ExitCritical(uint32_t prev)
+__stk_attr_naked void SVC_ExitCritical(uint32_t /*prev*/)
 {
-    (void)prev;
     STK_CORTEX_M_UNPRIV_EXIT_CRITICAL();
     STK_CORTEX_M_EXIT_FUNCTION();
 }
@@ -257,6 +263,11 @@ static struct Context : public PlatformContext
     void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap, int32_t resolution_us)
     {
         PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
+
+        // we expect Stack::mode member at offset of 0 (first member).
+        STK_STATIC_ASSERT(offsetof(Stack, SP) == 0);
+        // we expect Stack::mode member at offset of 4 (second member).
+        STK_STATIC_ASSERT(offsetof(Stack, mode) == 4);
 
         m_csu         = 0;
         m_csu_nesting = 0;
@@ -395,92 +406,153 @@ extern "C" void _STK_SYSTICK_HANDLER()
 #endif
 }
 
-static __stk_forceinline void SaveStackIdle()
-{
-    // get Process Stack Pointer (PSP) of the current stack
-    __asm volatile(
-    "MRS        r0, psp         \n");
+// --- SaveStackIdle -----------------------------------------------------------
 
-    // save FP general registers
+#define STK_SAVE_STACK__GET_PSP()\
+    __asm volatile(\
+    "MRS        r0, psp         \n")
+
 #ifdef STK_CORTEX_M_EXPECT_FPU
-    __asm volatile(
-    "TST        LR, #16         \n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
-    "IT         EQ              \n"
-    "VSTMDBEQ   r0!, {s16-s31}  \n" // store 16 SP registers
-    );
-#endif
-
-    // save general registers to the stack memory
-    // note: for Cortex-M3 and higher save LR to keep correct Thread state of the task when it is restored
-#ifdef STK_CORTEX_M_MANAGE_LR
-    __asm volatile(
-    "STMDB      r0!, {r4-r11, LR}\n");
+#define STK_SAVE_STACK__SAVE_FP_REGS()\
+    __asm volatile(\
+    "TST        LR, #16         \n" /* test LR for 0xffffffe_, e.g. Thread mode with FP data */\
+    "IT         EQ              \n"\
+    "VSTMDBEQ   r0!, {s16-s31}  \n" /* store 16 SP registers */\
+    )
 #else
-    // note: STMIA is limited to r0-r7 range, therefore save via stack memory
-    __asm volatile(
-    "SUB        r0, #16         \n"
-    "STMIA      r0!, {r4-r7}    \n"
-    "MOV        r4, r8          \n"
-    "MOV        r5, r9          \n"
-    "MOV        r6, r10         \n"
-    "MOV        r7, r11         \n"
-    "SUB        r0, #32         \n"
-    "STMIA      r0!, {r4-r7}    \n"
-    "SUB        r0, #16         \n");
+#define STK_SAVE_STACK__SAVE_FP_REGS()
 #endif
 
-    // save PSP of the idle stack
-    __asm volatile(
-    "LDR        r1, %0          \n"
-    "STR        r0, [r1]        \n" // store the first member (SP) from r0
-    : /* output: none */
-    : "m" (GetContext().m_stack_idle)
-    : /* clobbers: none */);
-}
+#ifdef STK_CORTEX_M_MANAGE_LR
+    /* note: for Cortex-M3 and higher save LR to keep correct Thread state of the task when it is restored */
+#define STK_SAVE_STACK__SAVE_GP_REGS()\
+    __asm volatile(\
+    "STMDB      r0!, {r4-r11, LR}\n")
+#else
+    /* note: STMIA is limited to r0-r7 range, therefore save via stack memory */
+#define STK_SAVE_STACK__SAVE_GP_REGS()\
+    __asm volatile(\
+    "SUB        r0, #16         \n"\
+    "STMIA      r0!, {r4-r7}    \n"\
+    "MOV        r4, r8          \n"\
+    "MOV        r5, r9          \n"\
+    "MOV        r6, r10         \n"\
+    "MOV        r7, r11         \n"\
+    "SUB        r0, #32         \n"\
+    "STMIA      r0!, {r4-r7}    \n"\
+    "SUB        r0, #16         \n")
+#endif
 
-static __stk_forceinline void LoadStackActive()
-{
+#define STK_SAVE_STACK__SAVE_PSP()\
+    __asm volatile(\
+    "LDR        r1, %0          \n"\
+    "STR        r0, [r1]        \n" /* store the first member (SP) from r0 */\
+    : /* output: none */\
+    : "m" (GetContext().m_stack_idle)\
+    : /* clobbers: none */)
+
+#define SaveStackIdle()\
+    /* get Process Stack Pointer (PSP) of the current stack */\
+    STK_SAVE_STACK__GET_PSP();\
+    /* save FP general registers */\
+    STK_SAVE_STACK__SAVE_FP_REGS();\
+    /* save general registers to the stack memory */\
+    STK_SAVE_STACK__SAVE_GP_REGS();\
+    /* save PSP of the idle stack */\
+    STK_SAVE_STACK__SAVE_PSP()
+
+// -----------------------------------------------------------------------------
+
+// --- LoadStackActive ---------------------------------------------------------
+
+/*! Set privileged mode, this is equivalent of the following C code:
+
     if (GetContext().m_stack_active->mode == ACCESS_PRIVILEGED)
-       STK_CORTEX_M_PRIVILEGED_MODE_ON();
+        STK_CORTEX_M_PRIVILEGED_MODE_ON();
     else
-       STK_CORTEX_M_PRIVILEGED_MODE_OFF();
-
-    // load PSP of the active stack
-    __asm volatile(
-    "LDR        r1, %0          \n"
-    "LDR        r0, [r1]        \n" // load the first member (SP) into r0
-    : /* output: none */
-    : "m" (GetContext().m_stack_active)
-    : /* clobbers: none */);
-
-    // load general registers from the stack memory
-#ifdef STK_CORTEX_M_MANAGE_LR
-    __asm volatile(
-    "LDMIA      r0!, {r4-r11, LR}\n");
+        STK_CORTEX_M_PRIVILEGED_MODE_OFF()
+*/
+#ifdef CONTROL_nPRIV_Msk
+#define STK_LOAD_STACK__SET_MODE()\
+    __asm volatile(\
+    "LDR        r1, %0          \n" /* r1 = Stack* (m_stack_active) */ \
+    "LDR        r2, [r1, #4]    \n" /* r2 = m_stack_active->mode (offset 4) */ \
+    "CMP        r2, %1          \n" /* compare with ACCESS_PRIVILEGED */ \
+    "BEQ        1f              \n" /* if equal, privileged mode */\
+    /* unprivileged mode: set CONTROL.nPRIV = 1 */\
+    "MRS        r0, CONTROL     \n"\
+    "ORR        r0, r0, #1      \n"\
+    "MSR        CONTROL, r0     \n"\
+    "ISB                        \n"\
+    "B          2f              \n"\
+    "1:                         \n"\
+    /* privileged mode: set CONTROL.nPRIV = 0 */\
+    "MRS        r0, CONTROL     \n"\
+    "BIC        r0, r0, #1      \n"\
+    "MSR        CONTROL, r0     \n"\
+    "ISB                        \n"\
+    "2:                         \n"\
+    : /* output: none */\
+    : "m" (GetContext().m_stack_active), "i" (ACCESS_PRIVILEGED)\
+    : "r0", "r1", "r2")
 #else
-    // note: LDMIA is limited to r0-r7 range, therefore load via stack memory
-    __asm volatile(
-    "LDMIA      r0!, {r4-r7}    \n"
-    "MOV        r8, r4          \n"
-    "MOV        r9, r5          \n"
-    "MOV        r10, r6         \n"
-    "MOV        r11, r7         \n"
-    "LDMIA      r0!, {r4-r7}    \n");
+#define STK_LOAD_STACK__SET_MODE()
 #endif
 
-    // load FP general registers
+#define STK_LOAD_STACK__GET_PSP()\
+    __asm volatile(\
+    "LDR        r1, %0          \n"\
+    "LDR        r0, [r1]        \n" /* load the first member (SP) into r0 */\
+    : /* output: none */\
+    : "m" (GetContext().m_stack_active)\
+    : /* clobbers: none */)
+
+#ifdef STK_CORTEX_M_MANAGE_LR
+    /* restore r4-r11 and LR */
+#define STK_LOAD_STACK__LOAD_GP_REGS()\
+    __asm volatile(\
+    "LDMIA      r0!, {r4-r11, LR}\n")
+#else
+    /* note: LDMIA is limited to r0-r7 range, therefore load via stack memory */
+#define STK_LOAD_STACK__LOAD_GP_REGS()\
+    __asm volatile(\
+    "LDMIA      r0!, {r4-r7}    \n"\
+    "MOV        r8, r4          \n"\
+    "MOV        r9, r5          \n"\
+    "MOV        r10, r6         \n"\
+    "MOV        r11, r7         \n"\
+    "LDMIA      r0!, {r4-r7}    \n")
+#endif
+
 #ifdef STK_CORTEX_M_EXPECT_FPU
-    __asm volatile(
-    "TST        LR, #16         \n" // test LR for 0xffffffe_, e.g. Thread mode with FP data
-    "IT         EQ              \n" // if result is positive
-    "VLDMIAEQ   r0!, {s16-s31}  \n" // restore FP registers
-    );
+    /* restore FP general registers */
+#define STK_LOAD_STACK__LOAD_FP_REGS()\
+    __asm volatile(\
+    "TST        LR, #16         \n" /* test LR for 0xffffffe_, e.g. Thread mode with FP data */\
+    "IT         EQ              \n" /* if result is positive */\
+    "VLDMIAEQ   r0!, {s16-s31}  \n" /* restore FP registers */\
+    )
+#else
+#define STK_LOAD_STACK__LOAD_FP_REGS()
 #endif
 
-    // set Process Stack Pointer (PSP) of the new active stack
-    __asm volatile(
-    "MSR        psp, r0         \n");
-}
+#define STK_LOAD_STACK__SET_PSP()\
+    __asm volatile(\
+    "MSR        psp, r0         \n")
+
+#define LoadStackActive()\
+    /* set privileged/unprivileged mode for the active stack */\
+    STK_LOAD_STACK__SET_MODE();\
+    /* get Process Stack Pointer (PSP) of the active stack */\
+    STK_LOAD_STACK__GET_PSP();\
+    /* restore general registers from the stack memory */\
+    STK_LOAD_STACK__LOAD_GP_REGS();\
+    /* restore FP general registers */\
+    STK_LOAD_STACK__LOAD_FP_REGS();\
+    /* set Process Stack Pointer (PSP) of the new active stack */\
+    STK_LOAD_STACK__SET_PSP()
+
+// -----------------------------------------------------------------------------
 
 extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 {
@@ -488,6 +560,7 @@ extern "C" __stk_attr_naked void _STK_PENDSV_HANDLER()
 
     SaveStackIdle();
 
+    // note: unsuported by Clang/ARMCC due to __stk_attr_naked
 #if STK_SEGGER_SYSVIEW
     SEGGER_SYSVIEW_OnTaskStopExec();
     if (GetContext().m_stack_active->tid != SYS_TASK_ID_SLEEP)
