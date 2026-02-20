@@ -24,6 +24,10 @@ namespace stk {
 class PlatformContext
 {
 public:
+    explicit PlatformContext() : m_handler(nullptr), m_service(nullptr), m_stack_idle(nullptr),
+        m_stack_active(nullptr), m_tick_resolution(0)
+    {}
+
     /*! \brief     Initialize context.
         \param[in] handler: Event handler.
         \param[in] exit_trap: Exit trap's stack.

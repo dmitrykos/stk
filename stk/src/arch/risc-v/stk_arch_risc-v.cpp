@@ -342,6 +342,11 @@ static volatile bool g_CsuLock = false;
 //! Internal context.
 static struct Context : public PlatformContext
 {
+    Context() : PlatformContext(), m_stack_main(), m_stack_isr(), m_exit_buf(), m_stack_isr_mem(),
+        m_overrider(nullptr), m_specific(nullptr), m_tick_period(0), m_csu(0), m_csu_nesting(0),
+        m_starting(false), m_started(false), m_exiting(false)
+    {}
+
     void Initialize(IPlatform::IEventHandler *handler, IKernelService *service, Stack *exit_trap, int32_t resolution_us)
     {
         PlatformContext::Initialize(handler, service, exit_trap, resolution_us);
@@ -425,7 +430,7 @@ static struct Context : public PlatformContext
     sehndl_t *m_specific;      //!< platform-specific event handler
     int32_t   m_tick_period;   //!< system tick periodicity (microseconds, ticks)
     size_t    m_csu;           //!< user critical session
-    volatile uint32_t m_csu_nesting; //!< depth of user critical session nesting
+    uint32_t  m_csu_nesting;   //!< depth of user critical session nesting
     bool      m_starting;      //!< 'true' when in is being started
     bool      m_started;       //!< 'true' when in started state
     bool      m_exiting;       //!< 'true' when is exiting the scheduling process

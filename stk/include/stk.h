@@ -934,6 +934,10 @@ protected:
                 (*active) = &m_sleep_trap[0].stack;
             }
         }
+
+    #if STK_SEGGER_SYSVIEW
+        SEGGER_SYSVIEW_OnTaskStartExec(m_task_now->tid);
+    #endif
     }
 
     bool OnTick(Stack **idle, Stack **active)

@@ -14,6 +14,6 @@
 #include "../driver/led.h"
 #include "../driver/cpu.h"
 
-extern void RunExample();
+extern "C" void RunExample();
 
 #endif /* EXAMPLE_H_ */
