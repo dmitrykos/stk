@@ -207,6 +207,13 @@ There is a dual-core example for Raspberry Pico 2 W board with RSP2350 MCU in `b
 
 ---
 
+## Compiler
+
+* GCC
+* Clang/ARMCC 6 and higher
+
+---
+
 ## Dedicated C interface
 
 For a seamless integration with C projects STK provides a dedicated, fully-featured C interface. See [interop/c](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/interop/c) for more details and example.
