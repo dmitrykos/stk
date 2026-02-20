@@ -13,6 +13,6 @@
 #include <assert.h>
 #include "../driver/led.h"
 
-extern void RunExample();
+extern "C" void RunExample();
 
 #endif /* EXAMPLE_H_ */
