@@ -12,7 +12,7 @@
 
 #include "stk_common.h"
 
-/*! \file  stk_sync_mutex.h
+/*! \file  stk_sync_spinlock.h
     \brief Implementation of synchronization primitive: SpinLock.
 */
 
@@ -68,87 +68,96 @@ public:
         \note     If spin count is exhausted, it performs a Yield to allow other tasks to run.
         \warning  ISR-unsafe.
     */
-    void Lock()
-    {
-        TId current_tid = GetTid();
-
-        // increase recursion if this thread already owns the lock
-        if (!LockRecursively(current_tid))
-        {
-            m_lock.Lock();
-            MakeLocked(current_tid);
-        }
-    }
+    void Lock();
 
     /*! \brief    Attempt to acquire lock immediately.
         \warning  ISR-unsafe.
         \return   True if acquired (or already owned), false if owned by another thread.
     */
-    bool TryLock()
-    {
-        TId current_tid = GetTid();
-
-        // increase recursion if this thread already owns the lock
-        if (!LockRecursively(current_tid))
-        {
-            if (!m_lock.TryLock())
-                return false;
-
-            MakeLocked(current_tid);
-        }
-
-        return true;
-    }
+    bool TryLock();
 
     /*! \brief    Release lock or decrement recursion count.
         \warning  ISR-unsafe.
     */
-    void Unlock()
-    {
-        STK_ASSERT(!hw::IsInsideISR());
-
-        // must be in a locked state
-        STK_ASSERT(m_owner_tid == GetTid());
-        STK_ASSERT(m_recursion_count != 0);
-
-        if (--m_recursion_count == 0)
-        {
-            m_owner_tid = 0;
-            __stk_full_memfence();
-
-            m_lock.Unlock();
-        }
-    }
+    void Unlock();
 
 private:
-    bool LockRecursively(TId locking_tid)
-    {
-        if ((m_owner_tid == locking_tid) && (m_recursion_count != 0))
-        {
-            ++m_recursion_count;
-            STK_ASSERT(m_recursion_count < 0xFFFF);
-            return true;
-        }
-
-        return false;
-    }
-
-    void MakeLocked(TId locking_tid)
-    {
-        // must not be in a locked state
-        STK_ASSERT(m_owner_tid == 0);
-        STK_ASSERT(m_recursion_count == 0);
-
-        m_owner_tid       = locking_tid;
-        m_recursion_count = 1;
-        __stk_full_memfence();
-    }
+    bool LockRecursively(TId locking_tid);
+    void MakeLocked(TId locking_tid);
 
     hw::SpinLock m_lock;            //!< low-level spin lock
     TId          m_owner_tid;       //!< thread id of the current owner
     uint16_t     m_spin_count;      //!< max spins before yielding
     uint16_t     m_recursion_count; //!< nesting depth
 };
+
+inline void SpinLock::Lock()
+{
+    TId current_tid = GetTid();
+
+    // increase recursion if this thread already owns the lock
+    if (!LockRecursively(current_tid))
+    {
+        m_lock.Lock();
+        MakeLocked(current_tid);
+    }
+}
+
+inline bool SpinLock::TryLock()
+{
+    TId current_tid = GetTid();
+
+    // increase recursion if this thread already owns the lock
+    if (!LockRecursively(current_tid))
+    {
+        if (!m_lock.TryLock())
+            return false;
+
+        MakeLocked(current_tid);
+    }
+
+    return true;
+}
+
+inline void SpinLock::Unlock()
+{
+    STK_ASSERT(!hw::IsInsideISR());
+
+    // must be in a locked state
+    STK_ASSERT(m_owner_tid == GetTid());
+    STK_ASSERT(m_recursion_count != 0);
+
+    if (--m_recursion_count == 0)
+    {
+        m_owner_tid = 0;
+        __stk_full_memfence();
+
+        m_lock.Unlock();
+    }
+}
+
+inline bool SpinLock::LockRecursively(TId locking_tid)
+{
+    if ((m_owner_tid == locking_tid) && (m_recursion_count != 0))
+    {
+        ++m_recursion_count;
+        STK_ASSERT(m_recursion_count < 0xFFFF);
+        return true;
+    }
+
+    return false;
+}
+
+inline void SpinLock::MakeLocked(TId locking_tid)
+{
+    // must not be in a locked state
+    STK_ASSERT(m_owner_tid == 0);
+    STK_ASSERT(m_recursion_count == 0);
+
+    m_owner_tid       = locking_tid;
+    m_recursion_count = 1;
+    __stk_full_memfence();
+}
 
 } // namespace sync
 } // namespace stk

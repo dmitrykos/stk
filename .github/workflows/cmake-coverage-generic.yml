@@ -49,7 +49,10 @@ jobs:
         '*/stk_sync_cv.h' \
         '*/stk_sync_event.h' \
         '*/stk_sync_mutex.h' \
+        '*/stk_sync_pipe.h' \
+        '*/stk_sync_rwmutex.h' \
         '*/stk_sync_semaphore.h' \
+        '*/stk_sync_spinlock.h' \
         -o ${{ github.workspace }}/cov-build/coverage.info
 
     - name: Report Code Coverage with Pass Threshold - ${{env.PASS_THRESHOLD}}%

@@ -300,7 +300,8 @@ void Context::CreateTimerThreadAndJoin()
                 }
                 STK_ASSERT(exiting_task != NULL);
 
-                m_handler->OnTaskExit(exiting_task->m_stack);
+                if (exiting_task != NULL)
+                    m_handler->OnTaskExit(exiting_task->m_stack);
 
                 m_task_threads.erase(itr);
                 break;
