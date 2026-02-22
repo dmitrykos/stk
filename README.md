@@ -516,7 +516,7 @@ You can include STK in your project using `git submodule` or by copying the sour
 ```bash
 # Example: using git submodule
 cd your-project
-git submodule add https://github.com/SuperTinyKernel-RTOS/stk.git libs/stk_scheduler
+git submodule add https://github.com/SuperTinyKernel-RTOS/stk.git libs/stk_rtos
 git submodule update --init
 ```
 
@@ -527,7 +527,7 @@ Add the STK directory and link against STK:
 # In your project CMakeLists.txt
 
 # 1. Add STK as a subdirectory
-add_subdirectory(libs/stk_scheduler/stk)
+add_subdirectory(libs/stk_rtos/stk)
 
 # 2. Link STK into your executable or firmware target
 target_link_libraries(your_firmware_target PUBLIC stk)
@@ -535,7 +535,7 @@ target_link_libraries(your_firmware_target PUBLIC stk)
 # 3. Include STK headers
 target_include_directories(your_firmware_target
     PUBLIC
-    ${CMAKE_SOURCE_DIR}/libs/stk_scheduler/stk/include
+    ${CMAKE_SOURCE_DIR}/libs/stk_rtos/stk/include
 )
 ```
 
@@ -557,7 +557,7 @@ static Kernel<KERNEL_STATIC, 3, SwitchStrategyRoundRobin, PlatformDefault> kerne
 - Use STK’s x86 development mode for rapid development
 - Deploy to MCU when ready
 
-### Alternative Method: Copy STK directly into project files:
+### Alternative Method 1: Copy STK directly into project files manually:
 
 STK can be integrated by simply copying its source files from `stk/` folder.
 
@@ -609,7 +609,6 @@ For example, for ARM Cortex-M4 project:
 #ifndef STK_CONFIG_H_
 #define STK_CONFIG_H_
 
-#include "cmsis_device.h"
 #include "core_cm4.h"
 
 // Undefine if MCU is Arm Cortex-M4
@@ -652,6 +651,25 @@ SRCS += \
 #### 4. Build
 
 Build your project normally — STK will now be compiled together with it.
+
+### Alternative Method 2: Copy only STK kernel to your project using Git Sparse Clone method:
+
+> **Note:** With this method only `/stk` folder containing STK kernel files is cloned, examples, deps and anything else is omitted.
+
+#### 1. Clone the repo metadata without downloading any files (--no-checkout) and only get the latest commit (--depth 1)
+```git clone --depth 1 --filter=blob:none --no-checkout https://github.com/SuperTinyKernel-RTOS/stk.git```
+
+#### 2. Enter the folder
+```cd stk```
+
+#### 3. Initialize sparse-checkout
+```git sparse-checkout init --cone```
+
+#### 4. Tell Git which folder you actually want
+```git sparse-checkout set stk```
+
+#### 5. Checkout the files
+```git checkout```
 
 ---
 
