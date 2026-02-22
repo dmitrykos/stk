@@ -1,7 +1,7 @@
 ![Logo](docs/img/stk_logo_200px.png)
-# SuperTinyKernel (STK)
+# SuperTinyKernel™ (STK)
 
-**Minimalistic High-Performance C/C++ RTOS for Embedded Systems**
+**Lightweight High-Performance Deterministic C++ RTOS for Embedded Systems**
 
 ---
 
@@ -14,7 +14,7 @@
 
 ## Overview
 
-**SuperTinyKernel (STK)** is a high-performance, bare-metal RTOS designed for resource-constrained environments. By focusing on a preemptive and deterministic thread scheduler rather than peripheral abstraction (HAL), STK provides a lightweight yet robust foundation for multitasking embedded applications where timing and minimal overhead are critical.
+**SuperTinyKernel™ (STK)** is a high-performance, deterministic, bare-metal C++ RTOS designed for resource-constrained embedded systems. By focusing on a preemptive and deterministic thread scheduler rather than peripheral abstraction (HAL), STK provides a lightweight yet robust foundation for multitasking embedded applications where timing and minimal overhead are critical.
 
 STK is implemented in C++ with a clean **Object-Oriented Design** while remaining friendly to embedded developers:
 * No aggressive namespace usage
@@ -682,7 +682,7 @@ You may freely use it in projects of any type:
 
 ## 🚀 Professional Services & Commercial Licensing
 
-While **SuperTinyKernel (STK)** is provided under the permissive MIT license, we offer dedicated professional services for organizations integrating STK into production-grade, mission-critical, or regulated environments.
+While **SuperTinyKernel™ (STK)** is provided under the permissive MIT license, we offer dedicated professional services for organizations integrating STK into production-grade, mission-critical, or regulated environments.
 
 ### 🛡️ Legal & Compliance
 * **Warranty of Title:** Full intellectual property (IP) indemnification and provenance guarantees required by corporate legal departments.

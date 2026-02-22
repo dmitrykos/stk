@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # 
-#  SuperTinyKernel (STK): minimalistic C++ thread scheduling kernel for Embedded Systems.
+#  SuperTinyKernel(TM) (STK): Lightweight High-Performance Deterministic C++ RTOS for Embedded Systems.
 # 
-#  Source: http://github.com/dmitrykos/stk
+#  Source: https://github.com/SuperTinyKernel-RTOS
 # 
-#  Copyright (c) 2022-2026 Neutron Code Limited <stk@neutroncode.com>
+#  Copyright (c) 2022-2026 Neutron Code Limited <stk@neutroncode.com>. All Rights Reserved.
 #  License: MIT License, see LICENSE for a full text.
 # 
 
@@ -20,7 +20,7 @@ SHOW_IN_WEBBROWSER=false
 
 ShowHelp()
 {
-   echo "Generate Coverage HTML report with gcov/lcov."
+   echo "Generate STK Coverage HTML report with gcov/lcov."
    echo
    echo "Syntax: coverage [-h|s|b|o|w]"
    echo "options:"
@@ -68,7 +68,7 @@ CheckArgs
 # Configure
 cmake -S $SRC_DIR -B $BUILD_DIR -DCMAKE_BUILD_TYPE=Release -DBUILD_LIB=ON -DBUILD_TESTS=ON -DTEST_GENERIC=ON -DENABLE_COVERAGE=ON
 
-# Buildr
+# Build
 cmake --build $BUILD_DIR --config Release --parallel 4
 
 # Cleanup

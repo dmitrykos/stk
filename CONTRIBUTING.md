@@ -1,4 +1,4 @@
-## Contributions to SuperTinyKernel (STK)
+## Contributions to SuperTinyKernel™ (STK)
 
 STK aims to remain freely usable and free from copyright or licensing constraints. Because the core kernel must remain unencumbered, we maintain a structured approach to external contributions.
 
