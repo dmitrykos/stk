@@ -1241,15 +1241,15 @@ TEST(Kernel, SyncWait)
     kernel.AddTask(&task);
     kernel.Start();
 
-    mutex.Lock();
+    MutexMock::ScopedLock guard(mutex);
 
     IWaitObject *wo = IKernelService::GetInstance()->StartWaiting(&sobj, &mutex, 2);
 
     CHECK_EQUAL(GetTid(), wo->GetTid()); // expect the same thread id as WaitObject belongs to the caller's task
-    CHECK_TRUE_TEXT(wo != nullptr, "expect wait object in return after timeout");
-    CHECK_TRUE_TEXT(wo->IsTimeout(), "expect timeout");
-    CHECK_EQUAL_TEXT(2, g_SyncWaitRelaxCpuContext.counter, "expect 2 ticks after timeout");
-    CHECK_EQUAL_TEXT(true, mutex.m_locked, "expect locked mutex after StartWaiting return");
+    CHECK_TRUE(wo != nullptr); // expect wait object in return after timeout
+    CHECK_TRUE(wo->IsTimeout()); // expect timeout
+    CHECK_EQUAL(2, g_SyncWaitRelaxCpuContext.counter); // expect 2 ticks after timeout
+    CHECK_EQUAL(true, mutex.m_locked); // expect locked mutex after StartWaiting return
 }
 
 } // namespace stk

@@ -686,7 +686,7 @@ While **SuperTinyKernel (STK)** is provided under the permissive MIT license, we
 
 ### 🛡️ Legal & Compliance
 * **Warranty of Title:** Full intellectual property (IP) indemnification and provenance guarantees required by corporate legal departments.
-* **Safety-Critical Compliance:** Expert assistance in achieving **ISO 26262** (Automotive), **IEC 61508** (Industrial), or **DO-178C** (Aerospace) certification for STK-based systems.
+* **Safety-Critical Compliance:** Expert assistance in achieving **IEC 61508** (Industrial), **IEC 62304** (Medical), **ISO 26262** (Automotive), or **DO-178C** (Aerospace) certification for STK-based systems.
 * **Custom Licensing:** Tailored Enterprise License Agreements (ELA) for organizations with strict open-source procurement policies.
 * **Audit & Due Diligence:** Code audit and licensing assessment to satisfy corporate or regulatory requirements.
 
