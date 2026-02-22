@@ -47,8 +47,6 @@ jobs:
       run: |
         lcov --remove ${{ github.workspace }}/cov-build/coverage.info \
         '*/stk_sync_cv.h' \
-        '*/stk_sync_cs.h' \
-        '*/stk_sync_cv.h' \
         '*/stk_sync_event.h' \
         '*/stk_sync_mutex.h' \
         '*/stk_sync_pipe.h' \
