@@ -371,7 +371,8 @@ struct MutexMock : public IMutex
 
 struct SyncObjectMock : public ISyncObject
 {
-
+    void WakeOne() { ISyncObject::WakeOne(); }
+    void WakeAll() { ISyncObject::WakeAll(); }
 };
 
 } // namespace test

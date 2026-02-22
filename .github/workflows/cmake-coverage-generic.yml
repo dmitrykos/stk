@@ -2,9 +2,9 @@ name: Code Coverage - Generic
 
 on:
   push:
-    branches: [ "main", "sync", "port" ]
+    branches: [ "main" ]
   pull_request_target:
-    branches: [ "main", "sync", "port" ]
+    branches: [ "main" ]
   
 env:
   PASS_THRESHOLD: 100
