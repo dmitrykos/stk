@@ -29,12 +29,14 @@
     | **Semaphore**         | \c Signal()                                             |
     | **SpinLock**          | None                                                    |
     | **Mutex**             | None                                                    |
+    | **RWMutex**           | None                                                    |
     | **ConditionVariable** | \c NotifyOne(), \c NotifyAll(), \c Wait(NO_WAIT)        |
     | **Pipe**              | None                                                    |
 
     NOTE:
-    * **SpinLock**, **Mutex**: Ownership is tied to a Task ID (\a TId). Since ISRs lack a valid
-      Task ID context, Mutex operations are never safe in ISRs.
+    * **SpinLock**, **Mutex**, **RWMutex**: Ownership is tied to a Task ID (\a TId).
+      Since ISRs lack a valid Task ID context, and these primitives use internal Mutex 
+      logic for state protection, their operations are never safe in ISRs.
     * **Pipe** uses internal Mutexes for state protection and is therefore not suitable for direct use in ISRs.
     * **ConditionVariable::Notify** methods are safe as they only trigger internal wake-ups without
       blocking the caller.
@@ -55,5 +57,6 @@ namespace sync {
 #include "stk_sync_mutex.h"
 #include "stk_sync_semaphore.h"
 #include "stk_sync_pipe.h"
+#include "stk_sync_rwmutex.h"
 
 #endif /* STK_SYNC_H_ */

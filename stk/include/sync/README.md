@@ -51,6 +51,14 @@ A thread-safe, lock-free (for single producer/consumer), or mutex-protected FIFO
 - **Bulk Operations**: Optimized `ReadBulk` and `WriteBulk` using `memcpy` for high-throughput data like audio samples.
 - **Low-Power Aware**: Waiting tasks are suspended by the kernel.
 
+### 7. Reader-Writer Mutex (`sync::RWMutex`)
+A synchronization primitive that allows multiple concurrent readers or one exclusive writer.
+- **Writer Preference Policy**: Prevents writer starvation by blocking new readers when writers are waiting.
+- **Shared Access**: Multiple tasks can acquire `ReadLock()` simultaneously for read-only operations.
+- **Exclusive Access**: `Lock()` provides exclusive write access; blocks all other readers and writers.
+- **Timeout Support**: `TimedReadLock()` and `TimedLock()` with configurable timeouts.
+- **Low-Power Aware**: Waiting tasks are suspended by the kernel.
+
 ---
 
 ## ISR Safety
