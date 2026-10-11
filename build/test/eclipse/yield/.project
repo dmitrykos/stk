@@ -36,6 +36,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/test_yield.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/yield/test_yield.cpp</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -49,11 +54,6 @@
 			<name>deps/test/stktest_context.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
-		</link>
-		<link>
-			<name>deps/test/test_yield.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/yield/test_yield.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch</name>
@@ -156,11 +156,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_event.h</locationURI>
 		</link>
 		<link>
-			<name>deps/stk/include/sync/stk_sync_yield.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_yield.h</locationURI>
-		</link>
-		<link>
 			<name>deps/stk/include/sync/stk_sync_pipe.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_pipe.h</locationURI>
@@ -179,6 +174,11 @@
 			<name>deps/stk/include/sync/stk_sync_spinlock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_spinlock.h</locationURI>
+		</link>
+		<link>
+			<name>deps/stk/include/sync/stk_sync_yield.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_yield.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/time/stk_time.h</name>

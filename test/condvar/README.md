@@ -14,7 +14,7 @@ Source: `test/condvar/test_condvar.cpp`
 
 `ConditionVariable` follows the **Monitor pattern**: `Wait()` atomically releases the
 associated `Mutex` and suspends the calling task. When the task wakes (via signal or
-timeout) the `Mutex` is re-acquired before `Wait()` returns. All operations must be
+timeout or cancellation) the `Mutex` is re-acquired before `Wait()` returns. All operations must be
 performed with the mutex held by the caller, except `NotifyOne()` and `NotifyAll()`
 which are ISR-safe.
 
@@ -28,7 +28,8 @@ stk::sync::ConditionVariable g_Cond;
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Wait` | `bool Wait(IMutex &mutex, Timeout timeout = WAIT_INFINITE)` | Atomically releases `mutex` and blocks the calling task. Re-acquires `mutex` before returning. Returns `true` if signaled, `false` on timeout. Returns `false` immediately without blocking if `timeout == NO_WAIT`. ISR-unsafe unless `timeout == NO_WAIT`. |
+| `WaitEx` | `EWaitResult WaitEx(IMutex &mutex, Timeout timeout = WAIT_INFINITE)` | Same as `Wait()`, but preserves the full outcome: `WAIT_RESULT_SIGNAL` (notified), `WAIT_RESULT_TIMEOUT` (timeout expired, or `NO_WAIT`), `WAIT_RESULT_CANCELED` (wait cancelled via `IKernel::CancelTaskWait()` or `SleepCancel()`). `mutex` is re-acquired in all three cases. ISR-safe only with `NO_WAIT`. |
+| `Wait` | `bool Wait(IMutex &mutex, Timeout timeout = WAIT_INFINITE)` | Atomically releases `mutex` and blocks the calling task. Re-acquires `mutex` before returning, whatever ended the wait. Returns `true` if signaled, `false` otherwise (timeout, cancellation, or `NO_WAIT`); use `WaitEx()` to tell these apart. Returns `false` immediately without blocking if `timeout == NO_WAIT`. ISR-unsafe unless `timeout == NO_WAIT`. |
 | `NotifyOne` | `void NotifyOne()` | Wakes one waiting task in FIFO arrival order. No-op if no tasks are waiting. ISR-safe. |
 | `NotifyAll` | `void NotifyAll()` | Wakes all waiting tasks simultaneously. No-op if no tasks are waiting. ISR-safe. |
 | `~ConditionVariable` | (destructor) | Asserts `m_wait_list.IsEmpty()` in debug builds. Destroying a CV with active waiters is a logic error. |
@@ -55,10 +56,18 @@ g_Mtx.Unlock();
 - `Wait()` must be called with the mutex **locked** by the calling task.
 - The mutex is released **atomically** with task suspension — no window exists where
   the mutex is held and the task is not yet blocked.
-- The mutex is always re-acquired before `Wait()` returns, on both the signaled path
-  and the timeout path.
+- The mutex is always re-acquired before `Wait()` returns, on the signaled, timeout and
+  cancelled paths.
 - `Wait(mutex, NO_WAIT)` returns `false` immediately; the implementation short-circuits
   before calling `StartWaiting()`.
+- A cancelled wait (`WAIT_RESULT_CANCELED`) is distinct from a timeout, re-acquires the
+  mutex before `WaitEx()` returns, and leaves no stale entry in the wait list.
+- Mutex re-acquisition is not cancelable: `Mutex::Lock()` absorbs a cancel and retries.
+  If a notification reaches a waiter before a cancel does, the signal wins
+  (`WAIT_RESULT_SIGNAL`) and the cancel, which then lands while the waiter re-locks the
+  mutex, is a no-op.
+- A `ConditionVariable` keeps no signaled state: a notification with no waiter is lost,
+  and a cancel never consumes one.
 - Destroying a `ConditionVariable` while tasks are still waiting is a logic error;
   an assertion fires in debug builds.
 
@@ -78,14 +87,31 @@ Both `g_TestMutex` and `g_TestCond` are **reconstructed in-place** via placement
 inside `ResetTestState()` before each test, ensuring no wait-list or ownership state
 leaks between runs.
 
+The cancellation tests (9–19) additionally use a small amount of shared state, reset by
+`ResetTestState()`:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task (and its `TId`) whose wait is cancelled; published by task 1 right before it blocks |
+| `g_VictimResult[2]` | `EWaitResult` observed by task 1 / task 2 (`-100` = not set) |
+| `g_VictimElapsed[2]` | Milliseconds spent inside `WaitEx()` by task 1 / task 2 |
+| `g_VictimOwnsMutex[2]` | `1` if task 1 / task 2 owned `g_TestMutex` when `WaitEx()` returned |
+| `g_VictimSleepElapsed` | Milliseconds task 1 spends in a `Sleep(60)` after its wait was cancelled |
+| `g_CancelParam` | Scenario selector (see below); a global rather than a constructor argument because tasks 0–2 are `static` and would keep the value of the first case |
+
+The helper `CancelVictim(use_sleep_cancel)` cancels the victim either with
+`g_Kernel.CancelTaskWait(g_Victim)` or with `stk::SleepCancel(g_VictimTid)`.
+
 ---
 
 ## Platform Notes
 
-On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link five
-distinct task class templates simultaneously. Tests 1–7 are skipped on M0 and only
-`StressTest` (test 8) runs. `StressTest` uses a single task class template instantiated
-five times, which fits within the available memory.
+On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link all nine
+distinct task class templates simultaneously. Tests 1–7 and the cancellation tests 9–19
+are skipped on M0 and only `StressTest` (test 8) runs. `StressTest` uses a single task
+class template instantiated five times, which fits within the available memory.
+`CancelWaitTask` adds one more template (shared by all eleven cancellation tests) to the
+static footprint.
 
 Stack sizes differ between platforms because the `sync::Mutex` + `ConditionVariable` +
 `IKernelService::StartWaiting()` call chain is deeper than a bare `SpinLock` acquire:
@@ -210,6 +236,154 @@ Minimum guaranteed count: producer iterations only = `5 × ⌈100/2⌉` = `5 × 
 
 ---
 
+### Cancellation tests (Tests 9–19)
+
+Tests 9–19 verify that a wait on a `ConditionVariable` can be cancelled and that nothing
+is left behind: no stale wait entry, and the mutex always back in the victim's hands. All
+use the same task class (`CancelWaitTask`) and **tasks 0–2 only** (`"CancelWait*"` names
+are excluded from the extended task set). The cancel is issued by task 0 after
+`Sleep(60)`; task 1 is the *victim* that locks the mutex and blocks in `WaitEx()` after
+`_STK_CV_TEST_SHORT_SLEEP` ticks; task 2 is a second waiter used only by the two-waiters
+tests. Tests 9–14 cancel with `IKernel::CancelTaskWait()`; tests 15–19 repeat the key
+scenarios with `stk::SleepCancel()`. The scenario is selected by `param` (`1..6`);
+adding `100` selects `SleepCancel`. In every scenario the victim must own the mutex when
+`WaitEx()` returns, regardless of how the wait ended.
+
+`StressTest` keeps the number 8 but runs last in `main()`, after the cancellation tests.
+
+> **Safety net:** if a cancel does not work, the victim would stay blocked forever and the
+> kernel would never stop. On failure task 0 therefore calls `NotifyAll()` twice to release
+> any stuck waiter, so a broken cancel is reported as a test failure rather than a hang.
+
+> **Kernel requirement:** tests 15–19 depend on `SleepCancel()` also cancelling a wait on a
+> sync object (`OnTaskSleepCancel()` routes through `WaitObject::Cancel()`). Against a kernel
+> where `SleepCancel()` only wakes the task, they fail by design: that is the stale wait
+> entry regression they exist to catch.
+
+---
+
+### Test 9 — `CancelWait_Infinite`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `1` &nbsp;|&nbsp; **Runs on M0: no**
+
+Task 1 locks the mutex and calls `WaitEx(WAIT_INFINITE)` at about tick 10. Task 0 cancels
+it at about tick 60 via `CancelTaskWait()` and waits `2 × _STK_CV_TEST_SHORT_SLEEP` for
+the victim to record its result.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, elapsed in `[35, 75]` ms, victim owns the mutex
+
+---
+
+### Test 10 — `CancelWait_NotTimeout`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `2`
+
+Same as test 9 but task 1 waits with a finite 300-tick timeout. Verifies that a cancel is
+reported as `WAIT_RESULT_CANCELED`, not `WAIT_RESULT_TIMEOUT`, and that the wait really
+ends early instead of running to its deadline.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, elapsed `< 150` ms, victim owns the mutex
+
+---
+
+### Test 11 — `CancelWait_NoStaleWaiter`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `3`
+
+After the cancel, task 1 releases the mutex and starts a `Sleep(60)`, which it measures.
+Task 0 then calls `NotifyAll()` with nobody waiting. A condition variable keeps no state,
+so there is nothing to poll afterwards; instead, a ghost wait entry left behind by the
+cancel would be woken by that notification and cut the victim's sleep short.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, victim owns the mutex, victim sleep `>= 55` ms
+
+---
+
+### Test 12 — `CancelWait_MutexHeld`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `4`
+
+Verifies that a cancelled waiter still goes through mutex re-acquisition. Task 0 locks the
+mutex (free, because the victim released it inside `WaitEx()`), cancels the victim, then
+sleeps `_STK_CV_TEST_SHORT_SLEEP` ticks while still holding it. The victim has been woken
+as cancelled but must stay blocked re-acquiring the mutex: its result is still unset and
+`GetOwner()` still names task 0. Task 0 then calls `Unlock()`, which hands the mutex over
+to the victim.
+
+**Pass condition:** victim still blocked while task 0 held the mutex, `GetOwner()` was task 0,
+then `result == WAIT_RESULT_CANCELED` and victim owns the mutex
+
+---
+
+### Test 13 — `CancelWait_TwoWaiters`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `5`
+
+Task 1 blocks first, task 2 blocks behind it (`Sleep(20)` before locking and calling
+`WaitEx(WAIT_INFINITE)`). Task 0 cancels only task 1, then locks the mutex and calls
+`NotifyOne()`. The notification must reach task 2, which proves the wait list stayed
+intact after the removal of its first entry and that no ghost of task 1 absorbed it.
+
+**Pass condition:** task 1 `WAIT_RESULT_CANCELED`, task 2 `WAIT_RESULT_SIGNAL`, both own the mutex on return
+
+---
+
+### Test 14 — `CancelWait_SignalWins`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `6`
+
+Task 0 locks the mutex, calls `NotifyOne()` and immediately cancels the victim, then
+unlocks. The victim is already notified and unlinked from the wait list when the cancel
+arrives; it is only blocked re-locking the mutex held by task 0. The cancel must be
+absorbed (`Mutex::Lock()` is not cancelable) and the result must stay `WAIT_RESULT_SIGNAL`.
+
+**Pass condition:** `result == WAIT_RESULT_SIGNAL` and victim owns the mutex
+
+---
+
+### Test 15 — `CancelWait_SleepCancel`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `101`
+
+Test 9 using `stk::SleepCancel(tid)` instead of `CancelTaskWait()`.
+
+**Pass condition:** same as test 9
+
+---
+
+### Test 16 — `CancelWait_SleepCancelNoStale`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `103`
+
+Test 11 using `SleepCancel()`. This is the primary regression test for the
+`OnTaskSleepCancel()` fix: without it the `WaitObject` stays linked in the condition
+variable's wait list after the task is woken.
+
+**Pass condition:** same as test 11
+
+---
+
+### Test 17 — `CancelWait_SleepCancelMutex`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `104`
+
+Test 12 using `SleepCancel()`.
+
+**Pass condition:** same as test 12
+
+---
+
+### Test 18 — `CancelWait_SleepCancelTwo`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `105`
+
+Test 13 using `SleepCancel()`.
+
+**Pass condition:** same as test 13
+
+---
+
+### Test 19 — `CancelWait_SleepCancelSignal`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `106`
+
+Test 14 using `SleepCancel()`. The cancel hits a task that is no longer waiting on the
+condition variable but is blocked on the mutex, so this also checks that the cancel is
+absorbed there without disturbing the already-delivered notification.
+
+**Pass condition:** same as test 14
+
+---
+
 ## Summary Table
 
 | # | Test | Tasks | Pass condition | What it verifies |
@@ -222,3 +396,14 @@ Minimum guaranteed count: producer iterations only = `5 × ⌈100/2⌉` = `5 × 
 | 6 | `NotifyOneOrderTask` | 0–4 | order `[1,2,3,4]`, `counter == 4` | `NotifyOne()` releases waiters in FIFO arrival order |
 | 7 | `NoWaitTimeoutTask` | 0–2 | `counter == 2` | `Wait(NO_WAIT)` returns `false` immediately without blocking; CV functional afterwards |
 | 8 | `StressTestTask` | 0–4 | `counter >= 250` | No corruption under full five-task contention with alternating producer/consumer roles; runs on all platforms |
+| 9 | `CancelWait_Infinite` | 0–2 | `CANCELED`, elapsed `[35, 75]` ms, mutex owned | Cancelling an infinite `WaitEx()` via `CancelTaskWait()` returns `WAIT_RESULT_CANCELED` with the mutex re-acquired |
+| 10 | `CancelWait_NotTimeout` | 0–2 | `CANCELED`, elapsed `< 150` ms, mutex owned | A cancel is distinct from a timeout and ends a finite wait early |
+| 11 | `CancelWait_NoStaleWaiter` | 0–2 | `CANCELED`, mutex owned, sleep `>= 55` ms | Cancel leaves no stale wait entry for a later `NotifyAll()` to wake |
+| 12 | `CancelWait_MutexHeld` | 0–2 | blocked while mutex held, then `CANCELED`, mutex owned | A cancelled waiter still re-acquires the mutex and blocks until it is released |
+| 13 | `CancelWait_TwoWaiters` | 0–2 | first `CANCELED`, second `SIGNAL`, both own mutex | Wait list stays intact; the notification reaches the remaining waiter |
+| 14 | `CancelWait_SignalWins` | 0–2 | `SIGNAL`, mutex owned | A notification delivered before the cancel wins; the cancel is absorbed during mutex re-lock |
+| 15 | `CancelWait_SleepCancel` | 0–2 | as test 9 | `SleepCancel()` cancels a sync-object wait |
+| 16 | `CancelWait_SleepCancelNoStale` | 0–2 | as test 11 | `SleepCancel()` leaves no stale wait entry (regression for `OnTaskSleepCancel()`) |
+| 17 | `CancelWait_SleepCancelMutex` | 0–2 | as test 12 | `SleepCancel()` still lets the waiter re-acquire the mutex |
+| 18 | `CancelWait_SleepCancelTwo` | 0–2 | as test 13 | `SleepCancel()` keeps the wait list intact |
+| 19 | `CancelWait_SleepCancelSignal` | 0–2 | as test 14 | `SleepCancel()` after a notification is a harmless no-op |

@@ -58,6 +58,28 @@ static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_EVT_TEST_TASKS_MAX, SwitchStrat
 // Test event (re-constructed per test via ResetTestState)
 static sync::Event g_TestEvent;
 
+// Cancellation test state (see CancelWaitTask)
+static ITask * volatile g_Victim                 = nullptr;     // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid              = TID_NONE;    // same, as TId (for SleepCancel)
+static volatile int32_t g_VictimResult[2]        = {-100, -100}; // EWaitResult of task 1 / task 2 (-100 = not set)
+static volatile int64_t g_VictimElapsed[2]       = {0, 0};      // ms spent in WaitEx() by task 1 / task 2
+static volatile int64_t g_VictimSleepElapsed     = 0;           // ms spent in Sleep() by task 1 after its wait ended
+
+// Scenario selector of CancelWaitTask. It is a global, not a constructor argument, because RunTest() declares
+// tasks 0-2 as 'static': a static local is constructed only once per template instantiation (on the first
+// RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first case.
+// Set by main() before each RunTest() call.
+static volatile int32_t g_CancelParam            = 0;
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_Kernel.CancelTaskWait(g_Victim);
+}
+
 /*! \class AutoResetBasicTask
     \brief Tests auto-reset event: Set() wakes exactly one waiting task then resets.
     \note  Verifies that after Set() the event returns to non-signaled state so that
@@ -483,6 +505,202 @@ private:
     }
 };
 
+static const int32_t CW_INFINITE        = 1;
+static const int32_t CW_NOT_TIMEOUT     = 2;
+static const int32_t CW_NO_STALE_WAITER = 3;
+static const int32_t CW_MANUAL_RESET    = 4;
+static const int32_t CW_TWO_WAITERS     = 5;
+static const int32_t CW_SIGNAL_WINS     = 6;
+static const int32_t CW_VIA_SLEEPCANCEL = 100;
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of Event waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked in WaitEx()), task 2 is a
+           second waiter used by the two-waiters scenario. The scenario is selected by g_CancelParam:
+           1 = cancel an infinite wait, 2 = cancel is not reported as a timeout, 3 = cancel leaves
+           no stale waiter behind (auto-reset), 4 = cancel does not change a manual-reset event,
+           5 = cancelling one of two waiters leaves the other intact, 6 = a signal that arrived
+           first wins over a late cancel. Adding 100 to g_CancelParam cancels via stk::SleepCancel()
+           instead of IKernel::CancelTaskWait().
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_EVT_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+    }
+
+    // Task 1: block on the event, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout timeout = (m_scenario == CW_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_TestEvent.WaitEx(timeout);
+
+        g_VictimElapsed[0] = GetTimeNowMs() - start;
+        g_VictimResult[0]  = static_cast<int32_t>(r);
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+    }
+
+    // Task 2: second waiter, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_EVT_TEST_SHORT_SLEEP); // block after task 1
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_TestEvent.WaitEx(WAIT_INFINITE);
+
+        g_VictimElapsed[1] = GetTimeNowMs() - start;
+        g_VictimResult[1]  = static_cast<int32_t>(r);
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        stk::Sleep(60); // task 1 (and task 2) are blocked in WaitEx() by now
+
+        if (m_scenario == CW_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75);
+        }
+        else
+        if (m_scenario == CW_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as CANCELED, not TIMEOUT
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimElapsed[0] < 150);
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            const bool signaled_changed = g_TestEvent.Set(); // nobody waits: state must become signaled
+            const bool poll1            = g_TestEvent.TryWait(); // consumes the signal (auto-reset)
+            const bool poll2            = g_TestEvent.TryWait(); // nothing left
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("cancel no stale waiter: result=%d set=%d poll1=%d poll2=%d victim_sleep=%d ms\n",
+                (int)g_VictimResult[0], (int)signaled_changed, (int)poll1, (int)poll2, (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   signaled_changed && poll1 && !poll2 &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_MANUAL_RESET)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP);
+
+            const bool poll_after_cancel = g_TestEvent.TryWait();   // the cancel must not signal the event
+            const bool set_changed       = g_TestEvent.Set();
+            const bool poll1             = g_TestEvent.TryWait();   // manual-reset: stays signaled
+            const bool poll2             = g_TestEvent.TryWait();
+            const bool reset_changed     = g_TestEvent.Reset();
+            const bool poll3             = g_TestEvent.TryWait();
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   !poll_after_cancel && set_changed && poll1 && poll2 && reset_changed && !poll3;
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);              // cancel the first waiter only
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP);
+
+            const bool set_changed = g_TestEvent.Set();    // must wake the second waiter (auto-reset)
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP * 2);
+
+            const bool leftover = g_TestEvent.TryWait();   // the second waiter consumed the signal
+
+            printf("cancel two waiters: first=%d second=%d set=%d leftover=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1], (int)set_changed, (int)leftover);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimResult[1] == WAIT_RESULT_SIGNAL) &&
+                   set_changed && !leftover;
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // back to back, no scheduling point in between: the waiter is already signaled and removed
+            // from the wait list when the cancel arrives, so the cancel must be a no-op
+            g_TestEvent.Set();
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP * 2);
+
+            const bool leftover = g_TestEvent.TryWait(); // auto-reset was applied for the woken waiter
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_SIGNAL) && !leftover;
+        }
+
+        // Safety net: if the cancel did not work a waiter is still blocked forever and the kernel would
+        // never stop, release any such waiter so that the test fails instead of hanging.
+        if (!pass)
+        {
+            g_TestEvent.Set();
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP);
+            g_TestEvent.Set();
+            stk::Sleep(_STK_EVT_TEST_SHORT_SLEEP);
+        }
+
+        printf("cancel wait (scenario=%d, via %s): result[0]=%d elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (int)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
 // Helper function to reset test state
 static void ResetTestState(bool manual_reset = false, bool initial_state = false)
 {
@@ -493,6 +711,16 @@ static void ResetTestState(bool manual_reset = false, bool initial_state = false
 
     for (int32_t i = 0; i < _STK_EVT_TEST_TASKS_MAX; ++i)
         g_AcquisitionOrder[i] = 0;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]  = -100;
+        g_VictimElapsed[i] = 0;
+    }
 
     // Re-construct the event in-place with the requested mode and initial state
     g_TestEvent.~Event();
@@ -508,7 +736,8 @@ static bool NeedsExtendedTasks(const char *test_name)
     return  (strcmp(test_name, "InitialState")  != 0) &&
             (strcmp(test_name, "TimeoutWait")   != 0) &&
             (strcmp(test_name, "TryWait")       != 0) &&
-            (strcmp(test_name, "ResetManual")   != 0);
+            (strcmp(test_name, "ResetManual")   != 0) &&
+            (strncmp(test_name, "CancelWait", 10) != 0); // cancel tests use tasks 0-2 only
 }
 
 /*! \fn    RunTest
@@ -620,6 +849,37 @@ int main(int argc, char **argv)
         total_failures++;
     else
         total_success++;
+
+    // Tests 9-18: cancelability of Event waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        struct CancelCase { const char *name; int32_t param; bool manual_reset; };
+
+        static const CancelCase cases[] =
+        {
+            { "CancelWait_Infinite",            CW_INFINITE,                             false },
+            { "CancelWait_NotTimeout",          CW_NOT_TIMEOUT,                          false },
+            { "CancelWait_NoStaleWaiter",       CW_NO_STALE_WAITER,                      false },
+            { "CancelWait_ManualReset",         CW_MANUAL_RESET,                         true  },
+            { "CancelWait_TwoWaiters",          CW_TWO_WAITERS,                          false },
+            { "CancelWait_SignalWins",          CW_SIGNAL_WINS,                          false },
+            { "CancelWait_SleepCancel",         CW_VIA_SLEEPCANCEL + CW_INFINITE,        false },
+            { "CancelWait_SleepCancelNoStale",  CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER, false },
+            { "CancelWait_SleepCancelTwo",      CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS,     false },
+            { "CancelWait_SleepCancelSignal",   CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS,     false }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param, cases[i].manual_reset) 
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
 
 #endif // __ARM_ARCH_6M__
 

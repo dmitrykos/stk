@@ -29,8 +29,9 @@ stk::sync::RWMutex g_SettingsLock;  // zero readers, zero writers initially
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `ReadLock` | `void ReadLock()` | Acquires shared read lock. Blocks if a writer is active or if writers are waiting (writer preference). ISR-unsafe. |
-| `TimedReadLock` | `bool TimedReadLock(Timeout timeout)` | Acquires shared read lock with timeout. Returns `true` if acquired, `false` on timeout. Blocks if a writer is active or waiting. ISR-unsafe. |
+| `ReadLock` | `void ReadLock()` | Acquires shared read lock. Blocks if a writer is active or if writers are waiting (writer preference). **Not cancelable:** a cancellation (`IKernel::CancelTaskWait()` / `SleepCancel()`) is absorbed and the wait retried; use `TimedReadLockEx()` to observe it. ISR-unsafe. |
+| `TimedReadLockEx` | `EWaitResult TimedReadLockEx(Timeout timeout)` | Same as `TimedReadLock()`, but preserves the full outcome: `WAIT_RESULT_SIGNAL` (lock acquired), `WAIT_RESULT_TIMEOUT` (timeout expired, or `NO_WAIT` on a busy lock), `WAIT_RESULT_CANCELED` (wait cancelled via `IKernel::CancelTaskWait()` or `SleepCancel()`; the lock is **not** taken and the reader count is unchanged), `WAIT_RESULT_FAIL` (kernel rejected the wait). ISR-safe only with `NO_WAIT`. |
+| `TimedReadLock` | `bool TimedReadLock(Timeout timeout)` | Acquires shared read lock with timeout. Returns `true` if acquired, `false` otherwise (timeout, cancellation, or `NO_WAIT` on a busy lock); use `TimedReadLockEx()` to tell these apart. Blocks if a writer is active or waiting. ISR-unsafe. |
 | `TryReadLock` | `bool TryReadLock()` | Non-blocking attempt to acquire read lock. Returns `true` if acquired immediately, `false` if a writer is active or waiting. Equivalent to `TimedReadLock(NO_WAIT)`. ISR-unsafe. |
 | `ReadUnlock` | `void ReadUnlock()` | Releases shared read lock. Decrements reader count. If this was the last reader, wakes one waiting writer via `m_cv_writers.NotifyOne()`. ISR-unsafe. |
 
@@ -38,8 +39,9 @@ stk::sync::RWMutex g_SettingsLock;  // zero readers, zero writers initially
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Lock` | `void Lock()` | Acquires exclusive write lock. Blocks until all active readers have released and no other writer is active. ISR-unsafe. Implements `IMutex` interface. |
-| `TimedLock` | `bool TimedLock(Timeout timeout)` | Acquires exclusive write lock with timeout. Returns `true` if acquired, `false` on timeout. Blocks until readers drain and no writer is active. ISR-unsafe. |
+| `Lock` | `void Lock()` | Acquires exclusive write lock. Blocks until all active readers have released and no other writer is active. **Not cancelable:** a cancellation is absorbed and the wait retried (this also keeps the mutex re-acquisition at the end of `ConditionVariable::Wait()` reliable); use `TimedLockEx()` to observe it. ISR-unsafe. Implements `IMutex` interface. |
+| `TimedLockEx` | `EWaitResult TimedLockEx(Timeout timeout)` | Same as `TimedLock()`, but preserves the full outcome (`WAIT_RESULT_SIGNAL`, `WAIT_RESULT_TIMEOUT`, `WAIT_RESULT_CANCELED`, `WAIT_RESULT_FAIL`, as for `TimedReadLockEx()`). On any result other than `SIGNAL` the writer withdraws from the waiting-writers queue (see Cancellation behavior). ISR-safe only with `NO_WAIT`. |
+| `TimedLock` | `bool TimedLock(Timeout timeout)` | Acquires exclusive write lock with timeout. Returns `true` if acquired, `false` otherwise (timeout, cancellation, or `NO_WAIT` on a busy lock); use `TimedLockEx()` to tell these apart. Blocks until readers drain and no writer is active. ISR-unsafe. |
 | `TryLock` | `bool TryLock()` | Non-blocking attempt to acquire write lock. Returns `true` if acquired immediately (no readers, no active writer), `false` otherwise. Equivalent to `TimedLock(NO_WAIT)`. ISR-unsafe. |
 | `Unlock` | `void Unlock()` | Releases exclusive write lock. Wakes one waiting writer if any exist (`m_cv_writers.NotifyOne()`), otherwise wakes all waiting readers (`m_cv_readers.NotifyAll()`). ISR-unsafe. Implements `IMutex` interface. |
 
@@ -47,8 +49,8 @@ stk::sync::RWMutex g_SettingsLock;  // zero readers, zero writers initially
 
 | Class | Usage | Description |
 |-------|-------|-------------|
-| `ScopedTimedReadMutex` | `ScopedTimedReadMutex guard(rw, timeout)` | RAII wrapper for `TimedReadLock()`. Constructor attempts acquisition; destructor calls `ReadUnlock()` if lock was acquired. Provides `IsLocked()` to check success. |
-| `ScopedTimedLock` | `ScopedTimedLock guard(rw, timeout)` | RAII wrapper for `TimedLock()`. Constructor attempts acquisition; destructor calls `Unlock()` if lock was acquired. Provides `IsLocked()` to check success. |
+| `ScopedTimedReadMutex` | `ScopedTimedReadMutex guard(rw, timeout)` | RAII wrapper for `TimedReadLock()`. Constructor attempts acquisition; destructor calls `ReadUnlock()` if lock was acquired. Provides `IsLocked()` to check success and `GetResult()` for the full `EWaitResult`. |
+| `ScopedTimedLock` | `ScopedTimedLock guard(rw, timeout)` | RAII wrapper for `TimedLock()`. Constructor attempts acquisition; destructor calls `Unlock()` if lock was acquired. Provides `IsLocked()` to check success and `GetResult()` for the full `EWaitResult`. |
 
 **Key invariants:**
 
@@ -63,6 +65,16 @@ stk::sync::RWMutex g_SettingsLock;  // zero readers, zero writers initially
 **Blocking behavior:**
 - `ReadLock()` / `TimedReadLock()` loop on `m_cv_readers.Wait()` while `m_writer_active || m_writers_waiting > 0`.
 - `Lock()` / `TimedLock()` increment `m_writers_waiting`, loop on `m_cv_writers.Wait()` while `m_writer_active || m_readers > 0`, then decrement `m_writers_waiting` and set `m_writer_active = true`.
+
+**Cancellation behavior** (`WAIT_RESULT_CANCELED`, via `IKernel::CancelTaskWait()` or `SleepCancel()`):
+- A cancelled `TimedReadLockEx()` leaves no trace: the lock is not taken and `m_readers` is not incremented.
+- A cancelled `TimedLockEx()` withdraws from the waiting-writers queue (`m_writers_waiting` is decremented). Since waiting writers block new readers, the withdrawal also repairs what that preference caused:
+  - if no writer is active and none is left waiting, **all** blocked readers are woken (`m_cv_readers.NotifyAll()`); otherwise they would sleep until their own timeout, or forever with `WAIT_INFINITE`;
+  - if other writers are still waiting and no reader is active, the wake is passed on to the next writer (`m_cv_writers.NotifyOne()`), because the withdrawing writer may have consumed a notification meant for it;
+  - if readers are still active nothing is needed: the last `ReadUnlock()` wakes the next writer.
+- The void `ReadLock()` and `Lock()` are not cancelable: they absorb a cancel and retry, and only return with the lock held.
+- If a release reaches a waiter before a cancel does, the signal wins: the waiter is granted the lock (`WAIT_RESULT_SIGNAL`) and the cancel is a no-op.
+- Cancellation is distinct from a timeout: `WaitEx()` underneath reports `WAIT_RESULT_CANCELED`, not `WAIT_RESULT_TIMEOUT`.
 
 ---
 
@@ -80,11 +92,22 @@ stk::sync::RWMutex g_SettingsLock;  // zero readers, zero writers initially
 
 All tests add all five tasks unconditionally — there is no `NeedsExtendedTasks()` gating.
 
+The cancellation tests (11–24) additionally use a small amount of shared state, reset by `ResetTestState()`:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task (and its `TId`) whose wait is cancelled; published by task 1 right before it blocks |
+| `g_VictimResult[2]` | `EWaitResult` observed by task 1 (victim) / task 3 (second waiter); `-100` = not set |
+| `g_VictimElapsed[2]` | Milliseconds task 1 / task 3 spent acquiring the lock |
+| `g_CancelParam` | Scenario selector (see below); a global rather than a constructor argument because tasks 0–2 are `static` and would keep the value of the first case |
+
+The helper `CancelVictim(use_sleep_cancel)` cancels the victim either with `g_Kernel.CancelTaskWait(g_Victim)` or with `stk::SleepCancel(g_VictimTid)`. The helper `IsLockPristine()` checks that the lock ended up free with consistent counters: `TryReadLock()` must succeed (a stale waiting writer would block it through writer preference) and so must `TryLock()` (a stale reader or active writer would block it).
+
 ---
 
 ## Platform Notes
 
-On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link ten distinct task class templates simultaneously. Tests 1–9 are skipped on M0 and only `StressTest` (test 10) runs, under `#ifndef __ARM_ARCH_6M__`.
+On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link all eleven distinct task class templates simultaneously. Tests 1–9 and the cancellation tests 11–24 are skipped on M0 and only `StressTest` (test 10) runs, under `#ifndef __ARM_ARCH_6M__`. `CancelWaitTask` is one more template, shared by all fourteen cancellation tests.
 
 `StressTest` runs on M0 because it uses a single task class template (`StressTestTask`) instantiated for all five task slots, fitting within the available memory.
 
@@ -200,6 +223,153 @@ All five tasks alternate between reader and writer roles by iteration index. Eve
 
 ---
 
+### Cancellation tests (Tests 11–24)
+
+Tests 11–24 verify that a blocked `RWMutex` acquisition can be cancelled, that the internal counters (`m_readers`, `m_writers_waiting`) stay consistent, and that nothing is left blocked behind a cancelled waiter. All use the same task class (`CancelWaitTask`) and **tasks 0–3** (task 4 is added like in every other test but returns immediately). The scenario is selected by `param` (`1..9`); adding `100` selects `stk::SleepCancel()` instead of `IKernel::CancelTaskWait()`. Tests 11–19 cancel with `CancelTaskWait()`; tests 20–24 repeat the key scenarios with `SleepCancel()`.
+
+Common timeline (ticks; deviations are noted per test):
+
+| Task | Role | Timeline |
+|------|------|----------|
+| 0 | canceller / checker | cancels at ~60; snapshot at ~80 (holder still owns the lock); final check at ~200 (`IsLockPristine()`) |
+| 1 | victim | locks at ~10 with `TimedLockEx()` / `TimedReadLockEx()` (or void `Lock()` / `ReadLock()`) and records result and elapsed time; releases the lock only if it was acquired |
+| 2 | holder | takes the lock at 0 (read or write, depending on the test) and releases it at ~150 |
+| 3 | second waiter | writer or reader queued at ~5 or ~20 depending on the test; records result and elapsed time |
+
+`StressTest` keeps the number 10 but runs last in `main()`, after the cancellation tests.
+
+> **Safety net:** if a cancel does not work, a waiter could stay blocked forever (for instance readers that are never woken after the withdrawal of a waiting writer) and the kernel would never stop. On failure task 0 therefore takes and drops the write lock twice with `TimedLock()` + `Unlock()`, which wakes all waiting readers (or the next writer), so a broken cancel is reported as a test failure rather than a hang.
+
+> **Kernel requirement:** tests 20–24 depend on `SleepCancel()` also cancelling a wait on a sync object (`OnTaskSleepCancel()` routes through `WaitObject::Cancel()`). Against a kernel where `SleepCancel()` only wakes the task, they fail by design: that is the stale wait entry regression they exist to catch.
+
+---
+
+### Test 11 — `CancelWait_WriterInfinite`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `1` &nbsp;|&nbsp; **Runs on M0: no**
+
+Task 2 holds a read lock. Task 1 calls `TimedLockEx(WAIT_INFINITE)` at about tick 10 and blocks behind the reader (`m_writers_waiting == 1`). Task 0 cancels it at about tick 60 via `CancelTaskWait()`. After the holder released, `IsLockPristine()` confirms the writer withdrew from the queue: `TryReadLock()` would fail forever if `m_writers_waiting` had leaked.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, elapsed in `[35, 75]` ms, lock pristine
+
+---
+
+### Test 12 — `CancelWait_WriterNotTimeout`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `2`
+
+Same as test 11 but task 1 waits with a finite 300-tick timeout. Verifies that a cancel is reported as `WAIT_RESULT_CANCELED`, not `WAIT_RESULT_TIMEOUT`, and that the wait really ends early instead of running to its deadline.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, elapsed `< 150` ms, lock pristine
+
+---
+
+### Test 13 — `CancelWait_ReaderInfinite`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `3`
+
+Task 2 holds the **write** lock. Task 1 calls `TimedReadLockEx(WAIT_INFINITE)` and blocks behind the writer. Task 0 cancels it at about tick 60. After the holder released, `IsLockPristine()` confirms the cancelled reader was not counted: `TryLock()` would fail if `m_readers` had been incremented.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, elapsed in `[35, 75]` ms, lock pristine
+
+---
+
+### Test 14 — `CancelWait_ReaderBehindWriter`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `4`
+
+Task 2 holds a read lock. Task 3 queues as a writer at about tick 5; task 1 then calls `TimedReadLockEx(WAIT_INFINITE)` at about tick 10 and blocks only because of writer preference. Task 0 cancels the reader at about tick 60. The writer must be unaffected: still blocked while the holder reads, and granted the lock when the holder releases at about tick 150 (never, if the cancelled reader had leaked into `m_readers`).
+
+**Pass condition:** victim `WAIT_RESULT_CANCELED` with elapsed in `[35, 75]` ms, writer still blocked at tick ~80, writer `WAIT_RESULT_SIGNAL` with elapsed `>= 100` ms, lock pristine
+
+---
+
+### Test 15 — `CancelWait_PreferenceReleased`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `5`
+
+Task 2 holds a read lock. Task 1 blocks as a writer (`TimedLockEx(WAIT_INFINITE)`). Task 3 calls `TimedReadLockEx(WAIT_INFINITE)` at about tick 20 and blocks only because of the waiting writer's preference. When task 0 cancels the writer at about tick 60, the withdrawal must wake all blocked readers (`m_cv_readers.NotifyAll()`): task 3 gets its read lock at once, while the holder is still reading. Without that wake-up it would sleep until the holder released and then forever, since nobody would ever notify it.
+
+**Pass condition:** victim `WAIT_RESULT_CANCELED`, reader `WAIT_RESULT_SIGNAL` already at tick ~80 with elapsed in `[25, 100]` ms, lock pristine
+
+---
+
+### Test 16 — `CancelWait_TwoWriters`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `6`
+
+Task 2 holds a read lock. Task 1 blocks as a writer first, task 3 as a second writer at about tick 20. Task 0 cancels only task 1. The second writer must be unaffected (`m_writers_waiting` decremented exactly once, wait list intact): still blocked at tick ~80, then granted the lock when the holder releases at about tick 150.
+
+**Pass condition:** victim `WAIT_RESULT_CANCELED`, second writer still blocked at tick ~80, then `WAIT_RESULT_SIGNAL` with elapsed `>= 100` ms, lock pristine
+
+---
+
+### Test 17 — `CancelWait_SignalWins`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `7`
+
+Task 0 itself holds a read lock; task 1 blocks as a writer. At about tick 60 task 0 calls `ReadUnlock()` and immediately cancels the victim, with no scheduling point in between. The last `ReadUnlock()` has already woken the writer (a notified waiter is unlinked from the wait list), so the cancel must be a no-op and the writer must be granted the lock.
+
+**Pass condition:** `result == WAIT_RESULT_SIGNAL` and lock pristine (the victim acquired and released it)
+
+---
+
+### Test 18 — `CancelWait_LockAbsorbs`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `8`
+
+Task 2 holds a read lock. Task 1 uses the **void** `Lock()`. A cancel at about tick 60 must be absorbed: `Lock()` cannot report a failure, so it withdraws and retries. The victim stays blocked until the holder releases at about tick 150 and only then returns with the lock held.
+
+**Pass condition:** victim still blocked at tick ~80, then returned with the lock after `>= 110` ms, lock pristine
+
+---
+
+### Test 19 — `CancelWait_ReadLockAbsorbs`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `9`
+
+Test 18 for readers: task 2 holds the write lock and task 1 uses the **void** `ReadLock()`. The cancel must be absorbed and the victim must return with the read lock only after the holder released.
+
+**Pass condition:** same as test 18
+
+---
+
+### Test 20 — `CancelWait_SleepCancelWriter`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `101`
+
+Test 11 using `stk::SleepCancel(tid)` instead of `CancelTaskWait()`.
+
+**Pass condition:** same as test 11
+
+---
+
+### Test 21 — `CancelWait_SleepCancelReader`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `103`
+
+Test 13 using `SleepCancel()`.
+
+**Pass condition:** same as test 13
+
+---
+
+### Test 22 — `CancelWait_SleepCancelPreference`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `105`
+
+Test 15 using `SleepCancel()`. A stale wait entry or a missing reader wake-up after the withdrawal of the writer shows up here as a blocked reader.
+
+**Pass condition:** same as test 15
+
+---
+
+### Test 23 — `CancelWait_SleepCancelTwoWriters`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `106`
+
+Test 16 using `SleepCancel()`.
+
+**Pass condition:** same as test 16
+
+---
+
+### Test 24 — `CancelWait_SleepCancelSignal`
+**Tasks:** 0–3 &nbsp;|&nbsp; **Param:** `107`
+
+Test 17 using `SleepCancel()`. The task is no longer waiting but is still marked as sleeping for one tick after the wake, so this also checks that `SleepCancel()` falls through to a plain wake without disturbing the already-granted lock.
+
+**Pass condition:** same as test 17
+
+---
+
 ## Summary Table
 
 | # | Test | Tasks | Pass condition | What it verifies |
@@ -214,3 +384,17 @@ All five tasks alternate between reader and writer roles by iteration index. Eve
 | 8 | `WriterPriorityTask` | 0–3 | `counter == 2` | New readers blocked behind waiting writer (writer preference policy enforcement) |
 | 9 | `ReaderWriterAlternationTask` | 0–4 | `max_concurrent >= 2` | Alternating read/write phases; readers share access, writer gets exclusivity |
 | 10 | `StressTestTask` | 0–4 | `counter == 250` | No corruption under full contention; readers and writers alternate; runs on all platforms |
+| 11 | `CancelWait_WriterInfinite` | 0–3 | `CANCELED`, elapsed `[35, 75]` ms, lock pristine | Cancelling an infinite `TimedLockEx()` returns `WAIT_RESULT_CANCELED`; the writer leaves the queue (no leaked `m_writers_waiting`) |
+| 12 | `CancelWait_WriterNotTimeout` | 0–3 | `CANCELED`, elapsed `< 150` ms, lock pristine | A cancel is distinct from a timeout and ends a finite wait early |
+| 13 | `CancelWait_ReaderInfinite` | 0–3 | `CANCELED`, elapsed `[35, 75]` ms, lock pristine | Cancelling `TimedReadLockEx()` returns `WAIT_RESULT_CANCELED` and leaves `m_readers` untouched |
+| 14 | `CancelWait_ReaderBehindWriter` | 0–3 | reader `CANCELED`, writer `SIGNAL` after release, lock pristine | A cancelled reader queued behind a writer does not disturb that writer |
+| 15 | `CancelWait_PreferenceReleased` | 0–3 | writer `CANCELED`, reader `SIGNAL` at once, lock pristine | Withdrawing the only waiting writer wakes the readers held back by writer preference |
+| 16 | `CancelWait_TwoWriters` | 0–3 | first `CANCELED`, second `SIGNAL` after release, lock pristine | Waiting-writer count and wait list stay intact; the remaining writer still gets the lock |
+| 17 | `CancelWait_SignalWins` | 0–3 | `SIGNAL`, lock pristine | A release that already woke the waiter wins; the cancel is a no-op |
+| 18 | `CancelWait_LockAbsorbs` | 0–3 | blocked until release, `SIGNAL`, elapsed `>= 110` ms | Void `Lock()` absorbs a cancel and returns only with the lock held |
+| 19 | `CancelWait_ReadLockAbsorbs` | 0–3 | as test 18 | Void `ReadLock()` absorbs a cancel and returns only with the lock held |
+| 20 | `CancelWait_SleepCancelWriter` | 0–3 | as test 11 | `SleepCancel()` cancels a sync-object wait of a writer |
+| 21 | `CancelWait_SleepCancelReader` | 0–3 | as test 13 | `SleepCancel()` cancels a sync-object wait of a reader |
+| 22 | `CancelWait_SleepCancelPreference` | 0–3 | as test 15 | `SleepCancel()` leaves no stale entry and still releases the readers held back by the writer |
+| 23 | `CancelWait_SleepCancelTwoWriters` | 0–3 | as test 16 | `SleepCancel()` keeps the wait list intact |
+| 24 | `CancelWait_SleepCancelSignal` | 0–3 | as test 17 | `SleepCancel()` after a release is a harmless no-op |

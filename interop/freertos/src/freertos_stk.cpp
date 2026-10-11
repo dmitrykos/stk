@@ -1346,6 +1346,15 @@ BaseType_t xTaskAbortDelay(TaskHandle_t xTask)
     if (t->m_state != FrtosTask::State::Ready)
         return pdFAIL; // suspended or otherwise not in a delay-able state
 
+    // FreeRTOS: only a task in the Blocked state can have its delay aborted. The calling task is
+    // running by definition, so it can never be blocked (and SleepCancel() would be a no-op for it).
+    if (tid == stk::GetTid())
+        return pdFAIL;
+
+    // Ends a vTaskDelay()/vTaskDelayUntil() sleep, and also a blocking wait on a sync object
+    // (xQueueReceive/xQueueSend, xSemaphoreTake, xEventGroupWaitBits, xTaskNotifyWait, ...): the
+    // wait ends with WAIT_RESULT_CANCELED, which the wrapper reports exactly like a timeout
+    // (pdFAIL / nullptr / 0 / flags snapshot), as FreeRTOS does for an aborted delay.
     stk::SleepCancel(tid);
     return pdPASS;
 }
@@ -2271,7 +2280,7 @@ QueueSetMemberHandle_t xQueueSelectFromSet(QueueSetHandle_t xQueueSet,
     // Block until a member handle arrives in the token FIFO or timeout fires.
     void *handle = nullptr;
     if (!qs->m_token_mq->Get(&handle, FrtosTimeoutToStk(xTicksToWait)))
-        return nullptr; // timeout
+        return nullptr; // timeout or aborted wait (xTaskAbortDelay)
 
     return static_cast<QueueSetMemberHandle_t>(handle);
 }
@@ -3060,7 +3069,8 @@ TickType_t xTimerGetExpiryTime(TimerHandle_t xTimer)
 //
 // Success path: return the matched bits directly.
 // Error path  : return the caller-supplied snapshot of the flags word taken
-//               immediately after the timeout was confirmed.  FreeRTOS documents
+//               immediately after the timeout (or an aborted wait, see
+//               xTaskAbortDelay(): ERROR_CANCELED) was confirmed.  FreeRTOS documents
 //               that xEventGroupWaitBits() returns the flags value *at the time
 //               of timeout*, not zero, so callers can distinguish which bits were
 //               set even though the wait condition was not fully satisfied.
@@ -3069,7 +3079,7 @@ TickType_t xTimerGetExpiryTime(TimerHandle_t xTimer)
 static inline EventBits_t StkFlagsToFrtos(uint32_t result, EventBits_t snapshot = 0U)
 {
     if (stk::sync::EventFlags::IsError(result))
-        return snapshot; // timeout or parameter error — return flags snapshot
+        return snapshot; // timeout, aborted wait (ERROR_CANCELED) or error — return flags snapshot
 
     return static_cast<EventBits_t>(result);
 }

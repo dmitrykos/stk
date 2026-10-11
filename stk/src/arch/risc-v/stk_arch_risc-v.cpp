@@ -564,7 +564,7 @@ static __stk_forceinline void HW_SetMtimecmp(uint64_t time_next)
 #endif
 
 #if (__riscv_xlen == 64)
-    hw::WordToPtr<volatile uint64_t>(STK_RISCV_CLINT_MTIMECMP_ADDR)[hart] = next;
+    hw::WordToPtr<volatile uint64_t>(STK_RISCV_CLINT_MTIMECMP_ADDR)[hart] = time_next;
 #else
     const Word mtimecmp_base = STK_RISCV_CLINT_MTIMECMP_ADDR + (hart * sizeof(uint64_t));
     volatile uint32_t *mtimecmp_lo = hw::WordToPtr<volatile uint32_t>(mtimecmp_base);

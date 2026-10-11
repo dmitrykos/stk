@@ -106,6 +106,10 @@ public:
                before the flag condition was met (independent of the deadline). */
     static const uint32_t ERROR_CANCELED  = 0x80000008U;
 
+    /*! \brief Return sentinel: the kernel rejected the wait (IKernelService::Wait() returned
+               WAIT_RESULT_FAIL, e.g. KERNEL_SYNC mode is not enabled). */
+    static const uint32_t ERROR_FAIL      = 0x80000010U;
+
     /*! \brief Reserved error mask. Any return value with bit 31 set is an error. */
     static const uint32_t ERROR_MASK      = 0x80000000U;
 
@@ -330,6 +334,12 @@ inline uint32_t EventFlags::Wait(uint32_t flags, uint32_t options, Timeout timeo
                 final_result = ERROR_CANCELED;
                 break;
             }
+            else if (wr == WAIT_RESULT_FAIL)
+            {
+                // kernel rejected the wait: report it as such, not as a timeout
+                final_result = ERROR_FAIL;
+                break;
+            }
             else if (wr != WAIT_RESULT_SIGNAL)
             {
                 // timeout (either a real deadline miss, or NO_WAIT after 'remaining'
@@ -342,7 +352,8 @@ inline uint32_t EventFlags::Wait(uint32_t flags, uint32_t options, Timeout timeo
         }
 
         // If we didn't time out or get cancelled, the predicate was satisfied successfully
-        if ((final_result != ERROR_TIMEOUT) && (final_result != ERROR_CANCELED))
+        if ((final_result != ERROR_TIMEOUT) && (final_result != ERROR_CANCELED) &&
+            (final_result != ERROR_FAIL))
         {
             // predicate satisfied: determine which flags matched
             final_result = (((options & OPT_WAIT_ALL) == OPT_WAIT_ALL) ? flags : (m_flags & flags));

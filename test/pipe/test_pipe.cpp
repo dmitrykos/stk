@@ -548,6 +548,10 @@ static void ResetTestState()
 //   - Reset() wakes blocked readers and clears state
 //   - GetCapacity / GetElementSize / GetCount / GetSpace / IsEmpty / IsFull
 //     state invariants across fill and drain
+//   - Cancelability of blocked Read/Write/ReadBulk/ReadBulkTriggered/WriteBulk
+//     via IKernel::CancelTaskWait() and stk::SleepCancel() (RawCancelWaitTask):
+//     WAIT_RESULT_CANCELED vs timeout, no stale waiter, wait list integrity,
+//     signal-wins race, partial bulk transfers kept
 // ===========================================================================
 
 namespace rawpipe {
@@ -599,11 +603,76 @@ static inline bool ReadElem(sync::Pipe &p, int32_t &out, Timeout t = _STK_PIPE_T
     return ok;
 }
 
+// Cancellation test state (see RawCancelWaitTask) -------------------------
+
+static ITask * volatile g_Victim             = nullptr;      // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid          = TID_NONE;     // same, as TId (for SleepCancel)
+static volatile int32_t g_VictimResult[2]    = {-100, -100}; // EWaitResult of task 1 / task 2 (-100 = not set)
+static volatile int64_t g_VictimElapsed[2]   = {0, 0};       // ms spent inside the blocking Pipe call by task 1 / task 2
+static volatile int32_t g_VictimValue[2]     = {-1, -1};     // single element received by task 1 / task 2 (-1 = nothing)
+static volatile int32_t g_VictimCount        = -1;           // number of elements transferred by a bulk call of task 1 (-1 = not set)
+static volatile int32_t g_VictimBulk[RAW_CAPACITY];          // elements received by a bulk read of task 1
+static volatile int64_t g_VictimSleepElapsed = 0;            // ms spent in Sleep() by task 1 after its wait was cancelled
+
+// Scenario selector of RawCancelWaitTask. It is a global, not a constructor argument, because RunRawTest()
+// declares tasks 0-2 as 'static': a static local is constructed only once per template instantiation (on the
+// first RunRawTest<RawCancelWaitTask> call), so a constructor argument would silently keep the value of the
+// first case. Set by main() before each RunRawTest() call.
+static volatile int32_t g_CancelParam        = 0;
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_RawKernel.CancelTaskWait(g_Victim);
+}
+
+// Safety net for a failed cancel test: a victim that is still blocked would keep the kernel running forever,
+// so push data through the pipe in both directions to release any stuck reader or writer. This turns a broken
+// cancel into a reported test failure instead of a hang.
+static void ReleaseStuckWaiters()
+{
+    for (int32_t round = 0; round < 2; ++round)
+    {
+        // frees blocked readers (a bulk reader needs up to CAPACITY elements)
+        for (size_t i = 0; i < RAW_CAPACITY; ++i)
+        {
+            TryWriteElem(g_RawPipe, -2);
+            stk::Sleep(2);
+        }
+
+        // frees blocked writers
+        for (size_t i = 0; i < RAW_CAPACITY; ++i)
+        {
+            int32_t v = -1;
+            ReadElem(g_RawPipe, v, NO_WAIT);
+            stk::Sleep(2);
+        }
+    }
+}
+
 static void ResetRawPipeState()
 {
     g_TestResult    = 0;
     g_SharedCounter = 0;
     g_InstancesDone = 0;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimCount        = -1;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]  = -100;
+        g_VictimElapsed[i] = 0;
+        g_VictimValue[i]   = -1;
+    }
+
+    for (size_t i = 0; i < RAW_CAPACITY; ++i)
+        g_VictimBulk[i] = -1;
 
     g_RawPipe.~Pipe();
     new (&g_RawPipe) sync::Pipe(g_RawBuf, RAW_CAPACITY, RAW_ELEM_SIZE);
@@ -1086,6 +1155,357 @@ private:
     }
 };
 
+static const int32_t CW_READ_INFINITE       = 1;
+static const int32_t CW_READ_NOT_TIMEOUT    = 2;
+static const int32_t CW_WRITE_FULL          = 3;
+static const int32_t CW_NO_STALE_WAITER     = 4;
+static const int32_t CW_TWO_WAITERS         = 5;
+static const int32_t CW_SIGNAL_WINS         = 6;
+static const int32_t CW_READ_BULK_PARTIAL   = 7;
+static const int32_t CW_TRIGGERED_PARTIAL   = 8;
+static const int32_t CW_WRITE_BULK_PARTIAL  = 9;
+static const int32_t CW_VIA_SLEEPCANCEL     = 100;
+
+/*! \class RawCancelWaitTask
+    \brief Tests cancelability of Pipe waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked inside a Pipe call), task 2 is a
+           second reader used by the two-waiters scenario. The scenario is selected by g_CancelParam:
+           1 = cancel an infinite Read(), 2 = a cancel is reported as CANCELED, not TIMEOUT,
+           3 = cancel a Write() on a full pipe, nothing is written,
+           4 = cancel leaves no stale waiter behind, the next element is neither lost nor consumed twice,
+           5 = cancelling one of two blocked readers leaves the other intact,
+           6 = an element that arrived first wins over a late cancel,
+           7 = cancel of a ReadBulk() keeps the elements already read (partial count),
+           8 = cancel of a ReadBulkTriggered() below its trigger still drains what is available,
+           9 = cancel of a WriteBulk() keeps the elements already written (partial count).
+           Adding 100 to g_CancelParam cancels via stk::SleepCancel() instead of IKernel::CancelTaskWait().
+    \note  Pipe wraps ConditionVariable, so this suite also covers the cancel path of ConditionVariable::WaitEx().
+*/
+template <EAccessMode _AccessMode>
+class RawCancelWaitTask : public Task<_STK_PIPE_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    RawCancelWaitTask(uint8_t id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    static constexpr size_t TRIGGER_BIG = 6U;               // above the 3 elements written by the partial scenarios
+    static constexpr size_t PARTIAL     = 3U;               // elements delivered before the cancel (read scenarios)
+    static constexpr size_t PREFILL     = RAW_CAPACITY - 2U; // elements pre-loaded in the bulk-write scenario
+
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+    }
+
+    // Task 1: block inside a Pipe call, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout timeout = (m_scenario == CW_READ_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+
+        EWaitResult r      = WAIT_RESULT_FAIL;
+        size_t      n      = 0U;
+        bool        is_bulk = false;
+        RawElem     single = { -1 };
+        RawElem     bulk[RAW_CAPACITY] = {};
+
+        const int64_t start = GetTimeNowMs();
+
+        if (m_scenario == CW_WRITE_FULL)
+        {
+            RawElem e = { 999 };
+            r = g_RawPipe.WriteEx(&e, timeout);
+        }
+        else
+        if (m_scenario == CW_READ_BULK_PARTIAL)
+        {
+            is_bulk = true;
+            r = g_RawPipe.ReadBulkEx(bulk, RAW_CAPACITY, n, timeout);
+        }
+        else
+        if (m_scenario == CW_TRIGGERED_PARTIAL)
+        {
+            is_bulk = true;
+            r = g_RawPipe.ReadBulkTriggeredEx(bulk, TRIGGER_BIG, RAW_CAPACITY, n, timeout);
+        }
+        else
+        if (m_scenario == CW_WRITE_BULK_PARTIAL)
+        {
+            is_bulk = true;
+            for (size_t i = 0; i < RAW_CAPACITY; ++i)
+                bulk[i].value = 50 + (int32_t)i;
+
+            r = g_RawPipe.WriteBulkEx(bulk, RAW_CAPACITY, n, timeout);
+        }
+        else
+        {
+            r = g_RawPipe.ReadEx(&single, timeout);
+        }
+
+        g_VictimElapsed[0] = GetTimeNowMs() - start;
+        g_VictimValue[0]   = single.value;
+
+        if (is_bulk)
+        {
+            g_VictimCount = (int32_t)n;
+
+            if (m_scenario != CW_WRITE_BULK_PARTIAL)
+            {
+                for (size_t i = 0; i < n; ++i)
+                    g_VictimBulk[i] = bulk[i].value;
+            }
+        }
+
+        g_VictimResult[0] = static_cast<int32_t>(r);
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+    }
+
+    // Task 2: second reader, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_PIPE_TEST_SHORT_SLEEP); // block after task 1
+
+        RawElem e = { -1 };
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_RawPipe.ReadEx(&e, WAIT_INFINITE);
+
+        g_VictimElapsed[1] = GetTimeNowMs() - start;
+        g_VictimValue[1]   = e.value;
+        g_VictimResult[1]  = static_cast<int32_t>(r);
+    }
+
+    // Drain the pipe without blocking and verify it held exactly the expected sequence
+    static bool DrainAndExpect(const int32_t *expected, size_t n)
+    {
+        bool ok = true;
+
+        for (size_t i = 0; i < n; ++i)
+        {
+            int32_t v = -1;
+            if (!ReadElem(g_RawPipe, v, NO_WAIT) || (v != expected[i]))
+                ok = false;
+        }
+
+        return ok && g_RawPipe.IsEmpty();
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        // writer scenarios: pre-load the pipe before the victim blocks (victim starts at ~10 ms)
+        if (m_scenario == CW_WRITE_FULL)
+        {
+            for (size_t i = 0; i < RAW_CAPACITY; ++i)
+                TryWriteElem(g_RawPipe, (int32_t)i);
+        }
+        else
+        if (m_scenario == CW_WRITE_BULK_PARTIAL)
+        {
+            for (size_t i = 0; i < PREFILL; ++i)
+                TryWriteElem(g_RawPipe, (int32_t)i);
+        }
+
+        if ((m_scenario == CW_READ_BULK_PARTIAL) || (m_scenario == CW_TRIGGERED_PARTIAL))
+        {
+            // victim is blocked by now (~10 ms): deliver a few elements, then cancel at ~60 ms
+            stk::Sleep(30);
+
+            for (size_t i = 0; i < PARTIAL; ++i)
+                TryWriteElem(g_RawPipe, (int32_t)i);
+
+            stk::Sleep(30);
+        }
+        else
+        {
+            stk::Sleep(60); // task 1 (and task 2) are blocked by now
+        }
+
+        if (m_scenario == CW_READ_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms; nothing was read
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   (g_VictimValue[0] == -1) && g_RawPipe.IsEmpty();
+        }
+        else
+        if (m_scenario == CW_READ_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as CANCELED, not TIMEOUT
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimElapsed[0] < 150);
+        }
+        else
+        if (m_scenario == CW_WRITE_FULL)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            const bool full = g_RawPipe.IsFull();
+
+            // the cancelled Write() must not have stored its element (999): original FIFO content intact
+            int32_t expected[RAW_CAPACITY];
+            for (size_t i = 0; i < RAW_CAPACITY; ++i)
+                expected[i] = (int32_t)i;
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   full && DrainAndExpect(expected, RAW_CAPACITY);
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            const bool wrote = TryWriteElem(g_RawPipe, 321); // nobody waits: element must stay in the pipe
+
+            int32_t v1 = -1, v2 = -1;
+            const bool poll1 = ReadElem(g_RawPipe, v1, NO_WAIT); // gets the element
+            const bool poll2 = ReadElem(g_RawPipe, v2, NO_WAIT); // nothing left
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("raw cancel no stale waiter: result=%d wrote=%d poll1=%d(v=%d) poll2=%d victim_sleep=%d ms\n",
+                (int)g_VictimResult[0], (int)wrote, (int)poll1, (int)v1, (int)poll2, (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   wrote && poll1 && (v1 == 321) && !poll2 &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);              // cancel the first reader only
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP);
+
+            const bool wrote = TryWriteElem(g_RawPipe, 77); // must wake the second reader
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            printf("raw cancel two waiters: first=%d second=%d wrote=%d value=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1], (int)wrote, (int)g_VictimValue[1]);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimValue[0] == -1) &&
+                   (g_VictimResult[1] == WAIT_RESULT_SIGNAL)   && (g_VictimValue[1] == 77) &&
+                   wrote && g_RawPipe.IsEmpty(); // the second reader consumed the element
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // back to back, no scheduling point in between: the reader is already signaled and removed
+            // from the wait list when the cancel arrives, so the cancel must be a no-op
+            const bool wrote = TryWriteElem(g_RawPipe, 777);
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            pass = wrote && (g_VictimResult[0] == WAIT_RESULT_SIGNAL) &&
+                   (g_VictimValue[0] == 777) && g_RawPipe.IsEmpty();
+        }
+        else
+        if (m_scenario == CW_READ_BULK_PARTIAL)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            // the 3 elements read before the cancel stay valid and are counted
+            bool data_ok = (g_VictimCount == (int32_t)PARTIAL);
+            for (size_t i = 0; data_ok && (i < PARTIAL); ++i)
+                data_ok = (g_VictimBulk[i] == (int32_t)i);
+
+            printf("raw cancel read bulk: result=%d count=%d\n", (int)g_VictimResult[0], (int)g_VictimCount);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && data_ok &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) && g_RawPipe.IsEmpty();
+        }
+        else
+        if (m_scenario == CW_TRIGGERED_PARTIAL)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            // trigger (6) was never reached: the cancel is reported as CANCELED (not a timeout) and,
+            // like a timeout, still drains the 3 elements that were available
+            bool data_ok = (g_VictimCount == (int32_t)PARTIAL);
+            for (size_t i = 0; data_ok && (i < PARTIAL); ++i)
+                data_ok = (g_VictimBulk[i] == (int32_t)i);
+
+            printf("raw cancel read triggered: result=%d count=%d\n", (int)g_VictimResult[0], (int)g_VictimCount);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && data_ok &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) && g_RawPipe.IsEmpty();
+        }
+        else
+        if (m_scenario == CW_WRITE_BULK_PARTIAL)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_PIPE_TEST_SHORT_SLEEP * 2);
+
+            // 2 of the 8 victim elements fitted before it blocked: they stay in the pipe, the rest is dropped
+            const bool full = g_RawPipe.IsFull();
+
+            int32_t expected[RAW_CAPACITY];
+            for (size_t i = 0; i < PREFILL; ++i)
+                expected[i] = (int32_t)i;
+            expected[PREFILL]     = 50;
+            expected[PREFILL + 1] = 51;
+
+            printf("raw cancel write bulk: result=%d written=%d\n", (int)g_VictimResult[0], (int)g_VictimCount);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimCount == 2) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   full && DrainAndExpect(expected, RAW_CAPACITY);
+        }
+
+        // Safety net: if the cancel did not work a task is still blocked forever and the kernel would
+        // never stop, release any such task so that the test fails instead of hanging.
+        if (!pass)
+            ReleaseStuckWaiters();
+
+        printf("raw cancel wait (scenario=%d, via %s): result[0]=%d elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (int)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
 static void ResetRawKernelAndPipe()
 {
     ResetRawPipeState();
@@ -1110,7 +1530,8 @@ static bool NeedsExtendedTasks(const char *test_name)
            (strcmp(test_name, "RawTriggeredNoWait")        != 0) &&
            (strcmp(test_name, "RawTriggeredClamp")         != 0) &&
            (strcmp(test_name, "RawResetDoesNotReleaseReader") != 0) &&
-           (strcmp(test_name, "RawStateInvariants")        != 0);
+           (strcmp(test_name, "RawStateInvariants")        != 0) &&
+           (strncmp(test_name, "RawCancel", 9)             != 0); // cancel tests use tasks 0-2 only
 }
 
 /*! \fn    RunRawTest
@@ -1279,6 +1700,44 @@ int main(int argc, char **argv)
     // Test 16: State-query API (GetCapacity/GetElementSize/GetCount/GetSpace/IsEmpty/IsFull)
     //          correctly reflects pipe state throughout a fill-and-drain cycle
     RUN_RAW(RawStateInvariantsTask,        "RawStateInvariants",         0);
+
+    // Tests 17-31: cancelability of Pipe waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        using namespace stk::test::rawpipe;
+
+        struct CancelCase { const char *name; int32_t param; };
+
+        static const CancelCase cases[] =
+        {
+            { "RawCancel_ReadInfinite",           CW_READ_INFINITE },
+            { "RawCancel_ReadNotTimeout",         CW_READ_NOT_TIMEOUT },
+            { "RawCancel_WriteFull",              CW_WRITE_FULL },
+            { "RawCancel_ReadNoStaleWaiter",      CW_NO_STALE_WAITER },
+            { "RawCancel_ReadTwoWaiters",         CW_TWO_WAITERS },
+            { "RawCancel_ReadSignalWins",         CW_SIGNAL_WINS },
+            { "RawCancel_ReadBulkPartial",        CW_READ_BULK_PARTIAL },
+            { "RawCancel_ReadTriggeredPartial",   CW_TRIGGERED_PARTIAL },
+            { "RawCancel_WriteBulkPartial",       CW_WRITE_BULK_PARTIAL },
+            { "RawCancel_SleepCancelRead",        CW_VIA_SLEEPCANCEL + CW_READ_INFINITE },
+            { "RawCancel_SleepCancelWrite",       CW_VIA_SLEEPCANCEL + CW_WRITE_FULL },
+            { "RawCancel_SleepCancelNoStale",     CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER },
+            { "RawCancel_SleepCancelTwo",         CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS },
+            { "RawCancel_SleepCancelSignal",      CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS },
+            { "RawCancel_SleepCancelTriggered",   CW_VIA_SLEEPCANCEL + CW_TRIGGERED_PARTIAL }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunRawTest<RawCancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param)
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
 
 #endif // __ARM_ARCH_6M__
 

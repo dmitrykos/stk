@@ -563,7 +563,7 @@ protected:
                 return m_task->Wake();
             }
 
-            /*! \brief  Advance the timeout countdown by one tick.
+            /*! \brief  Advance the timeout countdown by a number of ticks.
                 \return \c true if the wait is still active (not yet timed out),
                         \c false if the timeout just expired (caller should stop ticking this object).
                 \note   Called by UpdateSyncObjects() each kernel tick.
@@ -645,6 +645,21 @@ protected:
                 m_sync_obj = nullptr;
 
                 m_task->Wake();
+            }
+
+            /*! \brief  Cancel an in-progress wait and wake the owning task early if was waiting.
+                \return true if cancelled active waiting, false otherwise.
+                \see    Cancel, IsWaiting
+            */
+            bool CancelIfWaiting()
+            {
+                const bool was_waiting = IsWaiting();
+                if (was_waiting)
+                {
+                    Cancel();
+                }
+
+                return was_waiting;
             }
 
             KernelTask     *m_task;      //!< Back-pointer to the owning KernelTask. Set once at construction; never changes.
@@ -1008,7 +1023,7 @@ protected:
         {
             if __stk_constexpr_cpp17 (!IsHrtMode())
             {
-                m_kernel->OnTaskSleepCancel(task_id);
+                m_kernel->CancelTaskWait(GetUserTaskFromTid(task_id));
             }
         }
 
@@ -1429,25 +1444,27 @@ public:
     {
         STK_ASSERT(user_task != nullptr);
 
-        if __stk_constexpr_cpp17 (IsSyncMode())
+        KernelTask *const task = FindTaskByUserTask(user_task);
+        if (task != nullptr)
         {
-            // avoid race with OnTick
             const hw::CriticalSection::ScopedLock cs_;
 
-            KernelTask *const task = FindTaskByUserTask(user_task);
-            STK_ASSERT(task != nullptr);
+            bool canceled_wait = false;
 
-            // only cancel if actually blocked in OnTaskWait() on a sync object; no-op otherwise
-            // (e.g. task is running, suspended via SuspendTask(), or plainly sleeping)
-            if (task->m_wait_obj->IsWaiting())
+            if __stk_constexpr_cpp17 (IsSyncMode())
             {
-                task->m_wait_obj->Cancel();
+                // a task blocked in OnTaskWait() also counts as sleeping (ScheduleSleep(WAIT_INFINITE)), but
+                // its WaitObject is still linked into the sync object's wait list: waking only the task
+                // would leave a stale entry behind (later signaled or ticked as a timeout while the task is
+                // not waiting), so cancel the wait itself, this unlinks it, records WAIT_RESULT_CANCELED
+                // and wakes the task
+                canceled_wait = task->m_wait_obj->CancelIfWaiting();
             }
-        }
-        else
-        {
-            // kernel operating mode must include KERNEL_SYNC for tasks to be able to wait
-            STK_ASSERT(false);
+
+            if (!canceled_wait && task->IsSleeping())
+            {
+                task->Wake();
+            }
         }
     }
 
@@ -2136,20 +2153,6 @@ protected:
         }
 
         return result;
-    }
-
-    void OnTaskSleepCancel(TId task_id)
-    {
-        KernelTask *const task = FindTaskByUserTask(GetUserTaskFromTid(task_id));
-        if (task != nullptr)
-        {
-            const hw::CriticalSection::ScopedLock cs_;
-
-            if (task->IsSleeping())
-            {
-                task->Wake();
-            }
-        }
     }
 
     void OnTaskExit(Stack *stack) override

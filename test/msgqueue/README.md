@@ -52,6 +52,29 @@ stk::sync::MessageQueueT<8, sizeof(SensorMsg)> g_Q;
 | `IsFull` | `bool IsFull() const` | Returns `true` if the queue contains `capacity` messages. ISR-safe. |
 | `IsStorageValid` | `bool IsStorageValid() const` | Returns `true` if the backing buffer pointer is non-null. ISR-safe. |
 
+**`*Ex` variants (cancelable waits):** every blocking call has an `EWaitResult`-returning
+counterpart that lets the caller tell a timeout from a cancellation. The `bool` variants above
+collapse both outcomes into `false`.
+
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `PutEx` | `EWaitResult PutEx(const void *msg_ptr, Timeout timeout = WAIT_INFINITE)` | `WAIT_RESULT_SIGNAL` if enqueued; `WAIT_RESULT_TIMEOUT`, `WAIT_RESULT_CANCELED` or `WAIT_RESULT_FAIL` otherwise (nothing enqueued) |
+| `PutFrontEx` | `EWaitResult PutFrontEx(const void *msg_ptr, Timeout timeout = WAIT_INFINITE)` | Same as `PutEx` |
+| `GetEx` | `EWaitResult GetEx(void *msg_ptr, Timeout timeout = WAIT_INFINITE)` | `WAIT_RESULT_SIGNAL` if a message was dequeued; otherwise timeout / canceled / fail (nothing dequeued or copied) |
+| `PeekEx` | `EWaitResult PeekEx(void *msg_ptr, Timeout timeout = WAIT_INFINITE)` | Same as `GetEx`, message stays in the queue |
+| `PeekFrontEx` | `EWaitResult PeekFrontEx(void *msg_ptr, Timeout timeout = WAIT_INFINITE)` | Same as `GetEx`, message stays in the queue |
+
+**Cancellation semantics:** a blocked call can be cancelled with `IKernel::CancelTaskWait(ITask*)`
+or `stk::SleepCancel(TId)`. Both routes unlink the task from the internal `ConditionVariable`
+wait list and the `*Ex` call returns `WAIT_RESULT_CANCELED`.
+
+- A cancelled `Put` / `PutFront` enqueues nothing and leaves head, tail and count unchanged.
+- A cancelled `Get` / `Peek` / `PeekFront` copies nothing into `msg_ptr` and dequeues nothing.
+- **Signal wins:** if the waiter was already signaled (removed from the wait list) when the cancel
+  arrives, the cancel is a no-op and the call returns `WAIT_RESULT_SIGNAL`.
+- A cancel leaves no stale wait entry: a later `Put` / `Get` is neither lost nor delivered twice,
+  and a second waiter queued behind the cancelled one is still woken normally.
+
 **`Put()` flow:**
 
 ```
@@ -147,15 +170,69 @@ to zero before each test.
 |-----------|-------|-------------|
 | `NeedsOnlyOneTask()` | TryPutGet, FillDrain, Accessors, WrapAround, TryPutFront, PutFrontWrapAround, Peek, PeekFront | task 0 only |
 | *(default)* | BlockingGet, BlockingPut, TimedGetTimeout, TimedGetSuccess, TimedPutTimeout, Reset, PingPong, BlockingPutFront, TimedPutFrontTimeout | tasks 0–1 |
+| `NeedsThreeTasks()` | Cancel_* (tests 14–28) | tasks 0–2 |
 | `NeedsAllTasks()` | Stress | tasks 0–4 |
+
+### Cancellation tests (tests 14–28)
+
+Cancellation tests run on the same `g_Kernel` and use a per-test `MessageQueueT` like all other
+tests, driven by one task class, `CancelWaitTask`. They share the following state, reset by
+`ResetTestState()` before each test:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task whose wait is cancelled (task 1), as `ITask*` and as `TId` (for `SleepCancel`) |
+| `g_VictimResult[2]` | `EWaitResult` of task 1 / task 2 (`-100` = not set) |
+| `g_VictimElapsed[2]` | Milliseconds spent inside the blocking queue call by task 1 / task 2 |
+| `g_VictimValue[2]` | `int32_t` decoded from the first 4 bytes of the message received by task 1 / task 2 (`-1` = nothing) |
+| `g_VictimRxIntact` | `true` if task 1's receive buffer (pre-filled with `0x5A`) was left untouched by a non-signal result |
+| `g_VictimSleepElapsed` | Milliseconds task 1 spent in `Sleep()` after its wait was cancelled |
+| `g_CancelParam` | Scenario selector (see below) |
+
+**Scenario selection.** `RunTest()` declares tasks 0–1 `static`, so each is constructed only once
+per template instantiation; a constructor argument would silently keep the value of the first
+case. The scenario is therefore passed through the global `g_CancelParam`, set by `main()` before
+every `RunTest<CancelWaitTask>()` call. Values `1–9` select the scenario; adding
+`CW_VIA_SLEEPCANCEL` (`100`) makes the canceller use `stk::SleepCancel(g_VictimTid)` instead of
+`g_Kernel.CancelTaskWait(g_Victim)`.
+
+| Constant | Value | Scenario |
+|----------|-------|----------|
+| `CW_GET_INFINITE` | 1 | Cancel an infinite `GetEx` on an empty queue |
+| `CW_GET_NOT_TIMEOUT` | 2 | Cancel is reported as `CANCELED`, not `TIMEOUT` |
+| `CW_PUT_FULL` | 3 | Cancel a `PutEx` on a full queue |
+| `CW_NO_STALE_WAITER` | 4 | Cancel leaves no stale waiter behind |
+| `CW_TWO_WAITERS` | 5 | Cancel one of two blocked getters |
+| `CW_SIGNAL_WINS` | 6 | Message delivered first wins over a late cancel |
+| `CW_PUT_FRONT_FULL` | 7 | Cancel a `PutFrontEx` on a full queue |
+| `CW_PEEK_EMPTY` | 8 | Cancel a `PeekEx` on an empty queue |
+| `CW_PEEK_FRONT_EMPTY` | 9 | Cancel a `PeekFrontEx` on an empty queue |
+| `CW_VIA_SLEEPCANCEL` | 100 | Added to a scenario value: cancel via `stk::SleepCancel()` |
+
+**Task roles.** Task 0 is the canceller/checker, task 1 is the victim (sleeps
+`_STK_MQ_TEST_SHORT_SLEEP` = 10 ms, then blocks inside a queue call and records how the wait
+ended), task 2 is a second getter used only by the two-waiters scenario. Timeline: victim blocks
+at ~10 ms, canceller acts at ~60 ms. The victim's wait is infinite except in
+`CW_GET_NOT_TIMEOUT` (300 ms). Messages carry an `int32_t` value in their first 4 bytes
+(`MakeMsg()` / `MsgValue()`), the remaining bytes are filler.
+
+`CancelVictim(bool use_sleep_cancel)` selects the cancel route. `ReleaseStuckWaiters()` is the
+**safety net**: if the pass condition is not met, it pushes messages through the queue in both
+directions so that any still-blocked getter, peeker or putter is released. A broken cancel is
+therefore reported as a failed test instead of hanging the kernel (which only stops when all
+tasks exit).
+
+Task-count gating gains one predicate: `NeedsThreeTasks()` (name prefix `"Cancel"`) registers
+tasks 0–2.
 
 ---
 
 ## Platform Notes
 
 On **Cortex-M0** (`__ARM_ARCH_6M__`) insufficient RAM prevents linking the full set of
-distinct task class templates simultaneously. Tests 1–14 are skipped and only
-`StressTask` (test 15) runs, under `#ifndef __ARM_ARCH_6M__`.
+distinct task class templates simultaneously. All tests except `StressTask` (test 12),
+including the cancellation tests 14–28, are skipped on M0 under `#ifndef __ARM_ARCH_6M__`.
+The cancellation tests add one more task class template (`CancelWaitTask`).
 
 `StressTask` runs on M0 because it uses a single task class template instantiated
 for all five task slots, fitting within available memory.
@@ -445,6 +522,162 @@ and no deadlock occurred.
 
 ---
 
+## Cancellation Tests (tests 14–28)
+
+These tests verify that a task blocked inside a `MessageQueue` call can be cancelled, and that
+the cancel is clean: the right `EWaitResult` is reported, nothing is enqueued, dequeued or
+copied, no message is lost or duplicated, and the wait list stays consistent. `MessageQueue`
+builds on `ConditionVariable`, so they also cover the cancel path of `ConditionVariable::WaitEx()`.
+Shared state, scenario selection and task roles are described under
+[Test Configuration](#cancellation-tests-tests-14–28). Tests 14–22 cancel through
+`IKernel::CancelTaskWait()`; tests 23–28 repeat the key scenarios through `stk::SleepCancel()`.
+
+> **Safety net:** if a cancel fails, the victim stays blocked and the kernel would never stop. On
+> any failed pass condition the canceller calls `ReleaseStuckWaiters()` (puts and gets through the
+> queue), so a broken cancel shows up as a failed test, not a hang.
+>
+> **Kernel requirement:** cancellation requires the `KERNEL_DYNAMIC | KERNEL_SYNC` kernel mode
+> used by all tests in this suite.
+
+All tests use tasks 0–2 only.
+
+---
+
+### Test 14 — `Cancel_GetInfinite`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `1`
+
+Task 1 calls `GetEx(rx, WAIT_INFINITE)` on an empty queue at ~10 ms and blocks. Task 0 calls `CancelTaskWait(g_Victim)` at ~60 ms. The call must return `WAIT_RESULT_CANCELED` after roughly 50 ms, leave the receive buffer untouched, and the queue must still be empty. Basic cancel of a getter parked on `cv_not_empty`.
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, receive buffer intact, `IsEmpty()`
+
+---
+
+### Test 15 — `Cancel_GetNotTimeout`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `2`
+
+Same as test 14 but the victim uses a finite 300 ms timeout. The cancel at ~60 ms must end the wait early and be reported as `CANCELED`, not `TIMEOUT`. Guards against the cancel path being conflated with the timeout path in `GetEx`.
+
+**Pass condition:** `result == CANCELED`, `elapsed < 150 ms`
+
+---
+
+### Test 16 — `Cancel_PutFull`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `3`
+
+Task 0 pre-loads messages `0..7` so the queue is full; task 1 calls `PutEx(msg{999}, WAIT_INFINITE)` and blocks on `cv_not_full`. After the cancel the call must return `CANCELED`, the queue must still be full, and draining it must yield exactly `0..7` in order — the cancelled put stored nothing. A final put/get round trip confirms the queue still works.
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, `IsFull()`, FIFO content `0..7` intact, queue usable afterwards
+
+---
+
+### Test 17 — `Cancel_GetNoStaleWaiter`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `4`
+
+After the victim's get is cancelled, task 1 sleeps 60 ms and records the real duration. Task 0 then enqueues `321` with nobody waiting, reads it back with `TryGet()`, and polls once more. The message must stay in the queue (not lost to a ghost waiter), be consumed exactly once, and the victim's sleep must not be cut short by a stale wait entry.
+
+**Pass condition:** `result == CANCELED`, put ok, first poll returns `321`, second poll empty, `victim_sleep >= 55 ms`
+
+---
+
+### Test 18 — `Cancel_GetTwoWaiters`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `5`
+
+Task 1 and, 20 ms later, task 2 both block in `GetEx(WAIT_INFINITE)`. Task 0 cancels only task 1, then enqueues `77`. The cancel must leave the wait list consistent: task 2 is woken by the put with `SIGNAL` and receives `77`; task 1 stays `CANCELED` and its buffer untouched.
+
+**Pass condition:** task 1 `CANCELED`, buffer intact; task 2 `SIGNAL`, `value[1] == 77`; queue empty
+
+---
+
+### Test 19 — `Cancel_GetSignalWins`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `6`
+
+Task 0 calls `TryPut(777)` and `CancelTaskWait` back to back with no scheduling point between them. The put already signals the getter and removes it from the wait list, so the cancel must be a no-op. The getter returns `SIGNAL` with the message `777`; it is not cancelled and the message is not lost.
+
+**Pass condition:** put ok, `result == SIGNAL`, `value == 777`, queue empty
+
+---
+
+### Test 20 — `Cancel_PutFrontFull`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `7`
+
+Like test 16, but the victim calls `PutFrontEx()`. Because `PutFront` retreats the read pointer (`m_tail`) only after a successful wait, a cancelled call must neither store its message nor move `m_tail`. Draining the full queue must return `0..7` in order — a stray retreat would rotate the sequence or surface the `999` payload first.
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, `IsFull()`, FIFO content `0..7` intact, queue usable afterwards
+
+---
+
+### Test 21 — `Cancel_PeekEmpty`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `8`
+
+Task 1 calls `PeekEx(rx, WAIT_INFINITE)` on an empty queue and blocks on `cv_not_empty`. After the cancel it must return `CANCELED` without copying anything. A put/get round trip afterwards confirms the cancelled peeker left no stale wait entry or pending wake-up behind (`Peek` hands the wake-up on to the next waiter on success, which must not misfire here).
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, receive buffer intact, `IsEmpty()`, queue usable afterwards
+
+---
+
+### Test 22 — `Cancel_PeekFrontEmpty`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `9`
+
+Identical to test 21 but the victim calls `PeekFrontEx()`.
+
+**Pass condition:** same as test 21
+
+---
+
+### Test 23 — `Cancel_SleepCancelGet`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `101`
+
+Identical scenario to test 14 (`GetInfinite`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 14
+
+---
+
+### Test 24 — `Cancel_SleepCancelPut`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `103`
+
+Identical scenario to test 16 (`PutFull`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 16
+
+---
+
+### Test 25 — `Cancel_SleepCancelNoStale`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `104`
+
+Identical scenario to test 17 (`GetNoStaleWaiter`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 17
+
+---
+
+### Test 26 — `Cancel_SleepCancelTwo`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `105`
+
+Identical scenario to test 18 (`GetTwoWaiters`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 18
+
+---
+
+### Test 27 — `Cancel_SleepCancelSignal`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `106`
+
+Identical scenario to test 19 (`GetSignalWins`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 19
+
+---
+
+### Test 28 — `Cancel_SleepCancelPutFront`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `107`
+
+Identical scenario to test 20 (`PutFrontFull`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `MessageQueue` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 20
+
+---
+
 ## Summary Table
 
 | #   | Test | Tasks | Stack | Pass condition | What it verifies |
@@ -467,4 +700,18 @@ and no deadlock occurred.
 | 12  | `StressTask` | 0–4 | `_STK_MQ_STACK_SIZE` | `g_SharedCounter == 0`; queue empty | No message loss, duplication, or deadlock under full five-task contention mixing `TryPut`, `Put`, `Put(timeout)`, `TryGet`, `Get`, and `Get(timeout)`; runs on all platforms |
 | 13  | `PeekTask` | 0 | `_STK_MQ_STACK_SIZE` | all sub-cases pass; queue empty after each drain | `TryPeek()` on empty returns `false`; `Peek()` is non-destructive and idempotent; respects FIFO order |
 | 13a | `PeekFrontTask` | 0 | `_STK_MQ_STACK_SIZE` | all sub-cases pass; queue empty after each drain | `TryPeekFront()` on empty returns `false`; `PeekFront()` is non-destructive; returns the front-inserted slot (`Prev(m_tail)`) without altering queue state |
-
+| 14  | `Cancel_GetInfinite` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, `elapsed ∈ [35, 75] ms`, buffer intact | `CancelTaskWait` ends an infinite `GetEx` on an empty queue |
+| 15  | `Cancel_GetNotTimeout` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, `elapsed < 150 ms` | Cancel is reported as `CANCELED`, not `TIMEOUT` |
+| 16  | `Cancel_PutFull` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, content `0..7` intact | Cancelled `PutEx` on a full queue stores nothing |
+| 17  | `Cancel_GetNoStaleWaiter` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, message read once, `sleep >= 55 ms` | No stale waiter left: next message neither lost nor consumed twice |
+| 18  | `Cancel_GetTwoWaiters` | 0–2 | `_STK_MQ_STACK_SIZE` | 1st `CANCELED`, 2nd `SIGNAL` with `77` | Cancelling one of two blocked getters leaves the other intact |
+| 19  | `Cancel_GetSignalWins` | 0–2 | `_STK_MQ_STACK_SIZE` | `SIGNAL`, `value == 777` | Cancel after the waiter was already signaled is a no-op |
+| 20  | `Cancel_PutFrontFull` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, content `0..7` intact | Cancelled `PutFrontEx` stores nothing and does not move the read pointer |
+| 21  | `Cancel_PeekEmpty` | 0–2 | `_STK_MQ_STACK_SIZE` | `CANCELED`, buffer intact, queue usable | Cancelled `PeekEx` copies nothing and leaves no stale state |
+| 22  | `Cancel_PeekFrontEmpty` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 21 | Cancelled `PeekFrontEx` copies nothing and leaves no stale state |
+| 23  | `Cancel_SleepCancelGet` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 14 | `SleepCancel` cancels a blocked `GetEx` |
+| 24  | `Cancel_SleepCancelPut` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 16 | `SleepCancel` cancels a blocked `PutEx` |
+| 25  | `Cancel_SleepCancelNoStale` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 17 | `SleepCancel` leaves no stale waiter |
+| 26  | `Cancel_SleepCancelTwo` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 18 | `SleepCancel` of one of two getters leaves the other intact |
+| 27  | `Cancel_SleepCancelSignal` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 19 | `SleepCancel` after signal is a no-op |
+| 28  | `Cancel_SleepCancelPutFront` | 0–2 | `_STK_MQ_STACK_SIZE` | as test 20 | `SleepCancel` cancels a blocked `PutFrontEx` cleanly |

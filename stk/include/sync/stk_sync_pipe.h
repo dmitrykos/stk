@@ -44,6 +44,12 @@ namespace sync {
     object. For a self-contained, type-safe alternative with compile-time
     capacity and direct typed assignment, see stk::sync::PipeT.
 
+    \note  The boolean / count-returning calls (\c Write(), \c Read(), \c WriteBulk(), \c ReadBulk(),
+           \c ReadBulkTriggered()) collapse a timeout and a cancellation (IKernel::CancelTaskWait())
+           into the same failure result. Use the \c *Ex() variants (\c WriteEx(), \c ReadEx(),
+           \c WriteBulkEx(), \c ReadBulkEx(), \c ReadBulkTriggeredEx()) if the caller needs to tell
+           them apart.
+
     \code
     // Example: Producer-Consumer pattern with external buffer
     struct Sample { uint32_t timestamp_ms; int16_t value; };
@@ -90,6 +96,20 @@ public:
     */
     STK_VIRT_DTOR ~Pipe() = default;
 
+    /*! \brief     Write a single element to the pipe, preserving the full wait outcome.
+        \details   Identical to \c Write(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[in] data: Pointer to the element payload (must be at least \a element_size bytes).
+        \param[in] timeout_ticks: Maximum time to wait for space (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if data was written, \c WAIT_RESULT_TIMEOUT if no space became
+                   available before the timeout expired (or \a NO_WAIT was passed on a full pipe),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if the kernel rejected the wait. Nothing is written on a
+                   non-signal result.
+    */
+    EWaitResult WriteEx(const void *data, Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Write a single element to the pipe.
         \details   Copies \a element_size bytes from \a data into the next available
                    slot in the ring buffer. If the pipe is full, the calling task is
@@ -97,10 +117,13 @@ public:
         \param[in] data: Pointer to the element payload (must be at least \a element_size bytes).
         \param[in] timeout_ticks: Maximum time to wait for space (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if data was successfully written, \c false if timeout expired
-                   before space became available.
+        \return    \c true if data was successfully written, \c false otherwise (timeout, cancellation
+                   or NO_WAIT on a full pipe). Use \c WriteEx() to tell these apart.
     */
-    bool Write(const void *data, Timeout timeout_ticks = WAIT_INFINITE);
+    bool Write(const void *data, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (WriteEx(data, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to write a single element to the pipe without blocking.
         \details   Enqueues the element only if a free slot is immediately available.
@@ -111,6 +134,26 @@ public:
     */
     bool TryWrite(const void *data) { return Write(data, NO_WAIT); }
 
+    /*! \brief     Write multiple elements to the pipe, preserving the full wait outcome.
+        \details   Identical to \c WriteBulk(), except the caller gets the raw \c EWaitResult and the
+                   number of elements written through \a written, so a cancellation (via
+                   IKernel::CancelTaskWait()) can be distinguished from a timeout. Elements already
+                   copied into the pipe before a timeout or cancellation stay in the pipe.
+        \param[in] src: Pointer to the source array (must hold at least \a count elements
+                   of \a element_size bytes each).
+        \param[in] count: Number of elements to write.
+        \param[out] written: Number of elements actually written (always set, 0 on \c WAIT_RESULT_FAIL).
+        \param[in] timeout_ticks: Maximum time to wait for sufficient space (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if all \a count elements were written (also for \a count = 0),
+                   \c WAIT_RESULT_TIMEOUT if the timeout expired (or \a NO_WAIT was passed) before all
+                   elements fitted, \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                   IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if \a src is \c nullptr or the kernel
+                   rejected the wait. On any non-signal result \a written holds the partial count.
+    */
+    EWaitResult WriteBulkEx(const void *src, size_t count, size_t &written,
+                            Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Write multiple elements to the pipe.
         \details   Copies a block of \a count elements into the FIFO. If the pipe does not have
                    enough space for the entire block, it will block until the full amount can be
@@ -120,7 +163,8 @@ public:
         \param[in] count: Number of elements to write.
         \param[in] timeout_ticks: Maximum time to wait for sufficient space (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    Number of elements actually written. Equal to \c count unless a timeout occurred.
+        \return    Number of elements actually written. Equal to \c count unless a timeout or a
+                   cancellation occurred. Use \c WriteBulkEx() to tell these apart.
         \code
         // Example:
         Sample frame[64];
@@ -132,7 +176,13 @@ public:
         }
         \endcode
     */
-    size_t WriteBulk(const void *src, size_t count, Timeout timeout_ticks = WAIT_INFINITE);
+    size_t WriteBulk(const void *src, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        size_t written = 0U;
+        const EWaitResult result = WriteBulkEx(src, count, written, timeout_ticks);
+        STK_UNUSED(result);
+        return written;
+    }
 
     /*! \brief     Attempt to write multiple elements to the pipe without blocking.
         \details   Copies as many elements as possible without blocking. Elements that do not
@@ -144,6 +194,20 @@ public:
     */
     size_t TryWriteBulk(const void *src, size_t count) { return WriteBulk(src, count, NO_WAIT); }
 
+    /*! \brief     Read a single element from the pipe, preserving the full wait outcome.
+        \details   Identical to \c Read(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[out] data: Destination buffer for the retrieved element (must be at least \a element_size bytes).
+        \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if an element was read, \c WAIT_RESULT_TIMEOUT if no data became
+                   available before the timeout expired (or \a NO_WAIT was passed on an empty pipe),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if the kernel rejected the wait. Nothing is read on a
+                   non-signal result.
+    */
+    EWaitResult ReadEx(void *data, Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Read a single element from the pipe.
         \details   Copies \a element_size bytes from the oldest slot in the ring buffer into
                    the buffer pointed to by \a data. If the pipe is empty, the calling task is
@@ -151,10 +215,13 @@ public:
         \param[out] data: Destination buffer for the retrieved element (must be at least \a element_size bytes).
         \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if data was successfully read, \c false if timeout expired before
-                   any data became available.
+        \return    \c true if data was successfully read, \c false otherwise (timeout, cancellation or
+                   NO_WAIT on an empty pipe). Use \c ReadEx() to tell these apart.
     */
-    bool Read(void *data, Timeout timeout_ticks = WAIT_INFINITE);
+    bool Read(void *data, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (ReadEx(data, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to read a single element from the pipe without blocking.
         \details   Dequeues an element only if one is immediately available.
@@ -165,6 +232,26 @@ public:
     */
     bool TryRead(void *data) { return Read(data, NO_WAIT); }
 
+    /*! \brief     Read multiple elements from the pipe, preserving the full wait outcome.
+        \details   Identical to \c ReadBulk(), except the caller gets the raw \c EWaitResult and the
+                   number of elements read through \a read_count, so a cancellation (via
+                   IKernel::CancelTaskWait()) can be distinguished from a timeout. Elements already
+                   copied into \a dst before a timeout or cancellation stay valid and are counted.
+        \param[out] dst: Pointer to the destination array (must hold at least \a count elements
+                   of \a element_size bytes each).
+        \param[in] count:   Number of elements to read.
+        \param[out] read_count: Number of elements actually read (always set, 0 on \c WAIT_RESULT_FAIL).
+        \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if all \a count elements were read (also for \a count = 0),
+                   \c WAIT_RESULT_TIMEOUT if the timeout expired (or \a NO_WAIT was passed) before all
+                   elements were available, \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                   IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if \a dst is \c nullptr or the kernel
+                   rejected the wait. On any non-signal result \a read_count holds the partial count.
+    */
+    EWaitResult ReadBulkEx(void *dst, size_t count, size_t &read_count,
+                           Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Read multiple elements from the pipe.
         \details   Attempts to retrieve \a count elements from the FIFO. If the pipe does not
                    contain enough elements to satisfy the request, it will block until the full
@@ -174,7 +261,8 @@ public:
         \param[in] count:   Number of elements to read.
         \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    Number of elements actually read. Equal to \c count unless a timeout occurred.
+        \return    Number of elements actually read. Equal to \c count unless a timeout or a
+                   cancellation occurred. Use \c ReadBulkEx() to tell these apart.
         \code
         // Example:
         Sample frame[64];
@@ -187,7 +275,13 @@ public:
         }
         \endcode
     */
-    size_t ReadBulk(void *dst, size_t count, Timeout timeout_ticks = WAIT_INFINITE);
+    size_t ReadBulk(void *dst, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        size_t read_count = 0U;
+        const EWaitResult result = ReadBulkEx(dst, count, read_count, timeout_ticks);
+        STK_UNUSED(result);
+        return read_count;
+    }
 
     /*! \brief     Attempt to read multiple elements from the pipe without blocking.
         \details   Reads as many elements as are currently available without blocking.
@@ -197,6 +291,30 @@ public:
         \return    Number of elements actually read.
     */
     size_t TryReadBulk(void *dst, size_t count) { return ReadBulk(dst, count, NO_WAIT); }
+
+    /*! \brief     Read at least \a trigger elements, then drain up to \a max_count without blocking,
+                   preserving the full wait outcome.
+        \details   Identical to \c ReadBulkTriggered(), except the caller gets the raw \c EWaitResult
+                   and the number of elements read through \a read_count, so a cancellation (via
+                   IKernel::CancelTaskWait()) can be distinguished from a timeout. Like the plain
+                   variant, whatever is available is drained even when the wait did not succeed.
+        \param[out] dst: Destination buffer; must hold at least \a max_count elements
+                   of \a element_size bytes.
+        \param[in] trigger: Minimum number of elements that must be available before the wait is
+                   considered successful. Clamped to [1, max_count] internally.
+        \param[in] max_count: Maximum number of elements to return in total.
+        \param[out] read_count: Number of elements actually read (always set, 0 on \c WAIT_RESULT_FAIL).
+        \param[in] timeout_ticks: Maximum time to wait for \a trigger elements. Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if the trigger threshold was reached (also for \a max_count = 0),
+                   \c WAIT_RESULT_TIMEOUT if the timeout expired before the threshold was reached,
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if \a dst is \c nullptr or the kernel rejected the wait.
+                   On a timeout or cancellation \a read_count holds the (possibly zero) number of
+                   elements that were available and drained.
+    */
+    EWaitResult ReadBulkTriggeredEx(void *dst, size_t trigger, size_t max_count, size_t &read_count,
+                                    Timeout timeout_ticks = WAIT_INFINITE);
 
     /*! \brief     Read at least \a trigger elements, then drain up to \a max_count without blocking.
         \details   Blocks until \b at least \a trigger elements are simultaneously available in the
@@ -218,9 +336,17 @@ public:
                      and the timeout expires after some — but not enough — elements arrive).
                    - Greater than or equal to \a trigger if the threshold was satisfied (the
                      caller may then assume the trigger callback condition is met).
+        \note      A cancellation (IKernel::CancelTaskWait()) is reported the same way as a timeout.
+                   Use \c ReadBulkTriggeredEx() to tell these apart.
     */
-    size_t ReadBulkTriggered(void *dst, size_t trigger, size_t max_count, 
-                             Timeout timeout_ticks = WAIT_INFINITE);
+    size_t ReadBulkTriggered(void *dst, size_t trigger, size_t max_count,
+                             Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        size_t read_count = 0U;
+        const EWaitResult result = ReadBulkTriggeredEx(dst, trigger, max_count, read_count, timeout_ticks);
+        STK_UNUSED(result);
+        return read_count;
+    }
 
     /*! \brief     Non-blocking variant of ReadBulkTriggered.
         \details   Returns immediately with however many elements are available, up to
@@ -342,16 +468,16 @@ inline Pipe::Pipe(uint8_t *buf, size_t capacity, size_t element_size)
 }
 
 // ---------------------------------------------------------------------------
-// Pipe: Write
+// Pipe: WriteEx
 // ---------------------------------------------------------------------------
 
-inline bool Pipe::Write(const void *data, Timeout timeout_ticks)
+inline EWaitResult Pipe::WriteEx(const void *data, Timeout timeout_ticks)
 {
     STK_ASSERT(data    != nullptr);
     STK_ASSERT(m_count <= (CAPACITY_MAX - 1U));
 
     ScopedCriticalSection cs_;
-    bool success = true;
+    EWaitResult result = WAIT_RESULT_SIGNAL;
 
     const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -371,14 +497,15 @@ inline bool Pipe::Write(const void *data, Timeout timeout_ticks)
             remaining = (now >= deadline ? NO_WAIT : (deadline - now));
         }
 
-        if (!m_cv_not_full.Wait(cs_, remaining))
+        result = m_cv_not_full.WaitEx(cs_, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
         {
-            success = false;
+            // timeout, cancellation or kernel failure: nothing is written
             break;
         }
     }
 
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         STK_MEMCPY(Slot(m_head), data, m_element_size);
         m_head = Next(m_head);
@@ -388,33 +515,35 @@ inline bool Pipe::Write(const void *data, Timeout timeout_ticks)
         m_cv_not_empty.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// Pipe: WriteBulk
+// Pipe: WriteBulkEx
 // ---------------------------------------------------------------------------
 
-inline size_t Pipe::WriteBulk(const void *src, size_t count, Timeout timeout_ticks)
+inline EWaitResult Pipe::WriteBulkEx(const void *src, size_t count, size_t &written, Timeout timeout_ticks)
 {
-    size_t written = 0U;
+    written = 0U;
+
+    // null source is rejected, an empty request is trivially satisfied
+    EWaitResult result = ((src != nullptr) ? WAIT_RESULT_SIGNAL : WAIT_RESULT_FAIL);
 
     if ((src != nullptr) && (count != 0U))
     {
         const uint8_t *const src_bytes = static_cast<const uint8_t *>(src);
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
-        
+
         // capture an absolute deadline once, before entering the wait loop,
         // preventing the timeout from resetting on intermediate partial writes
-        const Timeout deadline = (timed_wait ? 
+        const Timeout deadline = (timed_wait ?
             static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
         ScopedCriticalSection cs_;
 
         while (written < count)
         {
-            bool is_timeout = false;
-
+            // wait until there is at least 1 free slot
             while (m_count == m_capacity)
             {
                 Timeout remaining = deadline;
@@ -424,15 +553,16 @@ inline size_t Pipe::WriteBulk(const void *src, size_t count, Timeout timeout_tic
                     remaining = (now >= deadline ? NO_WAIT : (deadline - now));
                 }
 
-                if (!m_cv_not_full.Wait(cs_, remaining))
+                const EWaitResult wr = m_cv_not_full.WaitEx(cs_, remaining);
+                if (wr != WAIT_RESULT_SIGNAL)
                 {
-                    is_timeout = true;
+                    result = wr;
                     break; // break inner condition variable loop
                 }
             }
 
-            // if a timeout occurred, drop out of the chunk processing loop
-            if (is_timeout)
+            // if the wait failed (timeout, cancellation), drop out of the chunk processing loop
+            if (result != WAIT_RESULT_SIGNAL)
             {
                 break;
             }
@@ -460,19 +590,19 @@ inline size_t Pipe::WriteBulk(const void *src, size_t count, Timeout timeout_tic
         }
     }
 
-    return written;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// Pipe: Read
+// Pipe: ReadEx
 // ---------------------------------------------------------------------------
 
-inline bool Pipe::Read(void *data, Timeout timeout_ticks)
+inline EWaitResult Pipe::ReadEx(void *data, Timeout timeout_ticks)
 {
     STK_ASSERT(data != nullptr);
 
     ScopedCriticalSection cs_;
-    bool success = true;
+    EWaitResult result = WAIT_RESULT_SIGNAL;
 
     const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -492,14 +622,15 @@ inline bool Pipe::Read(void *data, Timeout timeout_ticks)
             remaining = (now >= deadline ? NO_WAIT : (deadline - now));
         }
 
-        if (!m_cv_not_empty.Wait(cs_, remaining))
+        result = m_cv_not_empty.WaitEx(cs_, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
         {
-            success = false;
+            // timeout, cancellation or kernel failure: nothing is read
             break;
         }
     }
 
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         STK_MEMCPY(data, Slot(m_tail), m_element_size);
         m_tail = Next(m_tail);
@@ -509,7 +640,7 @@ inline bool Pipe::Read(void *data, Timeout timeout_ticks)
         m_cv_not_full.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -539,29 +670,31 @@ inline size_t Pipe::DrainLocked(uint8_t *const dst_bytes, const size_t count)
 }
 
 // ---------------------------------------------------------------------------
-// Pipe: ReadBulk
+// Pipe: ReadBulkEx
 // ---------------------------------------------------------------------------
 
-inline size_t Pipe::ReadBulk(void *dst, size_t count, Timeout timeout_ticks)
+inline EWaitResult Pipe::ReadBulkEx(void *dst, size_t count, size_t &read_count, Timeout timeout_ticks)
 {
-    size_t read_count = 0U;
+    read_count = 0U;
+
+    // null destination is rejected, an empty request is trivially satisfied
+    EWaitResult result = ((dst != nullptr) ? WAIT_RESULT_SIGNAL : WAIT_RESULT_FAIL);
 
     if ((dst != nullptr) && (count != 0U))
     {
         uint8_t *const dst_bytes = static_cast<uint8_t *>(dst);
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
-        
+
         // capture an absolute deadline once, before entering the wait loop,
         // preventing the timeout from resetting on intermediate partial reads
-        const Timeout deadline = (timed_wait ? 
+        const Timeout deadline = (timed_wait ?
             static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
         ScopedCriticalSection cs_;
 
         while (read_count < count)
         {
-            bool is_timeout = false;
-
+            // wait until there is at least 1 element available
             while (m_count == 0U)
             {
                 Timeout remaining = deadline;
@@ -571,15 +704,16 @@ inline size_t Pipe::ReadBulk(void *dst, size_t count, Timeout timeout_ticks)
                     remaining = (now >= deadline ? NO_WAIT : (deadline - now));
                 }
 
-                if (!m_cv_not_empty.Wait(cs_, remaining))
+                const EWaitResult wr = m_cv_not_empty.WaitEx(cs_, remaining);
+                if (wr != WAIT_RESULT_SIGNAL)
                 {
-                    is_timeout = true;
+                    result = wr;
                     break; // break inner condition variable loop
                 }
             }
 
-            // if a timeout occurred, drop out of the chunk processing loop
-            if (is_timeout)
+            // if the wait failed (timeout, cancellation), drop out of the chunk processing loop
+            if (result != WAIT_RESULT_SIGNAL)
             {
                 break;
             }
@@ -589,16 +723,20 @@ inline size_t Pipe::ReadBulk(void *dst, size_t count, Timeout timeout_ticks)
         }
     }
 
-    return read_count;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// Pipe: ReadBulkTriggered
+// Pipe: ReadBulkTriggeredEx
 // ---------------------------------------------------------------------------
 
-inline size_t Pipe::ReadBulkTriggered(void *dst, size_t trigger, size_t max_count, Timeout timeout_ticks)
+inline EWaitResult Pipe::ReadBulkTriggeredEx(void *dst, size_t trigger, size_t max_count, size_t &read_count,
+    Timeout timeout_ticks)
 {
-    size_t read_count = 0U;
+    read_count = 0U;
+
+    // null destination is rejected, an empty request is trivially satisfied
+    EWaitResult result = ((dst != nullptr) ? WAIT_RESULT_SIGNAL : WAIT_RESULT_FAIL);
 
     if ((dst != nullptr) && (max_count != 0U))
     {
@@ -608,10 +746,10 @@ inline size_t Pipe::ReadBulkTriggered(void *dst, size_t trigger, size_t max_coun
 
         uint8_t *const dst_bytes = static_cast<uint8_t *>(dst);
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
-        
+
         // capture an absolute deadline once, before entering the wait loop,
         // preventing the timeout from resetting on intermediate spurious wakeups
-        const Timeout deadline = (timed_wait ? 
+        const Timeout deadline = (timed_wait ?
             static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
         ScopedCriticalSection cs_;
@@ -625,18 +763,20 @@ inline size_t Pipe::ReadBulkTriggered(void *dst, size_t trigger, size_t max_coun
                 remaining = (now >= deadline ? NO_WAIT : (deadline - now));
             }
 
-            if (!m_cv_not_empty.Wait(cs_, remaining))
+            const EWaitResult wr = m_cv_not_empty.WaitEx(cs_, remaining);
+            if (wr != WAIT_RESULT_SIGNAL)
             {
-                break; // break the waiting loop on timeout
+                result = wr;
+                break; // break the waiting loop on timeout, cancellation or failure
             }
         }
 
-        // whether we broke out via satisfying the trigger or hitting a timeout,
-        // we drain whatever is currently available up to max_count
+        // whether we broke out via satisfying the trigger or a failed wait (timeout,
+        // cancellation), we drain whatever is currently available up to max_count
         read_count = DrainLocked(dst_bytes, max_count);
     }
 
-    return read_count;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -677,6 +817,11 @@ inline void Pipe::Reset()
        eliminate dead branches in bulk transfer paths.
      - A fully type-safe call interface using \c T references and pointers.
 
+    \note  The boolean / count-returning calls (\c Write(), \c Read(), \c WriteBulk(), \c ReadBulk())
+           collapse a timeout and a cancellation (IKernel::CancelTaskWait()) into the same failure
+           result. Use the \c *Ex() variants (\c WriteEx(), \c ReadEx(), \c WriteBulkEx(),
+           \c ReadBulkEx()) if the caller needs to tell them apart.
+
     \code
     // Example: Producer-Consumer pattern
     stk::sync::PipeT<uint32_t, 8> g_DataPipe;
@@ -708,20 +853,22 @@ public:
     explicit PipeT() : m_buffer(), m_head(0U), m_tail(0U), m_count(0U), m_cv_not_empty(), m_cv_not_full()
     {}
 
-    /*! \brief     Write data to the pipe.
-        \details   Attempts to push an element into the FIFO queue. If pipe is full, the
-                   calling task will be suspended until space is made available by a
-                   consumer or the timeout expires.
+    /*! \brief     Write data to the pipe, preserving the full wait outcome.
+        \details   Identical to \c Write(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
         \param[in] data: Reference to the data element to be copied into the pipe.
         \param[in] timeout_ticks: Maximum time to wait for space (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if data was successfully written, \c false if timeout expired
-                   before space became available.
+        \return    \c WAIT_RESULT_SIGNAL if data was written, \c WAIT_RESULT_TIMEOUT if no space became
+                   available before the timeout expired (or \a NO_WAIT was passed on a full pipe),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if the kernel rejected the wait. Nothing is written on a
+                   non-signal result.
     */
-    bool Write(const T &data, Timeout timeout_ticks = WAIT_INFINITE)
+    EWaitResult WriteEx(const T &data, Timeout timeout_ticks = WAIT_INFINITE)
     {
         ScopedCriticalSection cs_;
-        bool success = true;
+        EWaitResult result = WAIT_RESULT_SIGNAL;
 
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -741,14 +888,15 @@ public:
                 remaining = (now >= deadline ? NO_WAIT : (deadline - now));
             }
 
-            if (!m_cv_not_full.Wait(cs_, remaining))
+            result = m_cv_not_full.WaitEx(cs_, remaining);
+            if (result != WAIT_RESULT_SIGNAL)
             {
-                success = false;
+                // timeout, cancellation or kernel failure: nothing is written
                 break;
             }
         }
 
-        if (success)
+        if (result == WAIT_RESULT_SIGNAL)
         {
             m_buffer[m_head] = data;
             m_head = (m_head + 1U) % N;
@@ -758,7 +906,22 @@ public:
             m_cv_not_empty.NotifyOne_CS();
         }
 
-        return success;
+        return result;
+    }
+
+    /*! \brief     Write data to the pipe.
+        \details   Attempts to push an element into the FIFO queue. If pipe is full, the
+                   calling task will be suspended until space is made available by a
+                   consumer or the timeout expires.
+        \param[in] data: Reference to the data element to be copied into the pipe.
+        \param[in] timeout_ticks: Maximum time to wait for space (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c true if data was successfully written, \c false otherwise (timeout, cancellation
+                   or NO_WAIT on a full pipe). Use \c WriteEx() to tell these apart.
+    */
+    bool Write(const T &data, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (WriteEx(data, timeout_ticks) == WAIT_RESULT_SIGNAL);
     }
 
     /*! \brief     Attempt to write data to the pipe without blocking.
@@ -770,45 +933,44 @@ public:
     */
     bool TryWrite(const T &data) { return Write(data, NO_WAIT); }
 
-    /*! \brief     Write multiple elements to the pipe.
-        \details   Copies a block of data into the FIFO. If the pipe does not have
-                   enough space for the entire block, it will block until the full
-                   amount can be written or the timeout expires.
+    /*! \brief     Write multiple elements to the pipe, preserving the full wait outcome.
+        \details   Identical to \c WriteBulk(), except the caller gets the raw \c EWaitResult and the
+                   number of elements written through \a written, so a cancellation (via
+                   IKernel::CancelTaskWait()) can be distinguished from a timeout. Elements already
+                   copied into the pipe before a timeout or cancellation stay in the pipe.
         \param[in] src: Pointer to the source array.
         \param[in] count: Number of elements to write.
+        \param[out] written: Number of elements actually written (always set, 0 on \c WAIT_RESULT_FAIL).
         \param[in] timeout_ticks: Maximum time to wait for sufficient space (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    Number of elements actually written. Equal to \c count unless a timeout occurred.
-        \code
-        // Example:
-        Sample frame[64];
-        FillFrame(frame);
-
-        size_t result = g_Pipe.WriteBulk(frame, 64, 500);
-        if (result < 64) {
-            // handle partial write / timeout
-        }
-        \endcode
+        \return    \c WAIT_RESULT_SIGNAL if all \a count elements were written (also for \a count = 0),
+                   \c WAIT_RESULT_TIMEOUT if the timeout expired (or \a NO_WAIT was passed) before all
+                   elements fitted, \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                   IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if \a src is \c nullptr or the kernel
+                   rejected the wait. On any non-signal result \a written holds the partial count.
     */
-    size_t WriteBulk(const T *src, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    EWaitResult WriteBulkEx(const T *src, size_t count, size_t &written,
+                            Timeout timeout_ticks = WAIT_INFINITE)
     {
-        size_t written = 0U;
+        written = 0U;
+
+        // null source is rejected, an empty request is trivially satisfied
+        EWaitResult result = ((src != nullptr) ? WAIT_RESULT_SIGNAL : WAIT_RESULT_FAIL);
 
         if ((src != nullptr) && (count != 0U))
         {
             const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
-            
+
             // capture an absolute deadline once, before entering the wait loop,
             // preventing the timeout from resetting on intermediate partial writes
-            const Timeout deadline = (timed_wait ? 
+            const Timeout deadline = (timed_wait ?
                 static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
             ScopedCriticalSection cs_;
 
             while (written < count)
             {
-                bool is_timeout = false;
-
+                // wait until there is at least 1 free slot
                 while (m_count == N)
                 {
                     Timeout remaining = deadline;
@@ -818,17 +980,18 @@ public:
                         remaining = (now >= deadline ? NO_WAIT : (deadline - now));
                     }
 
-                    if (!m_cv_not_full.Wait(cs_, remaining))
+                    const EWaitResult wr = m_cv_not_full.WaitEx(cs_, remaining);
+                    if (wr != WAIT_RESULT_SIGNAL)
                     {
-                        is_timeout = true; 
+                        result = wr;
                         break; // break inner condition variable loop
                     }
                 }
 
-                // if timeout, drop out of the chunk processing loop
-                if (is_timeout)
+                // if the wait failed (timeout, cancellation), drop out of the chunk processing loop
+                if (result != WAIT_RESULT_SIGNAL)
                 {
-                    break; 
+                    break;
                 }
 
                 // calculate how many we can copy in this contiguous stretch
@@ -850,7 +1013,7 @@ public:
                 else
                 {
                     const size_t first_part = N - m_head;
-                    
+
                     if (to_write <= first_part)
                     {
                         STK_MEMCPY(&m_buffer[m_head], &src[written], to_write * sizeof(T));
@@ -860,7 +1023,7 @@ public:
                         STK_MEMCPY(&m_buffer[m_head], &src[written],              first_part              * sizeof(T));
                         STK_MEMCPY(&m_buffer[0U],     &src[written + first_part], (to_write - first_part) * sizeof(T));
                     }
-                    
+
                     written += to_write;
                     m_head   = (m_head + to_write) % N;
                     m_count += to_write;
@@ -871,6 +1034,35 @@ public:
             }
         }
 
+        return result;
+    }
+
+    /*! \brief     Write multiple elements to the pipe.
+        \details   Copies a block of data into the FIFO. If the pipe does not have
+                   enough space for the entire block, it will block until the full
+                   amount can be written or the timeout expires.
+        \param[in] src: Pointer to the source array.
+        \param[in] count: Number of elements to write.
+        \param[in] timeout_ticks: Maximum time to wait for sufficient space (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    Number of elements actually written. Equal to \c count unless a timeout or a
+                   cancellation occurred. Use \c WriteBulkEx() to tell these apart.
+        \code
+        // Example:
+        Sample frame[64];
+        FillFrame(frame);
+
+        size_t result = g_Pipe.WriteBulk(frame, 64, 500);
+        if (result < 64) {
+            // handle partial write / timeout
+        }
+        \endcode
+    */
+    size_t WriteBulk(const T *src, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        size_t written = 0U;
+        const EWaitResult result = WriteBulkEx(src, count, written, timeout_ticks);
+        STK_UNUSED(result);
         return written;
     }
 
@@ -884,20 +1076,22 @@ public:
     */
     size_t TryWriteBulk(const T *src, size_t count) { return WriteBulk(src, count, NO_WAIT); }
 
-    /*! \brief     Read data from the pipe.
-        \details   Attempts to retrieve an element from the FIFO queue. If pipe is empty,
-                   the calling task will be suspended until data is provided by a
-                   producer or the timeout expires.
+    /*! \brief     Read data from the pipe, preserving the full wait outcome.
+        \details   Identical to \c Read(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
         \param[out] data: Reference to the variable where the retrieved data will be stored.
         \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if data was successfully read, \c false if timeout expired before
-                   any data became available.
+        \return    \c WAIT_RESULT_SIGNAL if an element was read, \c WAIT_RESULT_TIMEOUT if no data became
+                   available before the timeout expired (or \a NO_WAIT was passed on an empty pipe),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if the kernel rejected the wait. \a data is not modified on a
+                   non-signal result.
     */
-    bool Read(T &data, Timeout timeout_ticks = WAIT_INFINITE)
+    EWaitResult ReadEx(T &data, Timeout timeout_ticks = WAIT_INFINITE)
     {
         ScopedCriticalSection cs_;
-        bool success = true;
+        EWaitResult result = WAIT_RESULT_SIGNAL;
 
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -917,14 +1111,15 @@ public:
                 remaining = (now >= deadline ? NO_WAIT : (deadline - now));
             }
 
-            if (!m_cv_not_empty.Wait(cs_, remaining))
+            result = m_cv_not_empty.WaitEx(cs_, remaining);
+            if (result != WAIT_RESULT_SIGNAL)
             {
-                success = false;
+                // timeout, cancellation or kernel failure: nothing is read
                 break;
             }
         }
 
-        if (success)
+        if (result == WAIT_RESULT_SIGNAL)
         {
             data     = m_buffer[m_tail];
             m_tail   = (m_tail + 1U) % N;
@@ -934,9 +1129,24 @@ public:
             m_cv_not_full.NotifyOne_CS();
         }
 
-        return success;
+        return result;
     }
-    
+
+    /*! \brief     Read data from the pipe.
+        \details   Attempts to retrieve an element from the FIFO queue. If pipe is empty,
+                   the calling task will be suspended until data is provided by a
+                   producer or the timeout expires.
+        \param[out] data: Reference to the variable where the retrieved data will be stored.
+        \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    \c true if data was successfully read, \c false otherwise (timeout, cancellation or
+                   NO_WAIT on an empty pipe). Use \c ReadEx() to tell these apart.
+    */
+    bool Read(T &data, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (ReadEx(data, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
+
     /*! \brief     Attempt to read data from the pipe without blocking.
         \details   Dequeues an element only if one is immediately available.
                    Returns \c false instantly if the pipe is empty.
@@ -946,47 +1156,43 @@ public:
     */
     bool TryRead(T &data) { return Read(data, NO_WAIT); }
 
-    /*! \brief     Read multiple elements from the pipe.
-        \details   Attempts to retrieve a block of data from the FIFO. If pipe does not
-                   contain enough elements to satisfy the requested count, it will block
-                   until the full amount is read or the timeout expires.
+    /*! \brief     Read multiple elements from the pipe, preserving the full wait outcome.
+        \details   Identical to \c ReadBulk(), except the caller gets the raw \c EWaitResult and the
+                   number of elements read through \a read_count, so a cancellation (via
+                   IKernel::CancelTaskWait()) can be distinguished from a timeout. Elements already
+                   copied into \a dst before a timeout or cancellation stay valid and are counted.
         \param[out] dst: Pointer to the destination array.
         \param[in] count: Number of elements to read.
+        \param[out] read_count: Number of elements actually read (always set, 0 on \c WAIT_RESULT_FAIL).
         \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
         \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
-        \return    Number of elements actually read. Equal to \c count unless a timeout occurred.
-        \code
-        // Example:
-        Sample frame[64];
-
-        size_t result = g_Pipe.ReadBulk(frame, 64, 500);
-        if (result == 64) {
-            // process full frame
-        } else {
-            // handle partial read / timeout
-        }
-        \endcode
+        \return    \c WAIT_RESULT_SIGNAL if all \a count elements were read (also for \a count = 0),
+                   \c WAIT_RESULT_TIMEOUT if the timeout expired (or \a NO_WAIT was passed) before all
+                   elements were available, \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                   IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if \a dst is \c nullptr or the kernel
+                   rejected the wait. On any non-signal result \a read_count holds the partial count.
     */
-    size_t ReadBulk(T *dst, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    EWaitResult ReadBulkEx(T *dst, size_t count, size_t &read_count,
+                           Timeout timeout_ticks = WAIT_INFINITE)
     {
-        size_t read_count = 0U;
+        read_count = 0U;
+
+        // null destination is rejected, an empty request is trivially satisfied
+        EWaitResult result = ((dst != nullptr) ? WAIT_RESULT_SIGNAL : WAIT_RESULT_FAIL);
 
         if ((dst != nullptr) && (count != 0U))
         {
             const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
-            
+
             // capture an absolute deadline once, before entering the wait loop,
-            // this prevents the timeout from being silently restarted on each
-            // spurious wakeup (e.g. a partial Set() that does not satisfy WAIT_ALL)
-            const Timeout deadline = (timed_wait ? 
+            // preventing the timeout from resetting on intermediate partial reads
+            const Timeout deadline = (timed_wait ?
                 static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
             ScopedCriticalSection cs_;
 
             while (read_count < count)
             {
-                bool is_timeout = false;
-              
                 // wait until there is at least 1 element available
                 while (m_count == 0U)
                 {
@@ -997,15 +1203,16 @@ public:
                         remaining = (now >= deadline ? NO_WAIT : (deadline - now));
                     }
 
-                    if (!m_cv_not_empty.Wait(cs_, remaining))
+                    const EWaitResult wr = m_cv_not_empty.WaitEx(cs_, remaining);
+                    if (wr != WAIT_RESULT_SIGNAL)
                     {
-                        is_timeout = true;
+                        result = wr;
                         break; // break inner condition variable loop
                     }
                 }
 
-                // if a timeout, drop out of the chunk processing loop
-                if (is_timeout)
+                // if the wait failed (timeout, cancellation), drop out of the chunk processing loop
+                if (result != WAIT_RESULT_SIGNAL)
                 {
                     break;
                 }
@@ -1027,7 +1234,7 @@ public:
                 else
                 {
                     const size_t first_part = N - m_tail;
-                    
+
                     if (to_read <= first_part)
                     {
                         STK_MEMCPY(&dst[read_count], &m_buffer[m_tail], to_read * sizeof(T));
@@ -1037,7 +1244,7 @@ public:
                         STK_MEMCPY(&dst[read_count],              &m_buffer[m_tail], first_part              * sizeof(T));
                         STK_MEMCPY(&dst[read_count + first_part], &m_buffer[0U],     (to_read - first_part)  * sizeof(T));
                     }
-                    
+
                     read_count += to_read;
                     m_tail      = (m_tail + to_read) % N;
                     m_count    -= to_read;
@@ -1048,6 +1255,36 @@ public:
             }
         }
 
+        return result;
+    }
+
+    /*! \brief     Read multiple elements from the pipe.
+        \details   Attempts to retrieve a block of data from the FIFO. If pipe does not
+                   contain enough elements to satisfy the requested count, it will block
+                   until the full amount is read or the timeout expires.
+        \param[out] dst: Pointer to the destination array.
+        \param[in] count: Number of elements to read.
+        \param[in] timeout_ticks: Maximum time to wait for data (ticks). Default: \c WAIT_INFINITE.
+        \warning   ISR-safe only with timeout_ticks=NO_WAIT, ISR-unsafe otherwise.
+        \return    Number of elements actually read. Equal to \c count unless a timeout or a
+                   cancellation occurred. Use \c ReadBulkEx() to tell these apart.
+        \code
+        // Example:
+        Sample frame[64];
+
+        size_t result = g_Pipe.ReadBulk(frame, 64, 500);
+        if (result == 64) {
+            // process full frame
+        } else {
+            // handle partial read / timeout
+        }
+        \endcode
+    */
+    size_t ReadBulk(T *dst, size_t count, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        size_t read_count = 0U;
+        const EWaitResult result = ReadBulkEx(dst, count, read_count, timeout_ticks);
+        STK_UNUSED(result);
         return read_count;
     }
 

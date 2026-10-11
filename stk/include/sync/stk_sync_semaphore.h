@@ -85,12 +85,24 @@ public:
         STK_ASSERT(m_wait_list.IsEmpty()); // API contract: must not be destroyed with waiting tasks
     }
 
+    /*! \brief     Wait for a signal (decrement counter), preserving the full wait outcome.
+        \param[in] timeout_ticks: Maximum time to wait (ticks).
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if a token was acquired, \c WAIT_RESULT_TIMEOUT if no token
+                   was available and the timeout expired (or \a NO_WAIT was passed),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait(),
+                   \c WAIT_RESULT_FAIL if the kernel rejected the wait. A non-signal result never
+                   consumes a token.
+    */
+    EWaitResult WaitEx(Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Wait for a signal (decrement counter).
         \param[in] timeout_ticks: Maximum time to wait (ticks).
-        \warning   ISR-safe only with \a timeout = \c NO_WAIT, ISR-unsafe otherwise.
-        \return    True if acquired, false if timeout occurred.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    True if acquired, false otherwise (timeout, cancellation or NO_WAIT with no token
+                   available). Use \c WaitEx() to tell these apart.
     */
-    bool Wait(Timeout timeout_ticks = WAIT_INFINITE);
+    bool Wait(Timeout timeout_ticks = WAIT_INFINITE) { return (WaitEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief     Poll the semaphore without blocking (decrement counter if available).
         \details   Checks if a resource token is available. If so, decrements the counter
@@ -144,17 +156,19 @@ private:
 // Wait
 // ---------------------------------------------------------------------------
 
-inline bool Semaphore::Wait(Timeout timeout_ticks)
+inline EWaitResult Semaphore::WaitEx(Timeout timeout_ticks)
 {
     ScopedCriticalSection cs_;
-    bool success = false;
+
+    // NO_WAIT with no token available is reported as an immediately-expired timeout
+    EWaitResult result = WAIT_RESULT_TIMEOUT;
 
     // fast path: resource is available
     if (m_count != 0U)
     {
         m_count = static_cast<uint16_t>(m_count - 1U);
         __stk_full_memfence();
-        success = true;
+        result = WAIT_RESULT_SIGNAL;
     }
     // slow path: block until Signal() or timeout
     else if (timeout_ticks != NO_WAIT)
@@ -163,15 +177,15 @@ inline bool Semaphore::Wait(Timeout timeout_ticks)
 
         // note: after waking, if not a timeout, we effectively own the resource that Signal() produced
         // but didn't put into m_count (see logic of if (m_wait_list.IsEmpty()) in Signal())
-        success = (IKernelService::GetInstance()->Wait(this, &cs_, timeout_ticks) == WAIT_RESULT_SIGNAL);
+        result = IKernelService::GetInstance()->Wait(this, &cs_, timeout_ticks);
     }
     // try lock behavior (timeout_ticks=NO_WAIT)
     else
     {
-        // success is false already, noop
+        // result is WAIT_RESULT_TIMEOUT already, noop
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------

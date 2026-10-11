@@ -147,6 +147,16 @@ typedef struct stk_task_t stk_task_t;
 */
 typedef void (*stk_task_entry_t)(void *arg);
 
+/*! \brief     Outcome of a cancellable, timed kernel wait (see stk_cv_wait_ex(), stk_mutex_timed_lock_ex(), stk_sem_wait_ex(), ...).
+    \note      It is a direct match for stk::EWaitResult.
+*/
+typedef enum stk_wait_result_t {
+    STK_WAIT_RESULT_FAIL     = -1, //!< The kernel returned an error without actually waiting.
+    STK_WAIT_RESULT_SIGNAL   = 0,  //!< The wake was caused by a signal.
+    STK_WAIT_RESULT_TIMEOUT  = 1,  //!< The wake was caused by a timeout expiry.
+    STK_WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task, independent of signal/timeout.
+} stk_wait_result_t;
+
 /*! \brief     Infinite timeout constant.
 */
 #define STK_WAIT_INFINITE (STK_STATIC_CAST(stk_timeout_t, INT32_MAX))
@@ -993,6 +1003,22 @@ void stk_mutex_unlock(stk_mutex_t *mtx);
 */
 bool stk_mutex_timed_lock(stk_mutex_t *mtx, stk_timeout_t timeout);
 
+/*! \brief     Try to lock the mutex with a timeout, preserving the full outcome.
+    \details   Identical to \c stk_mutex_timed_lock(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] mtx: Mutex handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_SIGNAL means "lock acquired" (including the immediate and
+               recursive paths). A busy mutex with \c STK_NO_WAIT is reported as \c STK_WAIT_RESULT_TIMEOUT.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_mutex_timed_lock_ex(stk_mutex_t *mtx, stk_timeout_t timeout);
+
 #ifdef __cplusplus
 namespace stk { namespace sync { class Mutex; } }
 
@@ -1066,6 +1092,23 @@ void stk_fastmutex_unlock(stk_fastmutex_t *mtx);
 */
 bool stk_fastmutex_timed_lock(stk_fastmutex_t *mtx, stk_timeout_t timeout);
 
+/*! \brief     Try to lock the FastMutex with a timeout, preserving the full outcome.
+    \details   Identical to \c stk_fastmutex_timed_lock(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] mtx: FastMutex handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_SIGNAL means "lock acquired". A busy mutex with \c STK_NO_WAIT
+               is reported as \c STK_WAIT_RESULT_TIMEOUT.
+    \warning   Panics (KERNEL_PANIC_SYNC_DEADLOCK) if the caller already owns the mutex.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_fastmutex_timed_lock_ex(stk_fastmutex_t *mtx, stk_timeout_t timeout);
+
 #ifdef __cplusplus
 namespace stk { namespace sync { class FastMutex; } }
 
@@ -1127,18 +1170,6 @@ namespace stk { namespace sync { class SpinLock; } }
 */
 extern "C" stk::sync::SpinLock *stk_spinlock_get_instance(stk_spinlock_t *slock);
 #endif // __cplusplus
-
-// ----- Wait Result (shared) ---------------------------------------------------
-
-/*! \brief     Outcome of a cancellable, timed kernel wait (see stk_cv_wait_ex()).
-    \note      It is a direct match for stk::EWaitResult.
-*/
-typedef enum stk_wait_result_t {
-    STK_WAIT_RESULT_FAIL     = -1, //!< The kernel returned an error without actually waiting.
-    STK_WAIT_RESULT_SIGNAL   = 0,  //!< The wake was caused by a signal.
-    STK_WAIT_RESULT_TIMEOUT  = 1,  //!< The wake was caused by a timeout expiry.
-    STK_WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task, independent of signal/timeout.
-} stk_wait_result_t;
 
 // ----- Condition Variable ----------------------------------------------------
 
@@ -1290,6 +1321,22 @@ void stk_event_destroy(stk_event_t *ev);
 */
 bool stk_event_wait(stk_event_t *ev, stk_timeout_t timeout);
 
+/*! \brief     Wait for the event to become signaled, preserving the full outcome.
+    \details   Identical to \c stk_event_wait(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool, so a cancellation can be
+               distinguished from a timeout.
+    \param[in] ev:      Event handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      A cancelled wait does not consume the event state.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_event_wait_ex(stk_event_t *ev, stk_timeout_t timeout);
+
 /*! \brief     Wait for the event to become signaled.
     \param[in] ev: Event handle.
     \return    True if signaled, False on timeout.
@@ -1367,6 +1414,21 @@ void stk_sem_destroy(stk_sem_t *sem);
                different tick rates.
 */
 bool stk_sem_wait(stk_sem_t *sem, stk_timeout_t timeout);
+
+/*! \brief     Wait for a semaphore resource, preserving the full outcome.
+    \details   Identical to \c stk_sem_wait(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] sem: Semaphore handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      A non-signal result never consumes a token.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_sem_wait_ex(stk_sem_t *sem, stk_timeout_t timeout);
 
 /*! \brief     Poll the semaphore without blocking.
     \details   Acquires a resource token if one is immediately available; returns
@@ -1636,6 +1698,21 @@ void stk_pipe_destroy(stk_pipe_t *pipe);
 */
 bool stk_pipe_write(stk_pipe_t *pipe, const void *data, stk_timeout_t timeout);
 
+/*! \brief     Write a single element to the pipe, preserving the full outcome.
+    \details   Identical to \c stk_pipe_write(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] pipe: Pipe handle.
+    \param[in] data: Pointer to the element payload (must be >= element_size bytes).
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_pipe_write_ex(stk_pipe_t *pipe, const void *data, stk_timeout_t timeout);
+
 /*! \brief     Attempt to write a single element to the pipe without blocking.
     \param[in] pipe: Pipe handle.
     \param[in] data: Pointer to the element payload.
@@ -1659,6 +1736,21 @@ bool stk_pipe_trywrite(stk_pipe_t *pipe, const void *data);
     \warning   ISR-safe only with \a timeout = \c STK_NO_WAIT.
 */
 bool stk_pipe_read(stk_pipe_t *pipe, void *data, stk_timeout_t timeout);
+
+/*! \brief     Read a single element from the pipe, preserving the full outcome.
+    \details   Identical to \c stk_pipe_read(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] pipe: Pipe handle.
+    \param[out] data: Destination buffer (must be >= element_size bytes).
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_pipe_read_ex(stk_pipe_t *pipe, void *data, stk_timeout_t timeout);
 
 /*! \brief     Attempt to read a single element from the pipe without blocking.
     \param[in] pipe: Pipe handle.
@@ -1686,6 +1778,27 @@ bool stk_pipe_tryread(stk_pipe_t *pipe, void *data);
 */
 size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const void *src, size_t count, stk_timeout_t timeout);
 
+/*! \brief     Write multiple elements to the pipe, preserving the full outcome.
+    \details   Identical to \c stk_pipe_write_bulk(), except the caller gets the raw
+               \c stk_wait_result_t and the number of elements written is returned
+               through \a written.
+    \param[in] pipe: Pipe handle.
+    \param[in] src: Pointer to the source array (must hold at least \a count elements).
+    \param[in] count: Number of elements to write.
+    \param[out] written: Number of elements actually written (may be \c NULL if not needed).
+               Always set; holds the partial count on any non-signal result.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_FAIL is also returned if \a src is \c NULL.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_pipe_write_bulk_ex(stk_pipe_t *pipe, const void *src, size_t count,
+                                         size_t *written, stk_timeout_t timeout);
+
 /*! \brief     Attempt to write multiple elements to the pipe without blocking.
     \details   Copies as many elements as possible. Elements that do not fit are discarded.
     \param[in] pipe: Pipe handle.
@@ -1712,6 +1825,27 @@ size_t stk_pipe_trywrite_bulk(stk_pipe_t *pipe, const void *src, size_t count);
     \warning   ISR-safe only with \a timeout = \c STK_NO_WAIT.
 */
 size_t stk_pipe_read_bulk(stk_pipe_t *pipe, void *dst, size_t count, stk_timeout_t timeout);
+
+/*! \brief     Read multiple elements from the pipe, preserving the full outcome.
+    \details   Identical to \c stk_pipe_read_bulk(), except the caller gets the raw
+               \c stk_wait_result_t and the number of elements read is returned
+               through \a read_count.
+    \param[in] pipe: Pipe handle.
+    \param[out] dst: Pointer to the destination array (must hold at least \a count elements).
+    \param[in] count: Number of elements to read.
+    \param[out] read_count: Number of elements actually read (may be \c NULL if not needed).
+               Always set; holds the partial count on any non-signal result.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_FAIL is also returned if \a dst is \c NULL.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_pipe_read_bulk_ex(stk_pipe_t *pipe, void *dst, size_t count,
+                                        size_t *read_count, stk_timeout_t timeout);
 
 /*! \brief     Attempt to read multiple elements from the pipe without blocking.
     \details   Reads as many elements as are currently available without blocking.
@@ -1747,6 +1881,34 @@ size_t stk_pipe_read_bulk_triggered(stk_pipe_t   *pipe,
                                     size_t        trigger,
                                     size_t        max_count,
                                     stk_timeout_t timeout);
+
+/*! \brief     Read at least \a trigger elements, then drain up to \a max_count, preserving
+               the full outcome.
+    \details   Identical to \c stk_pipe_read_bulk_triggered(), except the caller gets the raw
+               \c stk_wait_result_t and the number of elements read is returned
+               through \a read_count.
+    \param[in] pipe: Pipe handle.
+    \param[out] dst: Destination buffer; must hold at least \a max_count elements.
+    \param[in] trigger: Minimum number of elements that must be available before any
+               data is dequeued. Clamped to [1, max_count] internally.
+    \param[in] max_count: Maximum number of elements to return in total.
+    \param[out] read_count: Number of elements actually read (may be \c NULL if not needed).
+               On a timeout or cancellation holds the (possibly zero) number of elements drained.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_FAIL is also returned if \a dst is \c NULL.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_pipe_read_bulk_triggered_ex(stk_pipe_t   *pipe,
+                                                  void         *dst,
+                                                  size_t        trigger,
+                                                  size_t        max_count,
+                                                  size_t       *read_count,
+                                                  stk_timeout_t timeout);
 
 /*! \brief     Non-blocking variant of stk_pipe_read_bulk_triggered.
     \details   Returns immediately with however many elements are available, up to
@@ -1916,6 +2078,23 @@ void stk_msgq_destroy(stk_msgq_t *mq);
 */
 bool stk_msgq_put(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout);
 
+/*! \brief      Put a message into the queue, preserving the full outcome.
+    \details    Identical to \c stk_msgq_put(), except the caller gets the raw
+                \c stk_wait_result_t instead of a collapsed bool.
+    \param[in]  mq: MessageQueue handle.
+    \param[in] msg: Pointer to the message payload (must be >= msg_size bytes).
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \return     \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+                or \c STK_WAIT_RESULT_FAIL.
+    \note       Nothing is enqueued on a non-signal result.
+    \note       If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+                to convert a millisecond value to ticks for best portability across
+                different tick rates.
+    \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
+*/
+stk_wait_result_t stk_msgq_put_ex(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout);
+
 /*! \brief     Attempt to put a message into the queue without blocking.
     \param[in] mq: MessageQueue handle.
     \param[in] msg: Pointer to the message payload.
@@ -1941,6 +2120,23 @@ bool stk_msgq_tryput(stk_msgq_t *mq, const void *msg);
 */
 bool stk_msgq_putfront(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout);
 
+/*! \brief      Put a message into the front of the queue, preserving the full outcome.
+    \details    Identical to \c stk_msgq_putfront(), except the caller gets the raw
+                \c stk_wait_result_t instead of a collapsed bool.
+    \param[in]  mq: MessageQueue handle.
+    \param[in] msg: Pointer to the message payload (must be >= msg_size bytes).
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \return     \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+                or \c STK_WAIT_RESULT_FAIL.
+    \note       Nothing is enqueued on a non-signal result.
+    \note       If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+                to convert a millisecond value to ticks for best portability across
+                different tick rates.
+    \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
+*/
+stk_wait_result_t stk_msgq_putfront_ex(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout);
+
 /*! \brief     Attempt to put a message into the front of the queue without blocking.
     \param[in] mq: MessageQueue handle.
     \param[in] msg: Pointer to the message payload.
@@ -1963,6 +2159,23 @@ bool stk_msgq_tryputfront(stk_msgq_t *mq, const void *msg);
     \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
 */
 bool stk_msgq_get(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
+
+/*! \brief      Get a message from the queue, preserving the full outcome.
+    \details    Identical to \c stk_msgq_get(), except the caller gets the raw
+                \c stk_wait_result_t instead of a collapsed bool.
+    \param[in]  mq: MessageQueue handle.
+    \param[out] msg: Destination buffer (must be >= msg_size bytes).
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \return     \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+                or \c STK_WAIT_RESULT_FAIL.
+    \note       Nothing is copied on a non-signal result.
+    \note       If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+                to convert a millisecond value to ticks for best portability across
+                different tick rates.
+    \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
+*/
+stk_wait_result_t stk_msgq_get_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
 
 /*! \brief      Attempt to get a message from the queue without blocking.
     \param[in]  mq: MessageQueue handle.
@@ -1990,6 +2203,23 @@ bool stk_msgq_tryget(stk_msgq_t *mq, void *msg);
 */
 bool stk_msgq_peek(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
 
+/*! \brief      Peek at the next message without removing it, preserving the full outcome.
+    \details    Identical to \c stk_msgq_peek(), except the caller gets the raw
+                \c stk_wait_result_t instead of a collapsed bool.
+    \param[in]  mq: MessageQueue handle.
+    \param[out] msg: Destination buffer (must be >= msg_size bytes).
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \return     \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+                or \c STK_WAIT_RESULT_FAIL.
+    \note       Nothing is copied on a non-signal result.
+    \note       If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+                to convert a millisecond value to ticks for best portability across
+                different tick rates.
+    \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
+*/
+stk_wait_result_t stk_msgq_peek_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
+
 /*! \brief      Attempt to peek at the next message without blocking.
     \param[in]  mq: MessageQueue handle.
     \param[out] msg: Destination buffer (must be >= msg_size bytes).
@@ -2014,6 +2244,23 @@ bool stk_msgq_trypeek(stk_msgq_t *mq, void *msg);
     \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
 */
 bool stk_msgq_peekfront(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
+
+/*! \brief      Peek at the front-inserted message without removing it, preserving the full outcome.
+    \details    Identical to \c stk_msgq_peekfront(), except the caller gets the raw
+                \c stk_wait_result_t instead of a collapsed bool.
+    \param[in]  mq: MessageQueue handle.
+    \param[out] msg: Destination buffer (must be >= msg_size bytes).
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \return     \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+                or \c STK_WAIT_RESULT_FAIL.
+    \note       Nothing is copied on a non-signal result.
+    \note       If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+                to convert a millisecond value to ticks for best portability across
+                different tick rates.
+    \warning    ISR-safe only with \a timeout = \c STK_NO_WAIT.
+*/
+stk_wait_result_t stk_msgq_peekfront_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout);
 
 /*! \brief      Attempt to peek at the front message without blocking.
     \param[in]  mq: MessageQueue handle.
@@ -2155,6 +2402,22 @@ bool stk_rwmutex_try_read_lock(stk_rwmutex_t *rw);
 */
 bool stk_rwmutex_timed_read_lock(stk_rwmutex_t *rw, stk_timeout_t timeout);
 
+/*! \brief     Try to acquire the read lock with a timeout, preserving the full outcome.
+    \details   Identical to \c stk_rwmutex_timed_read_lock(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] rw: RWMutex handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+               Use STK_NO_WAIT for non-blocking.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_SIGNAL means "lock acquired".
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_rwmutex_timed_read_lock_ex(stk_rwmutex_t *rw, stk_timeout_t timeout);
+
 /*! \brief     Release the shared reader lock.
     \details   If this is the last active reader, waiting writers are notified.
     \param[in] rw: RWMutex handle.
@@ -2184,6 +2447,22 @@ bool stk_rwmutex_trylock(stk_rwmutex_t *rw);
                different tick rates.
 */
 bool stk_rwmutex_timed_lock(stk_rwmutex_t *rw, stk_timeout_t timeout);
+
+/*! \brief     Try to acquire the write lock with a timeout, preserving the full outcome.
+    \details   Identical to \c stk_rwmutex_timed_lock(), except the caller gets the raw
+               \c stk_wait_result_t instead of a collapsed bool.
+    \param[in] rw: RWMutex handle.
+    \param[in] timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+               Use STK_NO_WAIT for non-blocking.
+    \return    \c STK_WAIT_RESULT_SIGNAL, \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED,
+               or \c STK_WAIT_RESULT_FAIL.
+    \note      \c STK_WAIT_RESULT_SIGNAL means "lock acquired".
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_rwmutex_timed_lock_ex(stk_rwmutex_t *rw, stk_timeout_t timeout);
 
 /*! \brief     Release the exclusive writer lock.
     \details   Prioritizes waking waiting writers. If none are waiting, all

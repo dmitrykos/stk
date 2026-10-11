@@ -1230,11 +1230,8 @@ public:
         \param[in] sobj: Synchronization object to wait on.
         \param[in] mutex: Mutex protecting the state of the synchronization object.
         \param[in] timeout: Maximum wait time (ticks). Use \c WAIT_INFINITE to block indefinitely, use \c NO_WAIT to poll without blocking.
-        \return    Pointer to the wait object representing this wait operation (always non-NULL).
-                   The caller must check IWaitObject::IsTimeout() after this function returns to determine whether
-                   the wake was caused by a signal or by timeout expiry. The returned pointer is valid until
-                   the calling task re-enters a wait or the wait object is explicitly released by the kernel.
-                   The return value is guaranteed non nullptr and points to a valid IWaitObject.
+        \return    Wait result.
+        \see       ISyncObject, IMutex, EWaitResult
         \warning   ISR-unsafe.
     */
     virtual EWaitResult Wait(ISyncObject *sobj, IMutex *mutex, Timeout timeout) = 0;
@@ -1535,10 +1532,14 @@ public:
                    distinct from WAIT_RESULT_SIGNAL (resource was NOT acquired/signalled) and
                    WAIT_RESULT_TIMEOUT (the timeout, if any, had not yet expired).
         \note      Primitives built on top of IKernelService::Wait() surface this in their own
-                   terms: Mutex/Semaphore/Event collapse it into their boolean failure result;
-                   EventFlags::Wait() reports it as EventFlags::ERROR_CANCELED, distinct from
-                   EventFlags::ERROR_TIMEOUT.
+                   terms: the boolean Mutex/FastMutex::TimedLock(), Semaphore::Wait() and
+                   Event::Wait() collapse it into their failure result, while the extended
+                   variants (FastMutex::TimedLockEx(), Semaphore::WaitEx(), Event::WaitEx())
+                   return WAIT_RESULT_CANCELED as is; EventFlags::Wait() reports it as
+                   EventFlags::ERROR_CANCELED, distinct from EventFlags::ERROR_TIMEOUT.
         \note      KERNEL_SYNC mode only.
+        \see       IKernelService::SleepCancel, which additionally ends a plain Sleep()/SleepUntil() and
+                   cancels a sync-object wait identically.
     */
     virtual void CancelTaskWait(ITask *user_task) = 0;
 
@@ -1699,8 +1700,14 @@ public:
 
     /*! \brief     Cancel sleep of the task.
         \param[in] task_id: Id of the task.
-        \note      No-op if task was not in a sleeping state.
+        \details   Ends a sleep started by Sleep()/SleepUntil() early. If the task is instead blocked on a
+                   synchronization object (KERNEL_SYNC mode), the wait is cancelled the same way as
+                   IKernel::CancelTaskWait() does: the task is removed from the object's wait list and its
+                   Wait() returns \c WAIT_RESULT_CANCELED (not \c WAIT_RESULT_TIMEOUT or
+                   \c WAIT_RESULT_SIGNAL, no resource is acquired or consumed).
+        \note      No-op if task was neither sleeping nor waiting on a synchronization object.
         \note      ISR-safe.
+        \see       IKernel::CancelTaskWait, EWaitResult
     */
     virtual void SleepCancel(TId task_id) = 0;
 

@@ -62,6 +62,28 @@ static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_EF_TEST_TASKS_MAX, SwitchStrate
 // Test object (re-constructed per test via ResetTestState)
 static sync::EventFlags g_Flags;
 
+// Cancellation test state (see CancelWaitTask)
+static ITask * volatile g_Victim                 = nullptr;     // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid              = TID_NONE;    // same, as TId (for SleepCancel)
+static volatile uint32_t g_VictimResult[2]       = {0, 0};      // value returned by Wait() in task 1 / task 2 (0 = not set, Wait() never returns 0)
+static volatile int64_t g_VictimElapsed[2]       = {0, 0};      // ms spent in Wait() by task 1 / task 2
+static volatile int64_t g_VictimSleepElapsed     = 0;           // ms spent in Sleep() by task 1 after its wait ended
+
+// Scenario selector of CancelWaitTask. It is a global, not a constructor argument, because RunTest() declares
+// tasks 0-1 as 'static': a static local is constructed only once per template instantiation (on the first
+// RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first case.
+// Set by main() before each RunTest() call.
+static volatile int32_t g_CancelParam            = 0;
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_Kernel.CancelTaskWait(g_Victim);
+}
+
 // ---------------------------------------------------------------------------
 
 /*! \class SetWaitAnyTask
@@ -628,6 +650,245 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+
+static const int32_t CW_INFINITE         = 1;
+static const int32_t CW_NOT_TIMEOUT      = 2;
+static const int32_t CW_NO_STALE_WAITER  = 3;
+static const int32_t CW_FLAGS_UNTOUCHED  = 4;
+static const int32_t CW_TWO_WAITERS      = 5;
+static const int32_t CW_SIGNAL_WINS      = 6;
+static const int32_t CW_WAIT_ALL_PARTIAL = 7;
+static const int32_t CW_VIA_SLEEPCANCEL  = 100;
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of EventFlags waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked in Wait()), task 2 is a
+           second waiter used by the two-waiters scenario. The scenario is selected by g_CancelParam:
+           1 = cancel an infinite wait (ERROR_CANCELED is returned), 2 = cancel is not reported
+           as a timeout, 3 = cancel leaves no stale waiter behind, 4 = cancel does not modify the
+           flags word (the test is started with FLAG_B preset), 5 = cancelling one of two waiters
+           leaves the other intact, 6 = a Set() that arrived first wins over a late cancel,
+           7 = cancel of a WAIT_ALL waiter that already woke up for a partial match does not
+           consume the partially matched flags. Adding 100 to g_CancelParam cancels via
+           stk::SleepCancel() instead of IKernel::CancelTaskWait().
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_EF_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+    }
+
+    // Task 1: block on the flags, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_EF_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout  timeout = (m_scenario == CW_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+        const bool     wait_all = (m_scenario == CW_WAIT_ALL_PARTIAL);
+        const uint32_t flags   = (wait_all ? (FLAG_A | FLAG_B) : FLAG_A);
+        const uint32_t options = (wait_all ? sync::EventFlags::OPT_WAIT_ALL : sync::EventFlags::OPT_WAIT_ANY);
+
+        const int64_t  start = GetTimeNowMs();
+        const uint32_t r     = g_Flags.Wait(flags, options, timeout);
+
+        g_VictimElapsed[0] = GetTimeNowMs() - start;
+        g_VictimResult[0]  = r;
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+    }
+
+    // Task 2: second waiter, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_EF_TEST_SHORT_SLEEP); // block after task 1
+
+        const int64_t  start = GetTimeNowMs();
+        const uint32_t r     = g_Flags.Wait(FLAG_A, sync::EventFlags::OPT_WAIT_ANY, WAIT_INFINITE);
+
+        g_VictimElapsed[1] = GetTimeNowMs() - start;
+        g_VictimResult[1]  = r;
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        stk::Sleep(60); // task 1 (and task 2) are blocked in Wait() by now
+
+        if (m_scenario == CW_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms
+            pass = (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75);
+        }
+        else
+        if (m_scenario == CW_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as ERROR_CANCELED, not ERROR_TIMEOUT
+            pass = (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) && (g_VictimElapsed[0] < 150);
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            const uint32_t set_result = g_Flags.Set(FLAG_A);     // nobody waits: flag must simply become set
+            const uint32_t poll1      = g_Flags.TryWait(FLAG_A); // consumes the flag
+            const uint32_t poll2      = g_Flags.TryWait(FLAG_A); // nothing left
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("cancel no stale waiter: result=0x%X set=0x%X poll1=0x%X poll2=0x%X victim_sleep=%d ms\n",
+                (unsigned)g_VictimResult[0], (unsigned)set_result, (unsigned)poll1, (unsigned)poll2,
+                (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) &&
+                   (set_result == FLAG_A) && (poll1 == FLAG_A) && sync::EventFlags::IsError(poll2) &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_FLAGS_UNTOUCHED)
+        {
+            // flags word was constructed with FLAG_B, the victim waits for FLAG_A
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP);
+
+            const uint32_t after_cancel = g_Flags.Get();                 // the cancel must not touch the flags word
+            const uint32_t poll_a       = g_Flags.TryWait(FLAG_A);       // FLAG_A was never set
+            const uint32_t set_result   = g_Flags.Set(FLAG_A);
+            const uint32_t peek         = g_Flags.TryWait(FLAG_A, sync::EventFlags::OPT_NO_CLEAR); // keeps FLAG_A
+            const uint32_t after_peek   = g_Flags.Get();
+            const uint32_t take         = g_Flags.TryWait(FLAG_A);       // consumes FLAG_A
+            const uint32_t final_flags  = g_Flags.Get();
+
+            printf("cancel flags untouched: result=0x%X after_cancel=0x%X set=0x%X peek=0x%X take=0x%X final=0x%X\n",
+                (unsigned)g_VictimResult[0], (unsigned)after_cancel, (unsigned)set_result,
+                (unsigned)peek, (unsigned)take, (unsigned)final_flags);
+
+            pass = (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) &&
+                   (after_cancel == FLAG_B) && sync::EventFlags::IsError(poll_a) &&
+                   (set_result == (FLAG_A | FLAG_B)) &&
+                   (peek == FLAG_A) && (after_peek == (FLAG_A | FLAG_B)) &&
+                   (take == FLAG_A) && (final_flags == FLAG_B);
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);                 // cancel the first waiter only
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP);
+
+            const uint32_t set_result = g_Flags.Set(FLAG_A);  // must wake the second waiter
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP * 2);
+
+            const uint32_t leftover = g_Flags.TryWait(FLAG_A); // the second waiter consumed the flag
+
+            printf("cancel two waiters: first=0x%X second=0x%X set=0x%X leftover=0x%X\n",
+                (unsigned)g_VictimResult[0], (unsigned)g_VictimResult[1], (unsigned)set_result, (unsigned)leftover);
+
+            pass = (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) &&
+                   (g_VictimResult[1] == FLAG_A) &&
+                   !sync::EventFlags::IsError(set_result) && sync::EventFlags::IsError(leftover);
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // back to back, no scheduling point in between: the waiter is already notified and removed
+            // from the wait list when the cancel arrives, so the cancel must be a no-op
+            g_Flags.Set(FLAG_A);
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP * 2);
+
+            const uint32_t leftover = g_Flags.TryWait(FLAG_A); // the woken waiter consumed the flag
+
+            pass = (g_VictimResult[0] == FLAG_A) && sync::EventFlags::IsError(leftover);
+        }
+        else
+        if (m_scenario == CW_WAIT_ALL_PARTIAL)
+        {
+            // victim waits for FLAG_A | FLAG_B (WAIT_ALL): a partial Set() wakes it for re-evaluation,
+            // it must go back to sleep without consuming FLAG_A and still be cancelable afterwards
+            g_Flags.Set(FLAG_A);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP);
+
+            const bool still_blocked = (g_VictimResult[0] == 0U); // partial match must not complete the wait
+
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_EF_TEST_SHORT_SLEEP * 2);
+
+            const uint32_t flags_left = g_Flags.Get();
+
+            printf("cancel wait-all partial: blocked=%d result=0x%X flags=0x%X\n",
+                (int)still_blocked, (unsigned)g_VictimResult[0], (unsigned)flags_left);
+
+            // started waiting at ~10 ms, cancelled at ~70 ms
+            pass = still_blocked &&
+                   (g_VictimResult[0] == sync::EventFlags::ERROR_CANCELED) &&
+                   (g_VictimElapsed[0] >= 45) && (g_VictimElapsed[0] <= 85) &&
+                   (flags_left == FLAG_A);
+        }
+
+        // Safety net: if the cancel did not work a waiter is still blocked forever and the kernel would
+        // never stop, release any such waiter so that the test fails instead of hanging.
+        if (!pass)
+        {
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                g_Flags.Set(FLAG_A | FLAG_B);
+                stk::Sleep(_STK_EF_TEST_SHORT_SLEEP);
+            }
+        }
+
+        printf("cancel wait (scenario=%d, via %s): result[0]=0x%X elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (unsigned)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Helper: reset test state and re-construct the EventFlags object in-place
 // ---------------------------------------------------------------------------
 
@@ -636,6 +897,16 @@ static void ResetTestState(uint32_t initial_flags = 0U)
     g_TestResult    = 0;
     g_SharedCounter = 0;
     g_TestComplete  = false;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]  = 0;
+        g_VictimElapsed[i] = 0;
+    }
 
     // Re-construct the EventFlags object in-place with the requested initial value
     g_Flags.~EventFlags();
@@ -658,7 +929,8 @@ static bool NeedsExtendedTasks(const char *test_name)
            (strcmp(test_name, "Timeout")       != 0) &&
            (strcmp(test_name, "TryWait")       != 0) &&
            (strcmp(test_name, "Get")           != 0) &&
-           (strcmp(test_name, "InitialFlags")  != 0);
+           (strcmp(test_name, "InitialFlags")  != 0) &&
+           (strncmp(test_name, "CancelWait", 10) != 0); // cancel tests use tasks 0-2 only
 }
 
 /*! \fn    RunTest
@@ -784,6 +1056,39 @@ int main(int argc, char **argv)
         total_failures++;
     else
         total_success++;
+
+    // Tests 11-22: cancelability of EventFlags waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        struct CancelCase { const char *name; int32_t param; uint32_t initial_flags; };
+
+        static const CancelCase cases[] =
+        {
+            { "CancelWait_Infinite",             CW_INFINITE,                              0U     },
+            { "CancelWait_NotTimeout",           CW_NOT_TIMEOUT,                           0U     },
+            { "CancelWait_NoStaleWaiter",        CW_NO_STALE_WAITER,                       0U     },
+            { "CancelWait_FlagsUntouched",       CW_FLAGS_UNTOUCHED,                       FLAG_B },
+            { "CancelWait_TwoWaiters",           CW_TWO_WAITERS,                           0U     },
+            { "CancelWait_SignalWins",           CW_SIGNAL_WINS,                           0U     },
+            { "CancelWait_WaitAllPartial",       CW_WAIT_ALL_PARTIAL,                      0U     },
+            { "CancelWait_SleepCancel",          CW_VIA_SLEEPCANCEL + CW_INFINITE,         0U     },
+            { "CancelWait_SleepCancelNoStale",   CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER,  0U     },
+            { "CancelWait_SleepCancelTwo",       CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS,      0U     },
+            { "CancelWait_SleepCancelSignal",    CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS,      0U     },
+            { "CancelWait_SleepCancelAllPartial",CW_VIA_SLEEPCANCEL + CW_WAIT_ALL_PARTIAL, 0U     }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param, cases[i].initial_flags)
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
 
 #endif // __ARM_ARCH_6M__
 

@@ -66,19 +66,40 @@ public:
         STK_ASSERT(m_wait_list.IsEmpty()); // API contract: must not be destroyed with waiting tasks
     }
 
+    /*! \brief     Acquire lock, preserving the full wait outcome.
+        \param[in] timeout_ticks: Maximum time to wait (ticks).
+        \note      Not recursive: locking a mutex already owned by the caller is a contract violation
+                   that triggers STK_KERNEL_PANIC(KERNEL_PANIC_SYNC_DEADLOCK) in all build configurations.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if the lock was acquired (note: here "signal" means
+                   "lock acquired", including the immediate path where no notification
+                   was involved), \c WAIT_RESULT_TIMEOUT if the lock was busy and the
+                   timeout expired (or \a NO_WAIT was passed), \c WAIT_RESULT_CANCELED if the wait
+                   was cancelled via IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the kernel
+                   rejected the wait.
+    */
+    EWaitResult TimedLockEx(Timeout timeout_ticks);
+
     /*! \brief     Acquire lock.
         \param[in] timeout_ticks: Maximum time to wait (ticks).
         \note      Not recursive: locking a mutex already owned by the caller is a contract violation
                    that triggers STK_KERNEL_PANIC(KERNEL_PANIC_SYNC_DEADLOCK) in all build configurations.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return    True if lock acquired, false if timeout occurred.
+        \return    True if lock acquired, false otherwise (timeout, cancellation or NO_WAIT on a busy
+                   mutex). Use \c TimedLockEx() to tell these apart.
     */
-    bool TimedLock(Timeout timeout_ticks);
+    bool TimedLock(Timeout timeout_ticks) { return (TimedLockEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief     Acquire lock.
+        \note      Not cancelable: a \c void Lock() cannot report failure and must return with the
+                   lock held, so a cancellation (IKernel::CancelTaskWait()) is absorbed and the wait is
+                   retried. This also keeps the mutex re-acquisition at the end of
+                   ConditionVariable::Wait() reliable (the kernel re-locks via this method).
+                   Use \c TimedLockEx() if cancellation must be observed. Panics
+                   (KERNEL_PANIC_ASSERT) on any other failure.
         \warning   ISR-unsafe.
     */
-    void Lock() override { STK_UNUSED(TimedLock(WAIT_INFINITE)); }
+    void Lock() override;
 
     /*! \brief     Try to acquire the lock without blocking.
         \warning   ISR-safe.
@@ -114,7 +135,7 @@ private:
 // TimedLock
 // ---------------------------------------------------------------------------
 
-inline bool FastMutex::TimedLock(Timeout timeout_ticks)
+inline EWaitResult FastMutex::TimedLockEx(Timeout timeout_ticks)
 {
     IKernelService *const svc = IKernelService::GetInstance();
     const TId current_tid = svc->GetTid();
@@ -122,7 +143,9 @@ inline bool FastMutex::TimedLock(Timeout timeout_ticks)
     ScopedCriticalSection cs_;
 
     const TId owner_tid = m_owner_tid;
-    bool success = false;
+
+    // NO_WAIT on a busy mutex is reported as an immediately-expired timeout
+    EWaitResult result = WAIT_RESULT_TIMEOUT;
 
     STK_ASSERT(current_tid != TID_NONE); // API contract: must be called inside STK task
 
@@ -132,7 +155,7 @@ inline bool FastMutex::TimedLock(Timeout timeout_ticks)
         m_owner_tid = current_tid;
         __stk_full_memfence();
 
-        success = true;
+        result = WAIT_RESULT_SIGNAL;
     }
     // self-lock: non-recursive mutex, the caller would dead-lock on itself (or silently continue without
     // owning a fresh lock): unrecoverable API contract violation, FastMutex is not recursive
@@ -150,16 +173,21 @@ inline bool FastMutex::TimedLock(Timeout timeout_ticks)
         svc->InheritWeight(owner_tid, GetUserTaskFromTid(current_tid)->GetWeight());
 
         // mutex owned by another thread (slow path/blocking)
-        if (svc->Wait(this, &cs_, timeout_ticks) != WAIT_RESULT_SIGNAL)
+        result = svc->Wait(this, &cs_, timeout_ticks);
+
+        if (result != WAIT_RESULT_SIGNAL)
         {
+            // kernel invariant: a wait that did not end in a signal must not leave this thread as the
+            // owner (Unlock() hands over ownership only together with a signal), otherwise the caller
+            // would be told it failed while owning a lock nobody will release
+            STK_ASSERT(m_owner_tid != current_tid);
+
             // if owner did not change, undo priority boost to avoid stuck elevated priority: lookup for a
             // higher weight within existing wait objects, noop if ISwitchStrategy::PRIORITY_INHERITANCE_API = 0
             if (owner_tid == m_owner_tid)
             {
                 svc->RestoreWeight(owner_tid, this);
             }
-
-            success = false;
         }
         else
         {
@@ -169,17 +197,35 @@ inline bool FastMutex::TimedLock(Timeout timeout_ticks)
             {
                 STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
             }
-
-            success = true;
         }
     }
     // try-lock variant: owned by someone else, but no-wait requested
     else
     {
-        // success is false already, noop
+        // result is WAIT_RESULT_TIMEOUT already, noop
     }
 
-    return success;
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Lock
+// ---------------------------------------------------------------------------
+
+inline void FastMutex::Lock()
+{
+    EWaitResult result;
+
+    do
+    {
+        result = TimedLockEx(WAIT_INFINITE);
+    }
+    while (result == WAIT_RESULT_CANCELED);
+
+    if (result != WAIT_RESULT_SIGNAL)
+    {
+        STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
+    }
 }
 
 // ---------------------------------------------------------------------------

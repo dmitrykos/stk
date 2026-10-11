@@ -35,21 +35,24 @@ stk::sync::FastMutex g_Mtx;    // unlocked, no owner
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Lock` | `void Lock()` | Acquires the lock, blocking indefinitely. Must not be called by the current owner. ISR-unsafe. |
+| `Lock` | `void Lock()` | Acquires the lock, blocking indefinitely. Must not be called by the current owner. **Not cancelable:** a cancellation (`IKernel::CancelTaskWait()`, `stk::SleepCancel()`) is absorbed and the wait is retried, so it always returns with the lock held. ISR-unsafe. |
 | `TryLock` | `bool TryLock()` | Acquires the lock without blocking (`timeout == NO_WAIT`). Returns `true` if acquired, `false` if held (including by the caller). ISR-safe. |
-| `TimedLock` | `bool TimedLock(Timeout timeout)` | Acquires the lock, blocking up to `timeout` ticks. Returns `true` if acquired, `false` on timeout (or if the caller already owns the lock). ISR-safe only with `NO_WAIT`. |
+| `TimedLockEx` | `EWaitResult TimedLockEx(Timeout timeout)` | Acquires the lock, blocking up to `timeout` ticks, and reports the full outcome: `WAIT_RESULT_SIGNAL` (acquired), `WAIT_RESULT_TIMEOUT` (busy and timeout expired, or `NO_WAIT`), `WAIT_RESULT_CANCELED` (wait cancelled), `WAIT_RESULT_FAIL` (kernel rejected the wait). ISR-safe only with `NO_WAIT`. |
+| `TimedLock` | `bool TimedLock(Timeout timeout)` | Acquires the lock, blocking up to `timeout` ticks. Returns `true` if acquired, `false` on timeout, cancellation or `NO_WAIT` on a busy mutex (use `TimedLockEx()` to tell them apart). Panics if the caller already owns the lock. ISR-safe only with `NO_WAIT`. |
 | `Unlock` | `void Unlock()` | Transfers ownership to the first waiter (FIFO) or marks the mutex free. Asserts the caller is the current owner. ISR-safe. |
 | `GetOwner` | `TId GetOwner() const` | Returns the owner's task ID, or `TID_NONE` if free. ISR-safe. |
 | `IsLocked` | `bool IsLocked() const` | Returns `true` if the mutex has an owner. Snapshot only — may be stale immediately for a non-owner. ISR-safe. |
 | `~FastMutex` | (destructor) | Asserts `m_wait_list.IsEmpty()` in debug builds. Destroying a mutex with active waiters is a logic error. |
 
-**Lock paths in `TimedLock()`:**
+**Lock paths in `TimedLockEx()` (`TimedLock()` and `TryLock()` are thin wrappers):**
 
 ```
-owner == TID_NONE (free)       →  m_owner_tid = caller, return true immediately
+owner == TID_NONE (free)       →  m_owner_tid = caller, return WAIT_RESULT_SIGNAL immediately
 owner == caller   (self-lock)  →  contract violation: STK_KERNEL_PANIC(KERNEL_PANIC_SYNC_DEADLOCK)
-timeout == NO_WAIT (try-lock)  →  return false immediately (fast-fail)
-otherwise         (contended)  →  block until Unlock() transfers ownership or timeout
+timeout == NO_WAIT (try-lock)  →  return WAIT_RESULT_TIMEOUT immediately (fast-fail)
+otherwise         (contended)  →  block until Unlock() transfers ownership (WAIT_RESULT_SIGNAL),
+                                  the timeout expires (WAIT_RESULT_TIMEOUT) or the wait is
+                                  cancelled (WAIT_RESULT_CANCELED)
 ```
 
 **Ownership transfer in `Unlock()`:**
@@ -65,6 +68,14 @@ no waiters       →  m_owner_tid = TID_NONE (fully free)
 - `Unlock()` asserts ownership — only the task that holds the lock may release it.
 - After ownership transfer in `Unlock()`, `m_owner_tid` is already set to the woken task's
   ID before that task resumes, so the releasing task cannot barge back in.
+- A cancelled `TimedLockEx()` returns `WAIT_RESULT_CANCELED` (`TimedLock()` returns `false`)
+  immediately, regardless of the deadline. The cancelled task does not own the mutex and is
+  removed from the wait list, so a later `Unlock()` frees the mutex or hands it to the next
+  waiter rather than to the cancelled task. The cancel never takes the mutex away from its owner.
+- If an `Unlock()` hand-over already woke the waiter before the cancel arrives, the cancel is a
+  no-op: the waiter owns the mutex and gets `WAIT_RESULT_SIGNAL`.
+- `Lock()` cannot report failure, so it is not cancelable: it absorbs a cancellation and retries.
+  This also keeps the mutex re-acquisition at the end of `ConditionVariable::Wait()` reliable.
 - Destroying a `FastMutex` while tasks are waiting is a logic error; an assertion fires
   in debug builds.
 
@@ -91,7 +102,23 @@ placement-new. The mutex is shared across all test runs in its naturally unlocke
 after each test completes (each test also asserts `!IsLocked()` where it matters).
 `ResetTestState()` resets only the counters and flags (`g_TestResult`, `g_SharedCounter`,
 `g_ExpectedCounter`, `g_OrderIndex`, `g_InstancesDone`, `g_Task1Tid`, `g_WaiterTask`,
-`g_AcquisitionOrder[]`).
+`g_AcquisitionOrder[]`) and the cancellation state described below.
+
+Cancellation tests (10–21) use additional shared state, all cleared by `ResetTestState()`:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task (as `ITask *` and as `TId`) whose wait is cancelled; published by task 1 just before it blocks |
+| `g_SecondTid` | Task ID of the second waiter (task 2), used for hand-over checks |
+| `g_VictimResult[2]` | `EWaitResult` of the lock attempt of task 1 / task 2 (`-100` = not set) |
+| `g_VictimOwner[2]` | `1` / `0`: task 1 / task 2 owned the mutex after its attempt ended (`-1` = not set) |
+| `g_VictimElapsed[2]` | Milliseconds spent in the lock attempt by task 1 / task 2 |
+| `g_VictimSleepElapsed` | Milliseconds task 1 spent in `Sleep(60)` after its wait ended (`NoStaleWaiter` only) |
+
+`CancelVictim(use_sleep_cancel)` cancels the victim's wait either via
+`g_Kernel.CancelTaskWait(g_Victim)` or via `stk::SleepCancel(g_VictimTid)`. The scenario is
+selected by the `param` of `RunTest()`; adding `CW_VIA_SLEEPCANCEL` (`100`) switches the cancel
+path to `stk::SleepCancel()`.
 
 Because the mutex cannot be reset from outside, `RunTest()` guards against a failing test
 poisoning the next ones: it fails a test immediately (without running it) if the mutex was left
@@ -114,8 +141,8 @@ returns, so this path can not be exercised by the suite.
 ## Platform Notes
 
 On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link all the
-distinct task class templates simultaneously. Tests 1–9 are skipped on M0 and only
-`StressTest` (test 10) runs, under `#ifndef __ARM_ARCH_6M__`.
+distinct task class templates simultaneously. Tests 1–21 are skipped on M0 and only
+`StressTest` (test 22) runs, under `#ifndef __ARM_ARCH_6M__`.
 
 `StressTest` runs on M0 because it uses a single task class template (`StressTestTask`)
 instantiated for all five task slots, fitting within the available memory.
@@ -274,7 +301,87 @@ and `!IsLocked()`
 
 ---
 
-### Test 10 — `StressTest`
+### Tests 10–21 — `CancelWait_*`
+**Tasks:** 0–2 (3 tasks) &nbsp;|&nbsp; **Task class:** `CancelWaitTask`
+
+Verify that a task blocked on the mutex can be cancelled. Task 0 owns the mutex for the whole test
+and is the canceller and checker, task 1 is the victim blocked from ~10 ms, and task 2 is a second
+waiter used only by the two-waiters scenario. Task 0 cancels at ~60 ms. Unlike `Event` and
+`EventFlags`, nothing is signaled: the "signal" is the `Unlock()` of task 0, which hands the mutex
+over to the first remaining waiter. The victim uses `TimedLockEx()` so that `WAIT_RESULT_CANCELED`
+can be told apart from a timeout. All scenarios run through `IKernel::CancelTaskWait()`; the
+`SleepCancel` variants (tests 17–21) repeat a subset through `stk::SleepCancel()`.
+
+A waiter that ends up owning the mutex releases it after 10 ms, so a failing scenario can not leave
+it locked. If a check fails, task 0 unlocks the mutex if it still owns it and waits for the
+waiters to drain, so the test fails instead of hanging the kernel.
+
+#### Test 10 — `CancelWait_Infinite`
+Task 1 calls `TimedLockEx(WAIT_INFINITE)` and is cancelled by task 0.
+
+**Pass condition:** result is `WAIT_RESULT_CANCELED`; task 1 does not own the mutex; elapsed time is in
+`[35, 75]` ms; task 0 is still the owner after the cancel; the mutex is free after task 0 unlocks.
+
+#### Test 11 — `CancelWait_NotTimeout`
+Task 1 waits with a 300 ms timeout and is cancelled long before it expires.
+
+**Pass condition:** result is `WAIT_RESULT_CANCELED` (not `WAIT_RESULT_TIMEOUT`); task 1 does not own the
+mutex; elapsed time is below 150 ms; the mutex is free after task 0 unlocks.
+
+#### Test 12 — `CancelWait_NoStaleWaiter`
+After the cancel, task 0 calls `Unlock()`. A stale wait entry would receive the ownership here.
+Task 1 meanwhile sleeps 60 ms; a ghost wait entry would wake it early.
+
+**Pass condition:** result is `WAIT_RESULT_CANCELED`; after `Unlock()` the mutex is free with
+`GetOwner() == TID_NONE`; `TryLock()` by task 0 succeeds and makes it the owner; task 1 slept at least 55 ms.
+
+#### Test 13 — `CancelWait_TwoWaiters`
+Tasks 1 and 2 both block on the mutex; only task 1 is cancelled. Task 0 then calls `Unlock()`.
+
+**Pass condition:** task 1 gets `WAIT_RESULT_CANCELED` and does not own the mutex; right after
+`Unlock()` the owner is task 2; task 2 gets `WAIT_RESULT_SIGNAL` and owns the mutex; the mutex is free
+once task 2 releases it.
+
+#### Test 14 — `CancelWait_SignalWins`
+Task 0 calls `Unlock()` and `CancelTaskWait()` back to back with no scheduling point between them.
+The waiter already owns the mutex when the cancel arrives, so the cancel must be a no-op.
+
+**Pass condition:** the owner right after the cancel is task 1; task 1 gets `WAIT_RESULT_SIGNAL` and owns
+the mutex; the mutex is free once task 1 releases it.
+
+#### Test 15 — `CancelWait_LockAbsorbs`
+Task 1 blocks in the void `Lock()` instead of `TimedLockEx()`. `Lock()` is not cancelable: it must
+absorb the cancel (a returned cancellation would panic with `KERNEL_PANIC_ASSERT`) and keep waiting.
+Task 0 unlocks at ~80 ms, after the cancel.
+
+**Pass condition:** task 1 is still blocked after the cancel; task 0 is still the owner; after `Unlock()`
+the owner is task 1; task 1's `Lock()` returned with the lock held after `[60, 100]` ms; the mutex is free
+once task 1 releases it.
+
+#### Test 16 — `CancelWait_RetryAfter`
+After receiving `WAIT_RESULT_CANCELED`, task 1 immediately calls `TimedLockEx(WAIT_INFINITE)` again on
+the same mutex. Verifies that a cancelled task can re-enter the wait list cleanly.
+
+**Pass condition:** first attempt is `WAIT_RESULT_CANCELED` without ownership; task 1 is blocked again
+before the unlock; after `Unlock()` the owner is task 1 and its second attempt returns `WAIT_RESULT_SIGNAL`;
+the mutex is free once task 1 releases it.
+
+#### Tests 17–21 — `CancelWait_SleepCancel*`
+Same scenarios as tests 10, 12, 13, 14 and 15, but cancelled through `stk::SleepCancel(tid)`:
+
+| # | Test | Repeats |
+|---|------|---------|
+| 17 | `CancelWait_SleepCancel` | Test 10 (`Infinite`) |
+| 18 | `CancelWait_SleepCancelNoStale` | Test 12 (`NoStaleWaiter`) |
+| 19 | `CancelWait_SleepCancelTwo` | Test 13 (`TwoWaiters`) |
+| 20 | `CancelWait_SleepCancelSignal` | Test 14 (`SignalWins`) |
+| 21 | `CancelWait_SleepCancelAbsorbs` | Test 15 (`LockAbsorbs`) |
+
+**Pass condition:** same as the corresponding test above.
+
+---
+
+### Test 22 — `StressTest`
 **Tasks:** 0–4 (all 5) — **runs on all platforms including Cortex-M0** &nbsp;|&nbsp; **Param:** `iterations = 400`
 
 All five tasks run 400 iterations each, cycling through three lock strategies by
@@ -305,4 +412,16 @@ permissive: every successful acquisition must be accounted for.
 | 7 | `InterTaskCoordinationTask` | 0–4 | `_STK_FMUTEX_STACK_SIZE` | `counter == 50` | Mutex correctly gates strict round-robin turn-taking across 10 rounds without a condition variable |
 | 8 | `CancelledWaitTask` | 0–1 | `_STK_FMUTEX_STACK_SIZE` | `counter == 2` | A wait cancelled via `CancelTaskWait()` returns `false`, does not acquire the lock, and leaves no dangling waiter |
 | 9 | `MiddleTimeoutTask` | 0–4 | `_STK_FMUTEX_STACK_SIZE` | order `[1,3]`, `counter == 1`, `!IsLocked()` | A waiter timing out mid-queue is skipped; the remaining waiters keep FIFO order |
-| 10 | `StressTestTask` | 0–4 | `_STK_FMUTEX_STACK_SIZE` | `counter > 0`, `counter == expected`, `!IsLocked()` | No corruption, lost update or deadlock under full five-task contention mixing `Lock()`, `TryLock()`, and `TimedLock(10)`; runs on all platforms |
+| 10 | `CancelWait_Infinite` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | `WAIT_RESULT_CANCELED`, elapsed `[35, 75]` ms, owner unchanged, free after `Unlock()` | Cancel ends an infinite wait with `WAIT_RESULT_CANCELED`; the owner keeps the mutex |
+| 11 | `CancelWait_NotTimeout` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | `WAIT_RESULT_CANCELED`, elapsed `< 150` ms | A cancel is not reported as a timeout and ends a timed wait early |
+| 12 | `CancelWait_NoStaleWaiter` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | free after `Unlock()`, `TryLock()` succeeds, victim sleep `>= 55` ms | Cancel leaves no wait entry that would receive the ownership or wake the task early |
+| 13 | `CancelWait_TwoWaiters` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | first `CANCELED`, second `SIGNAL` and owner, free at end | Cancelling one waiter leaves the other intact; `Unlock()` hands over to it |
+| 14 | `CancelWait_SignalWins` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | victim `SIGNAL` and owner, free at end | A hand-over that arrived first wins over a late cancel |
+| 15 | `CancelWait_LockAbsorbs` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | still blocked after cancel, then `SIGNAL` and owner after `[60, 100]` ms | Void `Lock()` is not cancelable: it absorbs the cancel and returns with the lock held |
+| 16 | `CancelWait_RetryAfter` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | first `CANCELED`, second `SIGNAL` and owner | A cancelled task can wait for the mutex again and receives it |
+| 17 | `CancelWait_SleepCancel` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | as test 10 | Test 10 via `stk::SleepCancel()` |
+| 18 | `CancelWait_SleepCancelNoStale` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | as test 12 | Test 12 via `stk::SleepCancel()` |
+| 19 | `CancelWait_SleepCancelTwo` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | as test 13 | Test 13 via `stk::SleepCancel()` |
+| 20 | `CancelWait_SleepCancelSignal` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | as test 14 | Test 14 via `stk::SleepCancel()` |
+| 21 | `CancelWait_SleepCancelAbsorbs` | 0–2 | `_STK_FMUTEX_STACK_SIZE` | as test 15 | Test 15 via `stk::SleepCancel()` |
+| 22 | `StressTestTask` | 0–4 | `_STK_FMUTEX_STACK_SIZE` | `counter > 0`, `counter == expected`, `!IsLocked()` | No corruption, lost update or deadlock under full five-task contention mixing `Lock()`, `TryLock()`, and `TimedLock(10)`; runs on all platforms |

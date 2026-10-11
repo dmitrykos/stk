@@ -102,13 +102,24 @@ public:
     */
     bool Reset();
 
+    /*! \brief     Wait until event becomes signaled or the timeout expires, preserving the full wait outcome.
+        \param[in] timeout_ticks: Maximum time to wait (ticks). Use \a WAIT_INFINITE for no timeout (wait forever).
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if the event was signaled, \c WAIT_RESULT_TIMEOUT if the event
+                   was not signaled and the timeout expired (or \a NO_WAIT was passed),
+                   \c WAIT_RESULT_CANCELED if the wait was cancelled via IKernel::CancelTaskWait()
+                   (the event state is not consumed), \c WAIT_RESULT_FAIL if the kernel rejected the wait.
+    */
+    EWaitResult WaitEx(Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Wait until event becomes signaled or the timeout expires.
         \param[in] timeout_ticks: Maximum time to wait (ticks). Use \a WAIT_INFINITE for no timeout (wait forever).
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
         \return    \c true if event was signaled (wait succeeded),
-                   \c false if timeout occurred before the event was signaled.
+                   \c false otherwise (timeout, cancellation or NO_WAIT on a non-signaled event).
+                   Use \c WaitEx() to tell these apart.
     */
-    bool Wait(Timeout timeout_ticks = WAIT_INFINITE);
+    bool Wait(Timeout timeout_ticks = WAIT_INFINITE) { return (WaitEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief    Poll event state without blocking.
         \details  Checks if the event is currently signaled. If signaled, performs the auto-reset
@@ -223,12 +234,12 @@ inline void Event::Pulse()
 // Wait
 // ---------------------------------------------------------------------------
 
-inline bool Event::Wait(Timeout timeout_ticks)
+inline EWaitResult Event::WaitEx(Timeout timeout_ticks)
 {
-    STK_ASSERT(!hw::IsInsideISR()); // API contract: caller must not be in ISR
-
     ScopedCriticalSection cs_;
-    bool success = false;
+
+    // NO_WAIT on a non-signaled event is reported as an immediately-expired timeout
+    EWaitResult result = WAIT_RESULT_TIMEOUT;
 
     // fast path: already signaled
     if (m_signaled)
@@ -239,20 +250,22 @@ inline bool Event::Wait(Timeout timeout_ticks)
             __stk_full_memfence();
         }
 
-        success = true;
+        result = WAIT_RESULT_SIGNAL;
     }
     // slow path: block until Set() signals the event or timeout expires
     else if (timeout_ticks != NO_WAIT)
     {
-        success = (IKernelService::GetInstance()->Wait(this, &cs_, timeout_ticks) == WAIT_RESULT_SIGNAL);
+        STK_ASSERT(!hw::IsInsideISR()); // API contract: caller must not be in ISR if timeout_ticks!=NO_WAIT
+
+        result = IKernelService::GetInstance()->Wait(this, &cs_, timeout_ticks);
     }
     else
     {
         // non-blocking poll: event not signaled, return immediately
-        // success is already false, so noop
+        // result is WAIT_RESULT_TIMEOUT already, so noop
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------

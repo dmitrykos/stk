@@ -103,6 +103,8 @@ public:
     size_t GetStackSize()       const override { return _StackSize; }
     EAccessMode GetAccessMode() const override { return _AccessMode; }
 
+    TId GetTid()                const          { return GetTidFromUserTask(this); }
+
 protected:
     STK_NONCOPYABLE_CLASS(Task);
 
@@ -155,6 +157,8 @@ public:
     size_t GetStackSize()       const override { return _StackSize; }
     EAccessMode GetAccessMode() const override { return _AccessMode; }
     Weight GetWeight()          const override { return _Weight; }
+
+    TId GetTid()                const          { return GetTidFromUserTask(this); }
 
 protected:
     STK_NONCOPYABLE_CLASS(TaskW);
@@ -508,7 +512,13 @@ static __stk_forceinline bool SleepUntil(Ticks timestamp)
 
 /*! \brief     Cancel sleep of the task.
     \param[in] task_id: Id of the task.
-    \note      No-op if task was not in a sleeping state.
+    \details   Ends a sleep started by Sleep()/SleepUntil() early. If the task is instead blocked on a
+               synchronization object (KERNEL_SYNC mode, e.g. Mutex, Semaphore, Event, ConditionVariable,
+               MessageQueue), the wait is cancelled the same way as IKernel::CancelTaskWait() does: the
+               task is removed from the object's wait list and its IKernelService::Wait() returns
+               \c WAIT_RESULT_CANCELED (not \c WAIT_RESULT_TIMEOUT or \c WAIT_RESULT_SIGNAL, no
+               resource is acquired or consumed).
+    \note      No-op if task was neither sleeping nor waiting on a synchronization object.
     \note      ISR-safe.
 */
 static __stk_forceinline void SleepCancel(TId task_id)

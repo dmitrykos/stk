@@ -61,6 +61,29 @@ static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_CV_TEST_TASKS_MAX, SwitchStrate
 static sync::Mutex             g_TestMutex;
 static sync::ConditionVariable g_TestCond;
 
+// Cancellation test state (see CancelWaitTask)
+static ITask * volatile g_Victim                 = nullptr;      // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid              = TID_NONE;     // same, as TId (for SleepCancel)
+static volatile int32_t g_VictimResult[2]        = {-100, -100}; // EWaitResult of task 1 / task 2 (-100 = not set)
+static volatile int64_t g_VictimElapsed[2]       = {0, 0};       // ms spent in WaitEx() by task 1 / task 2
+static volatile int32_t g_VictimOwnsMutex[2]     = {0, 0};       // 1 if task 1 / task 2 owned g_TestMutex on return from WaitEx()
+static volatile int64_t g_VictimSleepElapsed     = 0;            // ms spent in Sleep() by task 1 after its wait ended
+
+// Scenario selector of CancelWaitTask. It is a global, not a constructor argument, because RunTest() declares
+// tasks 0-2 as 'static': a static local is constructed only once per template instantiation (on the first
+// RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first case.
+// Set by main() before each RunTest() call.
+static volatile int32_t g_CancelParam            = 0;
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_Kernel.CancelTaskWait(g_Victim);
+}
+
 /*! \class NotifyOneWakesTask
     \brief Tests that NotifyOne() wakes exactly one waiting task per call.
     \note  Four consumer tasks block on Wait(WAIT_INFINITE); the producer calls
@@ -557,6 +580,225 @@ private:
     }
 };
 
+static const int32_t CW_INFINITE        = 1;
+static const int32_t CW_NOT_TIMEOUT     = 2;
+static const int32_t CW_NO_STALE_WAITER = 3;
+static const int32_t CW_MUTEX_HELD      = 4;
+static const int32_t CW_TWO_WAITERS     = 5;
+static const int32_t CW_SIGNAL_WINS     = 6;
+static const int32_t CW_VIA_SLEEPCANCEL = 100;
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of ConditionVariable waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked in WaitEx()), task 2 is a
+           second waiter used by the two-waiters scenario. The scenario is selected by g_CancelParam:
+           1 = cancel an infinite wait, 2 = cancel is not reported as a timeout, 3 = cancel leaves
+           no stale waiter behind, 4 = a cancelled waiter still re-acquires the mutex (and blocks
+           while another task holds it), 5 = cancelling one of two waiters leaves the other intact,
+           6 = a notification that arrived first wins over a late cancel (the cancel lands while the
+           woken waiter re-locks the mutex and must be absorbed). Adding 100 to g_CancelParam cancels
+           via stk::SleepCancel() instead of IKernel::CancelTaskWait().
+           In every scenario the victim must own the mutex when WaitEx() returns, regardless of
+           how the wait ended.
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_CV_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+    }
+
+    // Task 1: block on the condition variable, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_CV_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout timeout = (m_scenario == CW_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+
+        g_TestMutex.Lock();
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_TestCond.WaitEx(g_TestMutex, timeout);
+
+        g_VictimElapsed[0]    = GetTimeNowMs() - start;
+        g_VictimResult[0]     = static_cast<int32_t>(r);
+        g_VictimOwnsMutex[0]  = (g_TestMutex.GetOwner() == g_VictimTid ? 1 : 0);
+
+        g_TestMutex.Unlock();
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+    }
+
+    // Task 2: second waiter, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_CV_TEST_SHORT_SLEEP); // block after task 1
+
+        g_TestMutex.Lock();
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_TestCond.WaitEx(g_TestMutex, WAIT_INFINITE);
+
+        g_VictimElapsed[1]   = GetTimeNowMs() - start;
+        g_VictimResult[1]    = static_cast<int32_t>(r);
+        g_VictimOwnsMutex[1] = (g_TestMutex.GetOwner() == stk::GetTid() ? 1 : 0);
+
+        g_TestMutex.Unlock();
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        stk::Sleep(60); // task 1 (and task 2) are blocked in WaitEx() by now
+
+        if (m_scenario == CW_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   (g_VictimOwnsMutex[0] == 1);
+        }
+        else
+        if (m_scenario == CW_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as CANCELED, not TIMEOUT
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimElapsed[0] < 150) &&
+                   (g_VictimOwnsMutex[0] == 1);
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            // nobody waits: a notification is lost, but a ghost wait entry would be woken by it
+            g_TestCond.NotifyAll();
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("cancel no stale waiter: result=%d owns=%d victim_sleep=%d ms\n",
+                (int)g_VictimResult[0], (int)g_VictimOwnsMutex[0], (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimOwnsMutex[0] == 1) &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_MUTEX_HELD)
+        {
+            // hold the mutex (free: the victim released it inside WaitEx()) across the cancel: the victim
+            // is woken as CANCELED but must stay blocked re-acquiring the mutex until it is released
+            g_TestMutex.Lock();
+
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP);
+
+            const bool still_blocked = (g_VictimResult[0] == -100);
+            const bool owner_is_me   = (g_TestMutex.GetOwner() == stk::GetTid());
+
+            g_TestMutex.Unlock(); // hands the mutex over to the victim
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP * 2);
+
+            printf("cancel mutex held: still_blocked=%d owner_is_me=%d result=%d owns=%d\n",
+                (int)still_blocked, (int)owner_is_me, (int)g_VictimResult[0], (int)g_VictimOwnsMutex[0]);
+
+            pass = still_blocked && owner_is_me &&
+                   (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimOwnsMutex[0] == 1);
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);              // cancel the first waiter only
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP);
+
+            g_TestMutex.Lock();
+            g_TestCond.NotifyOne();                        // must wake the second waiter, not a ghost of the first
+            g_TestMutex.Unlock();
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP * 2);
+
+            printf("cancel two waiters: first=%d second=%d owns=[%d,%d]\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1],
+                (int)g_VictimOwnsMutex[0], (int)g_VictimOwnsMutex[1]);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimResult[1] == WAIT_RESULT_SIGNAL) &&
+                   (g_VictimOwnsMutex[0] == 1) && (g_VictimOwnsMutex[1] == 1);
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // notify and cancel back to back while holding the mutex: the waiter is already signaled and
+            // removed from the wait list, it is only blocked re-locking the mutex when the cancel arrives,
+            // so the cancel must be absorbed (Mutex::Lock() is not cancelable) and the result stay SIGNAL
+            g_TestMutex.Lock();
+            g_TestCond.NotifyOne();
+            CancelVictim(m_use_sleep_cancel);
+            g_TestMutex.Unlock();
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP * 2);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_SIGNAL) && (g_VictimOwnsMutex[0] == 1);
+        }
+
+        // Safety net: if the cancel did not work a waiter is still blocked forever and the kernel would
+        // never stop, release any such waiter so that the test fails instead of hanging.
+        if (!pass)
+        {
+            g_TestCond.NotifyAll();
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP);
+            g_TestCond.NotifyAll();
+            stk::Sleep(_STK_CV_TEST_SHORT_SLEEP);
+        }
+
+        printf("cancel wait (scenario=%d, via %s): result[0]=%d elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (int)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
 // Helper function to reset test state
 static void ResetTestState()
 {
@@ -568,6 +810,17 @@ static void ResetTestState()
 
     for (int32_t i = 0; i < _STK_CV_TEST_TASKS_MAX; ++i)
         g_AcquisitionOrder[i] = 0;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]    = -100;
+        g_VictimElapsed[i]   = 0;
+        g_VictimOwnsMutex[i] = 0;
+    }
 
     // Re-construct the mutex and condition variable in-place for a clean state
     g_TestMutex.~Mutex();
@@ -585,7 +838,8 @@ static bool NeedsExtendedTasks(const char *test_name)
 {
     return  (strcmp(test_name, "TimeoutExpires")   != 0) &&
             (strcmp(test_name, "MutexReacquired")  != 0) &&
-            (strcmp(test_name, "NoWaitTimeout")    != 0);
+            (strcmp(test_name, "NoWaitTimeout")    != 0) &&
+            (strncmp(test_name, "CancelWait", 10)  != 0); // cancel tests use tasks 0-2 only
 }
 
 /*! \fn    RunTest
@@ -691,9 +945,41 @@ int main(int argc, char **argv)
     else
         total_success++;
 
+    // Tests 9-19: cancelability of ConditionVariable waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        struct CancelCase { const char *name; int32_t param; };
+
+        static const CancelCase cases[] =
+        {
+            { "CancelWait_Infinite",            CW_INFINITE                              },
+            { "CancelWait_NotTimeout",          CW_NOT_TIMEOUT                           },
+            { "CancelWait_NoStaleWaiter",       CW_NO_STALE_WAITER                       },
+            { "CancelWait_MutexHeld",           CW_MUTEX_HELD                            },
+            { "CancelWait_TwoWaiters",          CW_TWO_WAITERS                           },
+            { "CancelWait_SignalWins",          CW_SIGNAL_WINS                           },
+            { "CancelWait_SleepCancel",         CW_VIA_SLEEPCANCEL + CW_INFINITE         },
+            { "CancelWait_SleepCancelNoStale",  CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER  },
+            { "CancelWait_SleepCancelMutex",    CW_VIA_SLEEPCANCEL + CW_MUTEX_HELD       },
+            { "CancelWait_SleepCancelTwo",      CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS      },
+            { "CancelWait_SleepCancelSignal",   CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS      }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param)
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
+
 #endif // __ARM_ARCH_6M__
 
-    // Test 8: Stress test under full five-task contention with alternating producer/consumer roles
+    // Test 8 (runs last, after the cancellation tests): Stress test under full five-task contention with alternating producer/consumer roles
     if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 100) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
     else
