@@ -243,7 +243,7 @@ static struct Context final : public PlatformContext
 
     struct TaskContext
     {
-        TaskContext() : m_task(nullptr), m_stack(nullptr), m_thread(nullptr), m_thread_id(0)
+        TaskContext() : m_task(nullptr), m_stack(nullptr), m_thread(nullptr), m_thread_id(0), m_exiting(false)
         {}
 
         void Initialize(ITask *task, Stack *stack)
@@ -252,6 +252,7 @@ static struct Context final : public PlatformContext
             m_stack     = stack;
             m_thread    = nullptr;
             m_thread_id = 0;
+            m_exiting   = false;
 
             InitThread();
         }
@@ -264,16 +265,13 @@ static struct Context final : public PlatformContext
             m_thread = CreateThread(nullptr, stack_size, &OnTaskRun, this, CREATE_SUSPENDED, &m_thread_id);
         }
 
-        static DWORD WINAPI OnTaskRun(LPVOID param)
-        {
-            ((TaskContext *)param)->m_task->Run();
-            return 0;
-        }
+        static DWORD WINAPI OnTaskRun(LPVOID param); // defined below, after Context is complete
 
-        ITask  *m_task;       //!< user task
-        Stack  *m_stack;      //!< user tasks's stack
-        HANDLE  m_thread;     //!< task's thread handle
-        DWORD   m_thread_id;  //!< task's thread id
+        ITask        *m_task;       //!< user task
+        Stack        *m_stack;      //!< user tasks's stack
+        HANDLE        m_thread;     //!< task's thread handle
+        DWORD         m_thread_id;  //!< task's thread id
+        volatile bool m_exiting;    //!< set by the task's own thread (under m_cs) once it reported its exit to the kernel
     };
 
     void InitStack(EStackType stack_type, Stack *stack, IStackMemory *stack_memory, ITask *user_task);
@@ -286,6 +284,7 @@ static struct Context final : public PlatformContext
     void SwitchToNext();
     void ForceContextSwitch(TId id);
     void OnForceContextSwitch();
+    void ReportTaskExit(TaskContext *task);
     void Sleep(Timeout ticks);
     bool SleepUntil(Ticks timestamp);
     EWaitResult Wait(ISyncObject *sync_obj, IMutex *mutex, Timeout timeout);
@@ -350,7 +349,7 @@ static struct Context final : public PlatformContext
     HMODULE                        m_winmm_dll;     //!< Winmm.dll (loaded with LoadLibrary)
     HANDLE                         m_timer_thread;  //!< timer thread handle
     HANDLE                         m_switch_event;  //!< signaled by a task thread to ask TimerThread to perform a forced context switch on its behalf
-    TId                            m_pending_switch_id; //!< target task id of the pending forced switch requested via m_switch_event
+    volatile TId                   m_pending_switch_id; //!< target task id of the pending forced switch requested via m_switch_event (written by task threads, read by TimerThread)
     DWORD                          m_tls;           //!< TLS
     std::list<TaskContext *>       m_tasks;         //!< list of task internal contexts
     std::vector<HANDLE>            m_task_threads;  //!< task threads
@@ -484,22 +483,8 @@ void Context::CreateTimerThreadAndJoin()
         {
             if (result == (WAIT_OBJECT_0 + i))
             {
-                TaskContext *exiting_task = nullptr;
-                for (std::list<TaskContext *>::iterator titr = m_tasks.begin(); titr != m_tasks.end(); ++titr)
-                {
-                    if ((*titr)->m_thread == (*itr))
-                    {
-                        exiting_task = (*titr);
-                        break;
-                    }
-                }
-                STK_ASSERT(exiting_task != nullptr);
-
-                if (exiting_task != nullptr)
-                {
-                    m_handler->OnTaskExit(exiting_task->m_stack);
-                }
-
+                // note: the kernel is notified about the exit by the exiting task thread itself
+                // (see Context::ReportTaskExit), here we only drop the finished thread's handle
                 m_task_threads.erase(itr);
                 break;
             }
@@ -573,7 +558,12 @@ void Context::SwitchContext()
         TaskContext *idle_task = hw::WordToPtr<TaskContext>(m_stack_idle->SP);
         STK_ASSERT(idle_task != nullptr);
 
-        SuspendThread(idle_task->m_thread);
+        // a thread that already reported its exit is only returning from its entry function:
+        // let it finish, suspending it would leave it hanging forever (see ReportTaskExit)
+        if (!idle_task->m_exiting)
+        {
+            SuspendThread(idle_task->m_thread);
+        }
     }
 
     // resume Active thread
@@ -659,8 +649,10 @@ void Context::ForceContextSwitch(TId id)
     }
     else
     {
-        // notify TimerThread to cause a context switch
+        // notify TimerThread to cause a context switch,
+        // note: the id must be published before the event is signaled (SetEvent() is a full barrier)
         m_pending_switch_id = id;
+        __stk_full_memfence();
         SetEvent(m_switch_event);
     }
 }
@@ -669,10 +661,52 @@ void Context::OnForceContextSwitch()
 {
     Win32ScopedCriticalSection __cs(m_cs);
 
-    if (m_handler->OnForceContextSwitch(m_pending_switch_id, m_stack_idle, m_stack_active))
+    // read the requested id once (under m_cs) so that a concurrent request from another task
+    // cannot change it between the read and its use, a stale id is ignored by the kernel
+    const TId id = m_pending_switch_id;
+
+    if (m_handler->OnForceContextSwitch(id, m_stack_idle, m_stack_active))
     {
         SwitchContext();
     }
+}
+
+void Context::ReportTaskExit(TaskContext *task)
+{
+    // note: must be called by the exiting task's own thread while it is still the scheduled task
+    // (m_task_now), as on other platforms. If the exit was reported later from another thread
+    // (after the thread had died), the kernel could have already switched to another task and
+    // would receive SLEEP_PENDING on a non-current task, which breaks the kernel's invariant
+    // that only the currently scheduled task can be pending to sleep.
+    const TId tid = stk::GetTidFromUserTask(task->m_task);
+
+    // hold m_cs (recursive) so that TimerThread cannot switch this thread out between setting
+    // m_exiting and the kernel being notified: a switch before that point suspends the thread
+    // normally (it is simply resumed later), a switch after it must not suspend the thread
+    // at all (see SwitchContext) because it is never resumed and its handle would never signal
+    {
+        Win32ScopedCriticalSection __cs(m_cs);
+
+        task->m_exiting = true;
+
+        // kernel enters the user critical section by itself
+        m_handler->OnTaskExit(task->m_stack);
+    }
+
+    // let TimerThread switch this task out now instead of waiting for the next tick,
+    // note: 'task' must not be touched past this point, its slot may be released by the kernel
+    ForceContextSwitch(tid);
+}
+
+DWORD WINAPI Context::TaskContext::OnTaskRun(LPVOID param)
+{
+    TaskContext *const self = static_cast<TaskContext *>(param);
+
+    self->m_task->Run();
+
+    GetContext().ReportTaskExit(self);
+
+    return 0; // thread terminates, SuspendThread() on a finished thread is harmless
 }
 
 void Context::Sleep(Timeout ticks)

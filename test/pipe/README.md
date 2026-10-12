@@ -65,6 +65,34 @@ stk::sync::Pipe g_Pipe(s_buf, 8, sizeof(MyStruct)); // capacity 8, element 4 byt
 | `IsEmpty` | `bool IsEmpty() const` | `true` if pipe holds no elements. |
 | `IsFull` | `bool IsFull() const` | `true` if pipe is at capacity. |
 
+**`*Ex` variants (cancelable waits):** the blocking calls have `EWaitResult`-returning
+counterparts that let the caller tell a timeout from a cancellation. The `bool` / `size_t`
+variants above collapse both outcomes into "not completed" (`false` / short count).
+
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `WriteEx` | `EWaitResult WriteEx(const void *data, Timeout timeout = WAIT_INFINITE)` | `WAIT_RESULT_SIGNAL` if written, `WAIT_RESULT_TIMEOUT` / `WAIT_RESULT_CANCELED` otherwise |
+| `ReadEx` | `EWaitResult ReadEx(void *data, Timeout timeout = WAIT_INFINITE)` | `WAIT_RESULT_SIGNAL` if read, `WAIT_RESULT_TIMEOUT` / `WAIT_RESULT_CANCELED` otherwise |
+| `WriteBulkEx` | `EWaitResult WriteBulkEx(const void *src, size_t count, size_t &written, Timeout timeout = WAIT_INFINITE)` | Result of the wait; `written` holds the elements stored |
+| `ReadBulkEx` | `EWaitResult ReadBulkEx(void *dst, size_t count, size_t &read_count, Timeout timeout = WAIT_INFINITE)` | Result of the wait; `read_count` holds the elements removed |
+| `ReadBulkTriggeredEx` | `EWaitResult ReadBulkTriggeredEx(void *dst, size_t trigger, size_t max_count, size_t &read_count, Timeout timeout = WAIT_INFINITE)` | Result of the wait; `read_count` holds the elements removed |
+
+**Cancellation semantics:** a blocked `Pipe` call can be cancelled with
+`IKernel::CancelTaskWait(ITask*)` or `stk::SleepCancel(TId)`. Both routes unlink the task
+from the internal `ConditionVariable` wait list and the `*Ex` call returns
+`WAIT_RESULT_CANCELED`.
+
+- A cancelled `Write` stores nothing; a cancelled `Read` returns no element.
+- Bulk calls keep their **partial progress**: elements already transferred before the
+  cancel stay transferred and are reported through the count out-parameter.
+- `ReadBulkTriggeredEx` treats a cancel like a timeout for draining: whatever is
+  currently in the pipe (up to `max_count`) is drained and returned, but the result is
+  `WAIT_RESULT_CANCELED`, not `WAIT_RESULT_TIMEOUT`.
+- **Signal wins:** if the waiter was already signaled (removed from the wait list) when
+  the cancel arrives, the cancel is a no-op and the call returns `WAIT_RESULT_SIGNAL`.
+- A cancel leaves no stale wait entry: a later `Write` / `Read` is neither lost nor
+  delivered twice.
+
 **`ReadBulkTriggered` — trigger clamping:** if `trigger > max_count`, trigger is
 clamped to `max_count` internally, ensuring the wait condition is always satisfiable.
 
@@ -112,19 +140,72 @@ exercised with a non-trivial element size.
 `g_RawPipe` is **reconstructed in-place** via placement-new inside
 `ResetRawPipeState()` before each raw test, identical in principle to `ResetTestState`.
 
-`NeedsExtendedTasks` excludes all single-task and two-task tests (1–6, 9–16) from
-tasks 3–4. Tests 7 and 8 always use all five tasks.
+`NeedsExtendedTasks` excludes all single-task and two-task tests (1–6, 9–16) and all
+`RawCancel*` tests (17–31) from tasks 3–4 (the cancel tests match on the `"RawCancel"`
+name prefix). Tests 7 and 8 always use all five tasks.
+
+### Cancellation tests (tests 17–31)
+
+Cancellation tests also live in `namespace stk::test::rawpipe`, run on `g_RawKernel` with
+`g_RawPipe`, and are all driven by one task class, `RawCancelWaitTask`. They share the
+following state, reset before each test:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task whose wait is cancelled (task 1), as `ITask*` and as `TId` (for `SleepCancel`) |
+| `g_VictimResult[2]` | `EWaitResult` of task 1 / task 2 (`-100` = not set) |
+| `g_VictimElapsed[2]` | Milliseconds spent inside the blocking `Pipe` call by task 1 / task 2 |
+| `g_VictimValue[2]` | Single element received by task 1 / task 2 (`-1` = nothing) |
+| `g_VictimCount` | Elements transferred by a bulk call of task 1 (`-1` = not set) |
+| `g_VictimBulk[RAW_CAPACITY]` | Elements received by a bulk read of task 1 |
+| `g_VictimSleepElapsed` | Milliseconds task 1 spent in `Sleep()` after its wait was cancelled |
+| `g_CancelParam` | Scenario selector (see below) |
+
+**Scenario selection.** `RunRawTest()` declares tasks 0–2 `static`, so each is constructed
+only once per template instantiation; a constructor argument would silently keep the value
+of the first case. The scenario is therefore passed through the global `g_CancelParam`,
+set by `main()` before every `RunRawTest<RawCancelWaitTask>()` call. Values `1–9` select
+the scenario; adding `CW_VIA_SLEEPCANCEL` (`100`) makes the canceller use
+`stk::SleepCancel(g_VictimTid)` instead of `g_RawKernel.CancelTaskWait(g_Victim)`.
+
+| Constant | Value | Scenario |
+|----------|-------|----------|
+| `CW_READ_INFINITE` | 1 | Cancel an infinite `ReadEx` on an empty pipe |
+| `CW_READ_NOT_TIMEOUT` | 2 | Cancel is reported as `CANCELED`, not `TIMEOUT` |
+| `CW_WRITE_FULL` | 3 | Cancel a `WriteEx` on a full pipe |
+| `CW_NO_STALE_WAITER` | 4 | Cancel leaves no stale waiter behind |
+| `CW_TWO_WAITERS` | 5 | Cancel one of two blocked readers |
+| `CW_SIGNAL_WINS` | 6 | Element delivered first wins over a late cancel |
+| `CW_READ_BULK_PARTIAL` | 7 | Cancel of `ReadBulkEx` keeps the partial count |
+| `CW_TRIGGERED_PARTIAL` | 8 | Cancel of `ReadBulkTriggeredEx` below trigger drains what is available |
+| `CW_WRITE_BULK_PARTIAL` | 9 | Cancel of `WriteBulkEx` keeps the partial count |
+| `CW_VIA_SLEEPCANCEL` | 100 | Added to a scenario value: cancel via `stk::SleepCancel()` |
+
+**Task roles.** Task 0 is the canceller/checker, task 1 is the victim (sleeps
+`_STK_PIPE_TEST_SHORT_SLEEP` = 10 ms, then blocks inside a `Pipe` call and records how
+the wait ended), task 2 is a second reader used only by the two-waiters scenario.
+Timeline: victim blocks at ~10 ms, canceller acts at ~60 ms (partial-read scenarios
+deliver 3 elements at ~30 ms first). The victim's wait is infinite except in
+`CW_READ_NOT_TIMEOUT` (300 ms).
+
+`CancelVictim(bool use_sleep_cancel)` selects the cancel route.
+`ReleaseStuckWaiters()` is the **safety net**: if the pass condition is not met, it pushes
+elements through the pipe in both directions so that any still-blocked reader or writer is
+released. A broken cancel is therefore reported as a failed test instead of hanging the
+kernel (which only stops when all tasks exit).
 
 ---
 
 ## Platform Notes
 
 On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link the full
-set of task class templates simultaneously. Tests 1–7 and 9–16 are skipped on M0;
+set of task class templates simultaneously. Tests 1–7, 9–16 and the cancellation tests 17–31 are skipped on M0;
 only `StressTest` (test 8) runs, under `#ifndef __ARM_ARCH_6M__`.
 
 `StressTest` runs on M0 because it uses a single task class template (`StressTestTask`)
-instantiated for all five task slots, fitting within the available memory.
+instantiated for all five task slots, fitting within the available memory. The
+cancellation tests add one more task class template (`RawCancelWaitTask`) and are guarded
+the same way.
 
 | Platform | `_STK_PIPE_STACK_SIZE` |
 |----------|-----------------------|
@@ -369,6 +450,163 @@ after full drain, `IsEmpty` is true and `GetCount` is 0.
 
 ---
 
+## Cancellation Tests (tests 17–31)
+
+These tests verify that a task blocked inside a `Pipe` call can be cancelled, and that the
+cancel is clean: the right `EWaitResult` is reported, partial transfers are preserved, no
+element is lost or duplicated, and the wait list stays consistent. `Pipe` builds on
+`ConditionVariable`, so they also cover the cancel path of `ConditionVariable::WaitEx()`.
+Shared state, scenario selection and task roles are described under
+[Test Configuration](#cancellation-tests-tests-17–31). Tests 17–25 cancel through
+`IKernel::CancelTaskWait()`; tests 26–31 repeat the key scenarios through
+`stk::SleepCancel()`.
+
+> **Safety net:** if a cancel fails, the victim stays blocked and the kernel would never
+> stop. On any failed pass condition the canceller calls `ReleaseStuckWaiters()` (writes
+> and reads through the pipe), so a broken cancel shows up as a failed test, not a hang.
+>
+> **Kernel requirement:** cancellation requires the `KERNEL_DYNAMIC | KERNEL_SYNC` kernel
+> mode used by all tests in this suite.
+
+All tests use tasks 0–2 only.
+
+---
+
+### Test 17 — `RawCancel_ReadInfinite`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `1`
+
+Task 1 calls `ReadEx(&e, WAIT_INFINITE)` on an empty pipe at ~10 ms and blocks. Task 0 calls `CancelTaskWait(g_Victim)` at ~60 ms. The read must return `WAIT_RESULT_CANCELED` after roughly 50 ms, with no element received and the pipe still empty. Basic cancel of a reader parked on `m_cv_not_empty`.
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, `value == -1`, `IsEmpty()`
+
+---
+
+### Test 18 — `RawCancel_ReadNotTimeout`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `2`
+
+Same as test 17 but the victim uses a finite 300 ms timeout. The cancel at ~60 ms must end the wait early and be reported as `CANCELED`, not `TIMEOUT`. Guards against the cancel path being conflated with the timeout path in `ReadEx`.
+
+**Pass condition:** `result == CANCELED`, `elapsed < 150 ms`
+
+---
+
+### Test 19 — `RawCancel_WriteFull`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `3`
+
+Task 0 pre-loads `0..7` so the pipe is full; task 1 calls `WriteEx(&{999}, WAIT_INFINITE)` and blocks on `m_cv_not_full`. After the cancel the write must return `CANCELED`, the pipe must still be full, and draining it must yield exactly `0..7` — the cancelled write stored nothing.
+
+**Pass condition:** `result == CANCELED`, `elapsed ∈ [35, 75] ms`, `IsFull()`, FIFO content `0..7` intact, pipe empty after drain
+
+---
+
+### Test 20 — `RawCancel_ReadNoStaleWaiter`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `4`
+
+After the victim's read is cancelled, task 1 sleeps 60 ms and records the real duration. Task 0 then writes `321` with nobody waiting, reads it back with `NO_WAIT`, and polls once more. The element must stay in the pipe (not lost to a ghost waiter), be consumed exactly once, and the victim's sleep must not be cut short by a stale wait entry.
+
+**Pass condition:** `result == CANCELED`, write ok, first poll returns `321`, second poll empty, `victim_sleep >= 55 ms`
+
+---
+
+### Test 21 — `RawCancel_ReadTwoWaiters`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `5`
+
+Task 1 and, 10 ms later, task 2 both block in `ReadEx(WAIT_INFINITE)`. Task 0 cancels only task 1, then writes `77`. The cancel must leave the wait list consistent: task 2 is woken by the write with `SIGNAL` and receives `77`; task 1 stays `CANCELED` with no value.
+
+**Pass condition:** task 1 `CANCELED`, `value[0] == -1`; task 2 `SIGNAL`, `value[1] == 77`; pipe empty
+
+---
+
+### Test 22 — `RawCancel_ReadSignalWins`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `6`
+
+Task 0 calls `TryWrite(777)` and `CancelTaskWait` back to back with no scheduling point between them. The write already signals the reader and removes it from the wait list, so the cancel must be a no-op. The reader returns `SIGNAL` with the element `777`; it is not cancelled and the element is not lost.
+
+**Pass condition:** write ok, `result == SIGNAL`, `value == 777`, pipe empty
+
+---
+
+### Test 23 — `RawCancel_ReadBulkPartial`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `7`
+
+Task 1 calls `ReadBulkEx(bulk, 8, n, WAIT_INFINITE)`. At ~30 ms task 0 writes 3 elements `{0,1,2}`; at ~60 ms it cancels. The call must return `CANCELED` with `n == 3` and `bulk[0..2] == {0,1,2}` — the elements read before the cancel are kept, not discarded — and the pipe is empty.
+
+**Pass condition:** `result == CANCELED`, `count == 3`, values `{0,1,2}`, `elapsed ∈ [35, 75] ms`, pipe empty
+
+---
+
+### Test 24 — `RawCancel_ReadTriggeredPartial`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `8`
+
+Task 1 calls `ReadBulkTriggeredEx(bulk, trigger=6, max_count=8, n, WAIT_INFINITE)`. Only 3 elements arrive (below the trigger) before the cancel at ~60 ms. As on timeout (test 12) the 3 available elements must still be drained, but the result is `CANCELED`, not `TIMEOUT`.
+
+**Pass condition:** `result == CANCELED`, `count == 3`, values `{0,1,2}`, `elapsed ∈ [35, 75] ms`, pipe empty
+
+---
+
+### Test 25 — `RawCancel_WriteBulkPartial`
+**Cancel via:** `CancelTaskWait` &nbsp;|&nbsp; **`g_CancelParam`:** `9`
+
+Task 0 pre-loads 6 of 8 slots (`0..5`). Task 1 calls `WriteBulkEx(bulk, 8, n, WAIT_INFINITE)` with values `50..57`: 2 elements fit (`50`, `51`), then it blocks on the full pipe. After the cancel `n` must be `2`, the result `CANCELED`, and the pipe must contain `0..5, 50, 51` in order — the written prefix is kept, the rest is dropped.
+
+**Pass condition:** `result == CANCELED`, `written == 2`, `elapsed ∈ [35, 75] ms`, `IsFull()`, FIFO content `{0..5, 50, 51}`
+
+---
+
+### Test 26 — `RawCancel_SleepCancelRead`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `101`
+
+Identical scenario to test 17 (`ReadInfinite`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 17
+
+---
+
+### Test 27 — `RawCancel_SleepCancelWrite`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `103`
+
+Identical scenario to test 19 (`WriteFull`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 19
+
+---
+
+### Test 28 — `RawCancel_SleepCancelNoStale`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `104`
+
+Identical scenario to test 20 (`ReadNoStaleWaiter`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 20
+
+---
+
+### Test 29 — `RawCancel_SleepCancelTwo`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `105`
+
+Identical scenario to test 21 (`ReadTwoWaiters`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 21
+
+---
+
+### Test 30 — `RawCancel_SleepCancelSignal`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `106`
+
+Identical scenario to test 22 (`ReadSignalWins`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 22
+
+---
+
+### Test 31 — `RawCancel_SleepCancelTriggered`
+**Cancel via:** `SleepCancel` &nbsp;|&nbsp; **`g_CancelParam`:** `108`
+
+Identical scenario to test 24 (`ReadTriggeredPartial`), but the canceller calls `stk::SleepCancel(g_VictimTid)` instead of `CancelTaskWait()`. Verifies that `SleepCancel` routes through `OnTaskSleepCancel` into the wait object's `Cancel()` when the task is blocked in a `Pipe` call, with the same outcome as the direct kernel call.
+
+**Pass condition:** same as test 24
+
+---
+
 ## Summary Table
 
 | # | Test | Tasks | Pass condition | What it verifies |
@@ -389,3 +627,18 @@ after full drain, `IsEmpty` is true and `GetCount` is 0.
 | 14 | `RawTriggeredClampTask` | 0–2 | `counter == 2` | `trigger > max_count` is clamped to `max_count`; wait is always satisfiable |
 | 15 | `RawResetDoesNotReleaseReaderTask` | 0–2 | `counter == 1`, `elapsed >= 75 ms` | `Reset()` does not unblock blocked readers; reader waits full timeout (matches FreeRTOS semantics) |
 | 16 | `RawStateInvariantsTask` | 0–2 | `counter == 1` | `GetCapacity` / `GetElementSize` / `GetCount` / `GetSpace` / `IsEmpty` / `IsFull` track exactly throughout fill and drain |
+| 17 | `RawCancel_ReadInfinite` | 0–2 | `CANCELED`, `elapsed ∈ [35, 75] ms` | `CancelTaskWait` ends an infinite `ReadEx` on an empty pipe |
+| 18 | `RawCancel_ReadNotTimeout` | 0–2 | `CANCELED`, `elapsed < 150 ms` | Cancel is reported as `CANCELED`, not `TIMEOUT` |
+| 19 | `RawCancel_WriteFull` | 0–2 | `CANCELED`, content `0..7` intact | Cancelled `WriteEx` on a full pipe stores nothing |
+| 20 | `RawCancel_ReadNoStaleWaiter` | 0–2 | `CANCELED`, element read once, `sleep >= 55 ms` | No stale waiter left: next element neither lost nor consumed twice |
+| 21 | `RawCancel_ReadTwoWaiters` | 0–2 | 1st `CANCELED`, 2nd `SIGNAL` with `77` | Cancelling one of two blocked readers leaves the other intact |
+| 22 | `RawCancel_ReadSignalWins` | 0–2 | `SIGNAL`, `value == 777` | Cancel after the waiter was already signaled is a no-op |
+| 23 | `RawCancel_ReadBulkPartial` | 0–2 | `CANCELED`, `count == 3` | `ReadBulkEx` keeps elements read before the cancel |
+| 24 | `RawCancel_ReadTriggeredPartial` | 0–2 | `CANCELED`, `count == 3` | `ReadBulkTriggeredEx` below trigger drains available data, reports `CANCELED` |
+| 25 | `RawCancel_WriteBulkPartial` | 0–2 | `CANCELED`, `written == 2`, content `0..5,50,51` | `WriteBulkEx` keeps the prefix written before the cancel |
+| 26 | `RawCancel_SleepCancelRead` | 0–2 | as test 17 | `SleepCancel` cancels a blocked `ReadEx` |
+| 27 | `RawCancel_SleepCancelWrite` | 0–2 | as test 19 | `SleepCancel` cancels a blocked `WriteEx` |
+| 28 | `RawCancel_SleepCancelNoStale` | 0–2 | as test 20 | `SleepCancel` leaves no stale waiter |
+| 29 | `RawCancel_SleepCancelTwo` | 0–2 | as test 21 | `SleepCancel` of one of two readers leaves the other intact |
+| 30 | `RawCancel_SleepCancelSignal` | 0–2 | as test 22 | `SleepCancel` after signal is a no-op |
+| 31 | `RawCancel_SleepCancelTriggered` | 0–2 | as test 24 | `SleepCancel` of `ReadBulkTriggeredEx` drains available data, reports `CANCELED` |

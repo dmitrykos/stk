@@ -1375,6 +1375,345 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// Tests 14-28 – Cancelability of MessageQueue waits
+// ---------------------------------------------------------------------------
+
+// Cancellation test state (see CancelWaitTask) ------------------------------
+
+static ITask * volatile g_Victim             = nullptr;      // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid          = TID_NONE;     // same, as TId (for SleepCancel)
+static volatile int32_t g_VictimResult[2]    = {-100, -100}; // EWaitResult of task 1 / task 2 (-100 = not set)
+static volatile int64_t g_VictimElapsed[2]   = {0, 0};       // ms spent inside the blocking queue call by task 1 / task 2
+static volatile int32_t g_VictimValue[2]     = {-1, -1};     // value decoded from the message received by task 1 / task 2 (-1 = nothing)
+static volatile bool    g_VictimRxIntact     = false;        // receive buffer of task 1 left untouched by a non-signal result
+static volatile int64_t g_VictimSleepElapsed = 0;            // ms spent in Sleep() by task 1 after its wait was cancelled
+
+// Scenario selector of CancelWaitTask. It is a global, not a constructor argument, because RunTest()
+// declares tasks 0-1 as 'static': a static local is constructed only once per template instantiation (on the
+// first RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first
+// case. Set by main() before each RunTest() call.
+static volatile int32_t g_CancelParam        = 0;
+
+static const int32_t CW_GET_INFINITE        = 1;
+static const int32_t CW_GET_NOT_TIMEOUT     = 2;
+static const int32_t CW_PUT_FULL            = 3;
+static const int32_t CW_NO_STALE_WAITER     = 4;
+static const int32_t CW_TWO_WAITERS         = 5;
+static const int32_t CW_SIGNAL_WINS         = 6;
+static const int32_t CW_PUT_FRONT_FULL      = 7;
+static const int32_t CW_PEEK_EMPTY          = 8;
+static const int32_t CW_PEEK_FRONT_EMPTY    = 9;
+static const int32_t CW_VIA_SLEEPCANCEL     = 100;
+
+// Build / decode a message that carries an int32_t value in its first 4 bytes (the rest is a filler)
+static void MakeMsg(uint8_t *msg, int32_t value)
+{
+    memset(msg, 0xEE, _STK_MQ_MSG_SIZE);
+    memcpy(msg, &value, sizeof(value));
+}
+
+static int32_t MsgValue(const uint8_t *msg)
+{
+    int32_t value = 0;
+    memcpy(&value, msg, sizeof(value));
+    return value;
+}
+
+static bool TryPutVal(int32_t value)
+{
+    uint8_t msg[_STK_MQ_MSG_SIZE];
+    MakeMsg(msg, value);
+    return g_Queue->TryPut(msg);
+}
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_Kernel.CancelTaskWait(g_Victim);
+}
+
+// Safety net for a failed cancel test: a victim that is still blocked would keep the kernel running forever,
+// so push messages through the queue in both directions to release any stuck getter, peeker or putter.
+// This turns a broken cancel into a reported test failure instead of a hang.
+static void ReleaseStuckWaiters()
+{
+    for (int32_t round = 0; round < 2; ++round)
+    {
+        // frees blocked getters / peekers
+        for (size_t i = 0; i < _STK_MQ_CAPACITY; ++i)
+        {
+            TryPutVal(-2);
+            stk::Sleep(2);
+        }
+
+        // frees blocked putters
+        for (size_t i = 0; i < _STK_MQ_CAPACITY; ++i)
+        {
+            uint8_t tmp[_STK_MQ_MSG_SIZE];
+            g_Queue->TryGet(tmp);
+            stk::Sleep(2);
+        }
+    }
+}
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of MessageQueue waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked inside a queue call), task 2 is a
+           second getter used by the two-waiters scenario. The scenario is selected by g_CancelParam:
+           1 = cancel an infinite GetEx(), 2 = a cancel is reported as CANCELED, not TIMEOUT,
+           3 = cancel a PutEx() on a full queue, nothing is enqueued,
+           4 = cancel leaves no stale waiter behind, the next message is neither lost nor consumed twice,
+           5 = cancelling one of two blocked getters leaves the other intact,
+           6 = a message that arrived first wins over a late cancel,
+           7 = cancel a PutFrontEx() on a full queue, nothing is enqueued and the read pointer is untouched,
+           8 = cancel a PeekEx() on an empty queue, 9 = cancel a PeekFrontEx() on an empty queue.
+           Adding 100 to g_CancelParam cancels via stk::SleepCancel() instead of IKernel::CancelTaskWait().
+    \note  MessageQueue wraps ConditionVariable, so this suite also covers the cancel path of ConditionVariable::WaitEx().
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_MQ_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run() override
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+
+        ++g_InstancesDone;
+    }
+
+    // Task 1: block inside a queue call, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout timeout = (m_scenario == CW_GET_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+
+        uint8_t     msg[_STK_MQ_MSG_SIZE];
+        uint8_t     rx[_STK_MQ_MSG_SIZE];
+        uint8_t     rx_ref[_STK_MQ_MSG_SIZE];
+        EWaitResult r = WAIT_RESULT_FAIL;
+
+        MakeMsg(msg, 999);
+        memset(rx, 0x5A, sizeof(rx));        // receive buffer filler: must survive a non-signal result
+        memcpy(rx_ref, rx, sizeof(rx_ref));
+
+        const int64_t start = GetTimeNowMs();
+
+        switch (m_scenario)
+        {
+            case CW_PUT_FULL:         r = g_Queue->PutEx(msg, timeout);      break;
+            case CW_PUT_FRONT_FULL:   r = g_Queue->PutFrontEx(msg, timeout); break;
+            case CW_PEEK_EMPTY:       r = g_Queue->PeekEx(rx, timeout);      break;
+            case CW_PEEK_FRONT_EMPTY: r = g_Queue->PeekFrontEx(rx, timeout); break;
+            default:                  r = g_Queue->GetEx(rx, timeout);       break;
+        }
+
+        g_VictimElapsed[0] = GetTimeNowMs() - start;
+        g_VictimRxIntact   = (memcmp(rx, rx_ref, sizeof(rx)) == 0);
+        g_VictimValue[0]   = (g_VictimRxIntact ? -1 : MsgValue(rx));
+        g_VictimResult[0]  = static_cast<int32_t>(r);
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+    }
+
+    // Task 2: second getter, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_MQ_TEST_SHORT_SLEEP); // block after task 1
+
+        uint8_t rx[_STK_MQ_MSG_SIZE];
+        memset(rx, 0x5A, sizeof(rx));
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_Queue->GetEx(rx, WAIT_INFINITE);
+
+        g_VictimElapsed[1] = GetTimeNowMs() - start;
+        g_VictimValue[1]   = (r == WAIT_RESULT_SIGNAL ? MsgValue(rx) : -1);
+        g_VictimResult[1]  = static_cast<int32_t>(r);
+    }
+
+    // Drain the queue without blocking and verify it held exactly the values 0..n-1 in FIFO order
+    static bool DrainAndExpectSequence(size_t n)
+    {
+        bool ok = true;
+
+        for (size_t i = 0; i < n; ++i)
+        {
+            uint8_t rx[_STK_MQ_MSG_SIZE];
+            if (!g_Queue->TryGet(rx) || (MsgValue(rx) != (int32_t)i))
+                ok = false;
+        }
+
+        return ok && g_Queue->IsEmpty();
+    }
+
+    // The queue must still work after the cancel: one message goes in and comes out intact
+    static bool QueueStillWorks()
+    {
+        uint8_t rx[_STK_MQ_MSG_SIZE];
+        return TryPutVal(5) && g_Queue->TryGet(rx) && (MsgValue(rx) == 5) && g_Queue->IsEmpty();
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        // putter scenarios: fill the queue before the victim blocks (victim starts at ~10 ms)
+        if ((m_scenario == CW_PUT_FULL) || (m_scenario == CW_PUT_FRONT_FULL))
+        {
+            for (size_t i = 0; i < _STK_MQ_CAPACITY; ++i)
+                TryPutVal((int32_t)i);
+        }
+
+        stk::Sleep(60); // task 1 (and task 2) are blocked by now
+
+        if (m_scenario == CW_GET_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms; nothing was received
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   g_VictimRxIntact && g_Queue->IsEmpty();
+        }
+        else
+        if (m_scenario == CW_GET_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as CANCELED, not TIMEOUT
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimElapsed[0] < 150);
+        }
+        else
+        if ((m_scenario == CW_PUT_FULL) || (m_scenario == CW_PUT_FRONT_FULL))
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            const bool full = g_Queue->IsFull();
+
+            // the cancelled Put/PutFront must not have stored its message (999) nor moved the read
+            // pointer: original FIFO content 0..7 intact and in order
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   full && DrainAndExpectSequence(_STK_MQ_CAPACITY) && QueueStillWorks();
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            const bool wrote = TryPutVal(321); // nobody waits: message must stay in the queue
+
+            uint8_t rx1[_STK_MQ_MSG_SIZE] = {};
+            uint8_t rx2[_STK_MQ_MSG_SIZE] = {};
+            const bool poll1 = g_Queue->TryGet(rx1); // gets the message
+            const bool poll2 = g_Queue->TryGet(rx2); // nothing left
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("cancel no stale waiter: result=%d wrote=%d poll1=%d(v=%d) poll2=%d victim_sleep=%d ms\n",
+                (int)g_VictimResult[0], (int)wrote, (int)poll1, (int)MsgValue(rx1), (int)poll2, (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   wrote && poll1 && (MsgValue(rx1) == 321) && !poll2 &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);              // cancel the first getter only
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP);
+
+            const bool wrote = TryPutVal(77);              // must wake the second getter
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            printf("cancel two waiters: first=%d second=%d wrote=%d value=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1], (int)wrote, (int)g_VictimValue[1]);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && g_VictimRxIntact &&
+                   (g_VictimResult[1] == WAIT_RESULT_SIGNAL)   && (g_VictimValue[1] == 77) &&
+                   wrote && g_Queue->IsEmpty(); // the second getter consumed the message
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // back to back, no scheduling point in between: the getter is already signaled and removed
+            // from the wait list when the cancel arrives, so the cancel must be a no-op
+            const bool wrote = TryPutVal(777);
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            pass = wrote && (g_VictimResult[0] == WAIT_RESULT_SIGNAL) &&
+                   (g_VictimValue[0] == 777) && g_Queue->IsEmpty();
+        }
+        else
+        if ((m_scenario == CW_PEEK_EMPTY) || (m_scenario == CW_PEEK_FRONT_EMPTY))
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_MQ_TEST_SHORT_SLEEP * 2);
+
+            printf("cancel peek: result=%d elapsed=%d intact=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimElapsed[0], (int)g_VictimRxIntact);
+
+            // nothing copied; the cancelled peeker leaves the queue fully usable
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   g_VictimRxIntact && g_Queue->IsEmpty() && QueueStillWorks();
+        }
+
+        // Safety net: if the cancel did not work a task is still blocked forever and the kernel would
+        // never stop, release any such task so that the test fails instead of hanging.
+        if (!pass)
+            ReleaseStuckWaiters();
+
+        printf("cancel wait (scenario=%d, via %s): result[0]=%d elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (int)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
+// ---------------------------------------------------------------------------
 // Helper – reset shared state between tests
 // ---------------------------------------------------------------------------
 
@@ -1383,6 +1722,18 @@ static void ResetTestState()
     g_TestResult    = 0;
     g_InstancesDone = 0;
     g_SharedCounter = 0;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimRxIntact     = false;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]  = -100;
+        g_VictimElapsed[i] = 0;
+        g_VictimValue[i]   = -1;
+    }
 }
 
 } // namespace msgqueue
@@ -1408,6 +1759,14 @@ static bool NeedsOnlyOneTask(const char *test_name)
            (strcmp(test_name, "PutFrontWrapAround")  == 0) ||
            (strcmp(test_name, "Peek")                == 0) ||
            (strcmp(test_name, "PeekFront")           == 0);
+}
+
+/*! \fn    NeedsThreeTasks
+    \brief Returns true if the test uses tasks 0-2 (the cancellation tests: canceller, victim, second waiter).
+*/
+static bool NeedsThreeTasks(const char *test_name)
+{
+    return (strncmp(test_name, "Cancel", 6) == 0);
 }
 
 /*! \fn    NeedsAllTasks
@@ -1451,6 +1810,9 @@ static int32_t RunTest(const char *test_name, int32_t param = 0)
 
     if (!NeedsOnlyOneTask(test_name))
         g_Kernel.AddTask(&task1);
+
+    if (NeedsThreeTasks(test_name))
+        g_Kernel.AddTask(&task2);
 
     if (NeedsAllTasks(test_name))
     {
@@ -1505,31 +1867,31 @@ int main(int argc, char **argv)
 #ifndef __ARM_ARCH_6M__
 
     // Test 1: TryPut / TryGet basic cycle with accounting checks
-    RUN(stk::test::msgqueue::TryPutGetTask,        "TryPutGet",        0);
+    RUN(stk::test::msgqueue::TryPutGetTask,             "TryPutGet",        0);
 
     // Test 2: Fill to capacity, verify IsFull, drain in FIFO order
-    RUN(stk::test::msgqueue::FillDrainTask,        "FillDrain",        0);
+    RUN(stk::test::msgqueue::FillDrainTask,             "FillDrain",        0);
 
     // Test 3: Blocking Get unblocked by Put from another task
-    RUN(stk::test::msgqueue::BlockingGetTask,      "BlockingGet",      0);
+    RUN(stk::test::msgqueue::BlockingGetTask,           "BlockingGet",      0);
 
     // Test 4: Blocking Put unblocked by Get from another task
-    RUN(stk::test::msgqueue::BlockingPutTask,      "BlockingPut",      0);
+    RUN(stk::test::msgqueue::BlockingPutTask,           "BlockingPut",      0);
 
     // Test 5: Timed Get expires when queue stays empty
-    RUN(stk::test::msgqueue::TimedGetTimeoutTask,  "TimedGetTimeout",  0);
+    RUN(stk::test::msgqueue::TimedGetTimeoutTask,       "TimedGetTimeout",  0);
 
     // Test 6: Timed Get succeeds when message arrives within timeout
-    RUN(stk::test::msgqueue::TimedGetSuccessTask,  "TimedGetSuccess",  0);
+    RUN(stk::test::msgqueue::TimedGetSuccessTask,       "TimedGetSuccess",  0);
 
     // Test 7: Timed Put expires when queue stays full
-    RUN(stk::test::msgqueue::TimedPutTimeoutTask,  "TimedPutTimeout",  0);
+    RUN(stk::test::msgqueue::TimedPutTimeoutTask,       "TimedPutTimeout",  0);
 
     // Test 8: Reset drains queue and wakes blocked producers
-    RUN(stk::test::msgqueue::ResetTask,            "Reset",            0);
+    RUN(stk::test::msgqueue::ResetTask,                 "Reset",            0);
 
     // Test 9: Accessor correctness (GetCapacity, GetMsgSize, GetBuffer, etc.)
-    RUN(stk::test::msgqueue::AccessorsTask,        "Accessors",        0);
+    RUN(stk::test::msgqueue::AccessorsTask,             "Accessors",        0);
 
     // Test 10: Ring-buffer wrap-around preserves FIFO payload integrity
     RUN(stk::test::msgqueue::WrapAroundTask,            "WrapAround",            0);
@@ -1553,7 +1915,45 @@ int main(int argc, char **argv)
     RUN(stk::test::msgqueue::PeekFrontTask,             "PeekFront",             0);
 
     // Test 11: Single-producer / single-consumer ping-pong (30 iterations)
-    RUN(stk::test::msgqueue::PingPongTask,         "PingPong",         30);
+    RUN(stk::test::msgqueue::PingPongTask,              "PingPong",              30);
+
+    // Tests 14-28: cancelability of MessageQueue waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        using namespace stk::test::msgqueue;
+
+        struct CancelCase { const char *name; int32_t param; };
+
+        static const CancelCase cases[] =
+        {
+            { "Cancel_GetInfinite",            CW_GET_INFINITE },
+            { "Cancel_GetNotTimeout",          CW_GET_NOT_TIMEOUT },
+            { "Cancel_PutFull",                CW_PUT_FULL },
+            { "Cancel_GetNoStaleWaiter",       CW_NO_STALE_WAITER },
+            { "Cancel_GetTwoWaiters",          CW_TWO_WAITERS },
+            { "Cancel_GetSignalWins",          CW_SIGNAL_WINS },
+            { "Cancel_PutFrontFull",           CW_PUT_FRONT_FULL },
+            { "Cancel_PeekEmpty",              CW_PEEK_EMPTY },
+            { "Cancel_PeekFrontEmpty",         CW_PEEK_FRONT_EMPTY },
+            { "Cancel_SleepCancelGet",         CW_VIA_SLEEPCANCEL + CW_GET_INFINITE },
+            { "Cancel_SleepCancelPut",         CW_VIA_SLEEPCANCEL + CW_PUT_FULL },
+            { "Cancel_SleepCancelNoStale",     CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER },
+            { "Cancel_SleepCancelTwo",         CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS },
+            { "Cancel_SleepCancelSignal",      CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS },
+            { "Cancel_SleepCancelPutFront",    CW_VIA_SLEEPCANCEL + CW_PUT_FRONT_FULL }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param)
+                    != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
 
 #endif // __ARM_ARCH_6M__
 

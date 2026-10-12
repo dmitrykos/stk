@@ -563,7 +563,7 @@ protected:
                 return m_task->Wake();
             }
 
-            /*! \brief  Advance the timeout countdown by one tick.
+            /*! \brief  Advance the timeout countdown by a number of ticks.
                 \return \c true if the wait is still active (not yet timed out),
                         \c false if the timeout just expired (caller should stop ticking this object).
                 \note   Called by UpdateSyncObjects() each kernel tick.
@@ -607,7 +607,7 @@ protected:
 
             /*! \brief  Cancel an in-progress wait without waking the owning task.
                 \note   Used when the owning task is being forcibly removed (see
-                        KernelTask::ScheduleRemoval()) while blocked on a synchronization object.
+                        KernelTask::ScheduleRemoval) while blocked on a synchronization object.
                         Unlike Wake(), this does not touch m_task's sleep state or set m_timeout -
                         the task is being torn down and will never observe the wait result.
                 \note   No-op if not currently waiting.
@@ -645,6 +645,21 @@ protected:
                 m_sync_obj = nullptr;
 
                 m_task->Wake();
+            }
+
+            /*! \brief  Cancel an in-progress wait and wake the owning task early if was waiting.
+                \return true if cancelled active waiting, false otherwise.
+                \see    Cancel, IsWaiting
+            */
+            bool CancelIfWaiting()
+            {
+                const bool was_waiting = IsWaiting();
+                if (was_waiting)
+                {
+                    Cancel();
+                }
+
+                return was_waiting;
             }
 
             KernelTask     *m_task;      //!< Back-pointer to the owning KernelTask. Set once at construction; never changes.
@@ -714,8 +729,18 @@ protected:
         }
 
         /*! \brief     Schedule the removal of the task from the kernel on next tick.
+            \param[in] kernel: Owning kernel (used to deliver the sleep entry to the strategy immediately
+                       if this is not the currently scheduled task).
+            \note      Must be called with hw::CriticalSection held.
+            \note      Makes the task sleep infinitely and marks it pending for removal. If the task is not
+                       m_task_now (e.g. removed by another task via ScheduleTaskRemoval()) and it was not
+                       sleeping yet, OnTaskSleep() is delivered to the strategy right away: only the
+                       currently scheduled task may have STATE_SLEEP_PENDING consumed later by a tick or
+                       a forced context switch, otherwise the strategy could still return this task
+                       from GetNext() although it IsSleeping(). A task that is already sleeping has already
+                       been reported to the strategy and is not reported again.
         */
-        void ScheduleRemoval()
+        void ScheduleRemoval(Kernel *const kernel)
         {
             // if blocked on a sync object, detach first - otherwise the WaitObject stays linked
             // in the sync object's wait list after Unbind() frees this slot, and a later
@@ -736,6 +761,15 @@ protected:
 
             // mark it as pending for removal
             m_state |= STATE_REMOVE_PENDING;
+
+            // the task may not be the current one (e.g. removed via ScheduleTaskRemoval() by another task):
+            // deliver the sleep entry now, otherwise a forced context switch could pick this task from the
+            // strategy although it IsSleeping(); skipped if the task was already sleeping (flag is not set
+            // then, the strategy has already been notified)
+            if ((this != kernel->m_task_now) && ((m_state & STATE_SLEEP_PENDING) != 0U))
+            {
+                kernel->ProcessTaskPendingSleep(this);
+            }
         }
 
         /*! \brief     Check if task is pending removal.
@@ -894,7 +928,7 @@ protected:
 
         /*! \brief  Request a context switch and wait until the kernel consumes the pending yield.
         */
-        void BusyWaitWhileYielding(Kernel *kernel) const
+        void BusyWaitWhileYielding(Kernel *const kernel) const
         {
             if __stk_constexpr_cpp17 (TStrategy::NOSLEEP_YIELD_API)
             {
@@ -1008,7 +1042,7 @@ protected:
         {
             if __stk_constexpr_cpp17 (!IsHrtMode())
             {
-                m_kernel->OnTaskSleepCancel(task_id);
+                m_kernel->CancelTaskWait(GetUserTaskFromTid(task_id));
             }
         }
 
@@ -1094,11 +1128,15 @@ protected:
 
         Weight SetWeight(TId tid, Weight weight) override
         {
+            Weight result;
+
             if __stk_constexpr_cpp17 (TStrategy::WEIGHT_API && TStrategy::PRIORITY_INHERITANCE_API)
             {
+                // critical section: avoid race with OnTick
+
                 const hw::CriticalSection::ScopedLock cs_;
 
-                return m_kernel->OnSetWeight(tid, weight);
+                result = m_kernel->OnSetWeight(tid, weight);
             }
             else
             {
@@ -1106,8 +1144,11 @@ protected:
                 STK_UNUSED(tid);
                 STK_UNUSED(weight);
                 STK_ASSERT(false);
-                return NO_WEIGHT;
+
+                result = NO_WEIGHT;
             }
+
+            return result;
         }
 
     private:
@@ -1324,12 +1365,14 @@ public:
             STK_ASSERT(user_task != nullptr);
             STK_ASSERT(IsStarted());
 
+            // critical section: avoid race with OnTick
+
             const hw::CriticalSection::ScopedLock cs_;
 
             KernelTask *const task = FindTaskByUserTask(user_task);
             if (task != nullptr)
             {
-                task->ScheduleRemoval();
+                task->ScheduleRemoval(this);
             }
         }
         else
@@ -1350,8 +1393,9 @@ public:
         STK_ASSERT(user_task != nullptr);
 
         bool self = false;
+        KernelTask *self_task = nullptr;
 
-        // avoid race with OnTick
+        // critical section: avoid race with OnTick
         {
             const hw::CriticalSection::ScopedLock cs_;
 
@@ -1376,6 +1420,9 @@ public:
                 // trace blocked via Suspend
                 if (self)
                 {
+                    // keep the pointer: m_task_now may change as soon as the critical section is released
+                    self_task = task;
+
                 #if STK_SEGGER_SYSVIEW
                     SEGGER_SYSVIEW_OnTaskStopReady(task->GetUserStackPtr()->tid, TRACE_EVENT_SUSPEND);
                 #endif
@@ -1387,9 +1434,9 @@ public:
         }
 
         // note: we do not spin long here, kernel will switch this task out from scheduling on the next tick
-        if (self)
+        if (self_task != nullptr)
         {
-            m_task_now->BusyWaitWhileSleeping(this);
+            self_task->BusyWaitWhileSleeping(this);
         }
     }
 
@@ -1402,7 +1449,8 @@ public:
     {
         STK_ASSERT(user_task != nullptr);
 
-        // avoid race with OnTick
+        // critical section: avoid race with OnTick
+
         const hw::CriticalSection::ScopedLock cs_;
 
         KernelTask *const task = FindTaskByUserTask(user_task);
@@ -1429,25 +1477,29 @@ public:
     {
         STK_ASSERT(user_task != nullptr);
 
-        if __stk_constexpr_cpp17 (IsSyncMode())
+        KernelTask *const task = FindTaskByUserTask(user_task);
+        if (task != nullptr)
         {
-            // avoid race with OnTick
+            // critical section: avoid race with OnTick
+
             const hw::CriticalSection::ScopedLock cs_;
 
-            KernelTask *const task = FindTaskByUserTask(user_task);
-            STK_ASSERT(task != nullptr);
+            bool canceled_wait = false;
 
-            // only cancel if actually blocked in OnTaskWait() on a sync object; no-op otherwise
-            // (e.g. task is running, suspended via SuspendTask(), or plainly sleeping)
-            if (task->m_wait_obj->IsWaiting())
+            if __stk_constexpr_cpp17 (IsSyncMode())
             {
-                task->m_wait_obj->Cancel();
+                // a task blocked in OnTaskWait() also counts as sleeping (ScheduleSleep(WAIT_INFINITE)), but
+                // its WaitObject is still linked into the sync object's wait list: waking only the task
+                // would leave a stale entry behind (later signaled or ticked as a timeout while the task is
+                // not waiting), so cancel the wait itself, this unlinks it, records WAIT_RESULT_CANCELED
+                // and wakes the task
+                canceled_wait = task->m_wait_obj->CancelIfWaiting();
             }
-        }
-        else
-        {
-            // kernel operating mode must include KERNEL_SYNC for tasks to be able to wait
-            STK_ASSERT(false);
+
+            if (!canceled_wait && task->IsSleeping())
+            {
+                task->Wake();
+            }
         }
     }
 
@@ -1460,15 +1512,17 @@ public:
        size_t count = 0U;
        const size_t limit = Min(tasks.GetSize(), TASKS_MAX);
 
-       // avoid race with OnTick
-       const hw::CriticalSection::ScopedLock cs_;
-
-       for (size_t i = 0U; i < limit; ++i)
+       // critical section: avoid race with OnTick
        {
-           KernelTask *const task = &m_task_storage[i];
-           if (task->IsBusy())
+           const hw::CriticalSection::ScopedLock cs_;
+
+           for (size_t i = 0U; i < limit; ++i)
            {
-                tasks[count++] = task;
+               KernelTask &task = m_task_storage[i];
+               if (task.IsBusy())
+               {
+                    tasks[count++] = &task;
+               }
            }
        }
 
@@ -1484,15 +1538,17 @@ public:
         size_t count = 0U;
         const size_t limit = Min(user_tasks.GetSize(), TASKS_MAX);
 
-        // avoid race with OnTick
-        const hw::CriticalSection::ScopedLock cs_;
-
-        for (size_t i = 0U; i < limit; ++i)
+        // critical section: avoid race with OnTick
         {
-            KernelTask *const task = &m_task_storage[i];
-            if (task->IsBusy())
+            const hw::CriticalSection::ScopedLock cs_;
+
+            for (size_t i = 0U; i < limit; ++i)
             {
-                user_tasks[count++] = task->GetUserTask();
+                KernelTask &task = m_task_storage[i];
+                if (task.IsBusy())
+                {
+                    user_tasks[count++] = task.GetUserTask();
+                }
             }
         }
 
@@ -2037,6 +2093,8 @@ protected:
             if (task != nullptr)
             {
                 bool handled = false;
+
+                // critical section: avoid race with OnTick
                 {
                     const hw::CriticalSection::ScopedLock cs_;
 
@@ -2075,7 +2133,7 @@ protected:
         KernelTask *const task = FindTaskBySP(caller_SP);
         STK_ASSERT(task != nullptr);
 
-        // make change to HRT state and sleep time atomic
+        // // critical section: make change to HRT state and sleep time atomic
         {
             const hw::CriticalSection::ScopedLock cs_;
 
@@ -2106,7 +2164,7 @@ protected:
 
         bool result = true;
 
-        // make change to HRT state and sleep time atomic
+        // critical section: make change to HRT state and sleep time atomic
         {
             const hw::CriticalSection::ScopedLock cs_;
 
@@ -2138,20 +2196,6 @@ protected:
         return result;
     }
 
-    void OnTaskSleepCancel(TId task_id)
-    {
-        KernelTask *const task = FindTaskByUserTask(GetUserTaskFromTid(task_id));
-        if (task != nullptr)
-        {
-            const hw::CriticalSection::ScopedLock cs_;
-
-            if (task->IsSleeping())
-            {
-                task->Wake();
-            }
-        }
-    }
-
     void OnTaskExit(Stack *stack) override
     {
         if __stk_constexpr_cpp17 (IsDynamicMode())
@@ -2164,12 +2208,13 @@ protected:
             SEGGER_SYSVIEW_OnTaskStopExec();
         #endif
 
-            // notify kernel to execute removal
+            // critical section: avoid race with OnTick
             {
                 // make change to HRT/sleep/removal state atomic (same as OnTaskSleep/OnTaskSleepUntil)
                 const hw::CriticalSection::ScopedLock cs_;
 
-                task->ScheduleRemoval();
+                // notify kernel to execute removal (asynchronous operation)
+                task->ScheduleRemoval(this);
             }
         }
         else
@@ -2191,25 +2236,32 @@ protected:
             KernelTask *const task = FindTaskBySP(caller_SP);
             STK_ASSERT(task != nullptr);
 
-            // configure waiting
-            task->m_wait_obj->SetupWait(sync_obj, timeout);
-
-            // register ISyncObject if not yet
-            if (sync_obj->GetHead() == nullptr)
+            // critical section: avoid race with OnTick
             {
-                m_sync_list->LinkBack(sync_obj);
+                // keep the task from being de-scheduled between ScheduleSleep() and the end of mutex->Unlock():
+                // otherwise a tick can switch it out (sleeping) while it still owns the mutex
+                const hw::CriticalSection::ScopedLock cs_;
+
+                // configure waiting
+                task->m_wait_obj->SetupWait(sync_obj, timeout);
+
+                // register ISyncObject if not yet
+                if (sync_obj->GetHead() == nullptr)
+                {
+                    m_sync_list->LinkBack(sync_obj);
+                }
+
+                // start sleeping infinitely, we rely on a Wake call via WaitObject
+                task->ScheduleSleep(WAIT_INFINITE);
+
+                // trace blocked on sync object's Wait
+            #if STK_SEGGER_SYSVIEW
+                SEGGER_SYSVIEW_OnTaskStopReady(task->GetUserStackPtr()->tid, TRACE_EVENT_WAIT);
+            #endif
+
+                // unlock mutex locked externally, so that we could wait in a busy-waiting loop
+                mutex->Unlock();
             }
-
-            // start sleeping infinitely, we rely on a Wake call via WaitObject
-            task->ScheduleSleep(WAIT_INFINITE);
-
-            // trace blocked on sync object's Wait
-        #if STK_SEGGER_SYSVIEW
-            SEGGER_SYSVIEW_OnTaskStopReady(task->GetUserStackPtr()->tid, TRACE_EVENT_WAIT);
-        #endif
-
-            // unlock mutex locked externally, so that we could wait in a busy-waiting loop
-            mutex->Unlock();
 
             // note: we do not spin long here, kernel will switch this task out from scheduling on the next tick
             task->BusyWaitWhileSleeping(this);
@@ -2800,8 +2852,12 @@ protected:
     */
     void ScheduleAddTask()
     {
-        const hw::CriticalSection::ScopedLock cs_;
-        m_request |= REQ_ADD_TASK;
+        // critical section: avoid race with OnTick
+        {
+            const hw::CriticalSection::ScopedLock cs_;
+
+            m_request |= REQ_ADD_TASK;
+        }
     }
 
 #if STK_SEGGER_SYSVIEW

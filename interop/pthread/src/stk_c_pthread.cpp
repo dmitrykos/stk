@@ -360,12 +360,33 @@ static ThreadCtrl *DequeueReap()
     return result;
 }
 
+// Wait forever for a signal on an Event/Semaphore and return only once it was signaled. A cancelled
+// wait (IKernel::CancelTaskWait(), IKernelService::SleepCancel()) is absorbed and retried: the callers
+// cannot report it (pthread_join() must not release the thread's resources before the thread is done),
+// and a cancelled wait never consumes the signal. A wait the kernel rejected is an internal defect.
+template <typename TObj>
+static void WaitSignaled(TObj &obj)
+{
+    EWaitResult wr;
+
+    do
+    {
+        wr = obj.WaitEx(WAIT_INFINITE);
+    }
+    while (wr == WAIT_RESULT_CANCELED);
+
+    if (wr != WAIT_RESULT_SIGNAL)
+    {
+        STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
+    }
+}
+
 static void ReaperEntry(void * /*arg*/)
 {
     for (;;)
     {
         STK_C_ASSERT(s_ReapSem != nullptr);
-        (void)s_ReapSem->Wait(); // WAIT_INFINITE
+        WaitSignaled(*s_ReapSem);
 
         ThreadCtrl *const ctrl = DequeueReap();
         if (ctrl != nullptr)
@@ -578,6 +599,33 @@ static Timeout TimespecToRelativeTimeout(const struct timespec *abstime)
     }
 
     return GetTicksFromMsClampedToTimeout(static_cast<Timeout>(rel_ms));
+}
+
+// Map the outcome of a timed lock attempt to errno. CANCELED must be handled by the caller first
+// (retried, the deadline is absolute so the remaining time is simply recomputed): POSIX timed locks have
+// no "interrupted" error, and ETIMEDOUT must not be reported before abstime has passed.
+static int TimedResultToErrno(EWaitResult wr)
+{
+    int result;
+
+    switch (wr)
+    {
+    case WAIT_RESULT_SIGNAL:
+        result = 0;
+        break;
+
+    case WAIT_RESULT_TIMEOUT:
+        result = ETIMEDOUT;
+        break;
+
+    case WAIT_RESULT_CANCELED:
+    case WAIT_RESULT_FAIL:
+    default:
+        result = EINVAL; // kernel rejected the wait
+        break;
+    }
+
+    return result;
 }
 
 static sync::Mutex *EnsureMutex(pthread_mutex_t *m)
@@ -985,7 +1033,7 @@ int pthread_join(pthread_t thread, void **retval)
         }
         else
         {
-            (void)ctrl->done_event->Wait(); // WAIT_INFINITE
+            WaitSignaled(*ctrl->done_event);
 
             if (retval != nullptr)
             {
@@ -1238,7 +1286,15 @@ int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *absti
         result = PreLockCheck(mutex, m, EDEADLK);
         if (result == 0)
         {
-            result = m->TimedLock(TimespecToRelativeTimeout(abstime)) ? 0 : ETIMEDOUT;
+            EWaitResult wr;
+
+            do
+            {
+                wr = m->TimedLockEx(TimespecToRelativeTimeout(abstime));
+            }
+            while (wr == WAIT_RESULT_CANCELED);
+
+            result = TimedResultToErrno(wr);
         }
     }
 
@@ -1310,7 +1366,11 @@ int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
     }
     else
     {
-        (void)EnsureCond(cond)->Wait(*HandleOf(mutex)); // WAIT_INFINITE
+        // a cancelled wait is reported as a spurious wake-up (allowed by POSIX, callers re-check their
+        // predicate); the mutex is re-acquired in all cases
+        const EWaitResult wr = EnsureCond(cond)->WaitEx(*HandleOf(mutex), WAIT_INFINITE);
+
+        result = (wr == WAIT_RESULT_FAIL) ? EINVAL : 0;
     }
 
     return result;
@@ -1330,8 +1390,10 @@ int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, const s
     }
     else
     {
-        const bool signaled = EnsureCond(cond)->Wait(*HandleOf(mutex), TimespecToRelativeTimeout(abstime));
-        result = signaled ? 0 : ETIMEDOUT;
+        const EWaitResult wr = EnsureCond(cond)->WaitEx(*HandleOf(mutex), TimespecToRelativeTimeout(abstime));
+
+        // a cancelled wait is a spurious wake-up (0), not ETIMEDOUT: abstime may not have passed yet
+        result = (wr == WAIT_RESULT_CANCELED) ? 0 : TimedResultToErrno(wr);
     }
 
     return result;
@@ -1446,8 +1508,15 @@ int pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock, const struct timespec *
 
     if ((rwlock != nullptr) && (abstime != nullptr))
     {
-        const bool locked = EnsureRWLock(rwlock)->TimedReadLock(TimespecToRelativeTimeout(abstime));
-        result = locked ? 0 : ETIMEDOUT;
+        EWaitResult wr;
+
+        do
+        {
+            wr = EnsureRWLock(rwlock)->TimedReadLockEx(TimespecToRelativeTimeout(abstime));
+        }
+        while (wr == WAIT_RESULT_CANCELED);
+
+        result = TimedResultToErrno(wr);
     }
 
     return result;
@@ -1493,14 +1562,18 @@ int pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *
 
     if ((rwlock != nullptr) && (abstime != nullptr))
     {
-        if (EnsureRWLock(rwlock)->TimedLock(TimespecToRelativeTimeout(abstime)))
+        EWaitResult wr;
+
+        do
+        {
+            wr = EnsureRWLock(rwlock)->TimedLockEx(TimespecToRelativeTimeout(abstime));
+        }
+        while (wr == WAIT_RESULT_CANCELED);
+
+        result = TimedResultToErrno(wr);
+        if (result == 0)
         {
             rwlock->__wrlocked = true;
-            result = 0;
-        }
-        else
-        {
-            result = ETIMEDOUT;
         }
     }
 
@@ -1668,7 +1741,17 @@ int pthread_barrier_wait(pthread_barrier_t *barrier)
 
     if ((barrier != nullptr) && (barrier->__handle != nullptr))
     {
-        result = HandleOf(barrier)->Wait() ? PTHREAD_BARRIER_SERIAL_THREAD : 0;
+        // a cancelled wait rolls this arrival back (the barrier did not trip), reporting 0 would let the
+        // caller run on as if it had: pthread_barrier_wait() has no "interrupted" result, so arrive again
+        sync::Barrier::EResult br;
+
+        do
+        {
+            br = HandleOf(barrier)->WaitEx();
+        }
+        while (br == sync::Barrier::BARRIER_CANCELED);
+
+        result = (br == sync::Barrier::BARRIER_LAST_ARRIVAL) ? PTHREAD_BARRIER_SERIAL_THREAD : 0;
     }
 
     return result;

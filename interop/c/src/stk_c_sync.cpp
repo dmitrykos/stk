@@ -23,6 +23,22 @@ using namespace stk::sync;
 // =============================================================================
 extern "C" {
 
+// maps kernel wait result to the C API wait result
+static stk_wait_result_t ToCWaitResult(EWaitResult wr)
+{
+    stk_wait_result_t result;
+
+    switch (wr)
+    {
+    case WAIT_RESULT_SIGNAL:   result = STK_WAIT_RESULT_SIGNAL;   break;
+    case WAIT_RESULT_TIMEOUT:  result = STK_WAIT_RESULT_TIMEOUT;  break;
+    case WAIT_RESULT_CANCELED: result = STK_WAIT_RESULT_CANCELED; break;
+    default:                   result = STK_WAIT_RESULT_FAIL;     break;
+    }
+
+    return result;
+}
+
 // -----------------------------------------------------------------------------
 // Mutex
 // -----------------------------------------------------------------------------
@@ -78,6 +94,13 @@ bool stk_mutex_timed_lock(stk_mutex_t *mtx, stk_timeout_t timeout)
     STK_ASSERT(mtx != nullptr);
 
     return mtx->handle.TimedLock(timeout);
+}
+
+stk_wait_result_t stk_mutex_timed_lock_ex(stk_mutex_t *mtx, stk_timeout_t timeout)
+{
+    STK_ASSERT(mtx != nullptr);
+
+    return ToCWaitResult(mtx->handle.TimedLockEx(timeout));
 }
 
 Mutex *stk_mutex_get_instance(stk_mutex_t *mtx)
@@ -142,6 +165,13 @@ bool stk_fastmutex_timed_lock(stk_fastmutex_t *mtx, stk_timeout_t timeout)
     STK_ASSERT(mtx != nullptr);
 
     return mtx->handle.TimedLock(timeout);
+}
+
+stk_wait_result_t stk_fastmutex_timed_lock_ex(stk_fastmutex_t *mtx, stk_timeout_t timeout)
+{
+    STK_ASSERT(mtx != nullptr);
+
+    return ToCWaitResult(mtx->handle.TimedLockEx(timeout));
 }
 
 FastMutex *stk_fastmutex_get_instance(stk_fastmutex_t *mtx)
@@ -242,22 +272,6 @@ bool stk_cv_wait(stk_cv_t *cv, stk_mutex_t *mtx, stk_timeout_t timeout)
     return cv->handle.Wait(mtx->handle, timeout);
 }
 
-// maps kernel wait result to the C API wait result
-static stk_wait_result_t ToCWaitResult(EWaitResult wr)
-{
-    stk_wait_result_t result;
-
-    switch (wr)
-    {
-    case WAIT_RESULT_SIGNAL:   result = STK_WAIT_RESULT_SIGNAL;   break;
-    case WAIT_RESULT_TIMEOUT:  result = STK_WAIT_RESULT_TIMEOUT;  break;
-    case WAIT_RESULT_CANCELED: result = STK_WAIT_RESULT_CANCELED; break;
-    default:                   result = STK_WAIT_RESULT_FAIL;     break;
-    }
-
-    return result;
-}
-
 stk_wait_result_t stk_cv_wait_ex(stk_cv_t *cv, stk_mutex_t *mtx, stk_timeout_t timeout)
 {
     STK_ASSERT(cv != nullptr);
@@ -343,6 +357,13 @@ bool stk_event_wait(stk_event_t *ev, stk_timeout_t timeout)
     return ev->handle.Wait(timeout);
 }
 
+stk_wait_result_t stk_event_wait_ex(stk_event_t *ev, stk_timeout_t timeout)
+{
+    STK_ASSERT(ev != nullptr);
+
+    return ToCWaitResult(ev->handle.WaitEx(timeout));
+}
+
 bool stk_event_trywait(stk_event_t *ev)
 {
     STK_ASSERT(ev != nullptr);
@@ -421,6 +442,13 @@ bool stk_sem_wait(stk_sem_t *sem, stk_timeout_t timeout)
     STK_ASSERT(sem != nullptr);
 
     return sem->handle.Wait(timeout);
+}
+
+stk_wait_result_t stk_sem_wait_ex(stk_sem_t *sem, stk_timeout_t timeout)
+{
+    STK_ASSERT(sem != nullptr);
+
+    return ToCWaitResult(sem->handle.WaitEx(timeout));
 }
 
 bool stk_sem_trywait(stk_sem_t *sem)
@@ -582,6 +610,14 @@ bool stk_pipe_write(stk_pipe_t *pipe, const void *data, stk_timeout_t timeout)
     return pipe->handle.Write(data, timeout);
 }
 
+stk_wait_result_t stk_pipe_write_ex(stk_pipe_t *pipe, const void *data, stk_timeout_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+    STK_ASSERT(data != nullptr);
+
+    return ToCWaitResult(pipe->handle.WriteEx(data, timeout));
+}
+
 bool stk_pipe_trywrite(stk_pipe_t *pipe, const void *data)
 {
     STK_ASSERT(pipe != nullptr);
@@ -596,6 +632,14 @@ bool stk_pipe_read(stk_pipe_t *pipe, void *data, stk_timeout_t timeout)
     STK_ASSERT(data != nullptr);
 
     return pipe->handle.Read(data, timeout);
+}
+
+stk_wait_result_t stk_pipe_read_ex(stk_pipe_t *pipe, void *data, stk_timeout_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+    STK_ASSERT(data != nullptr);
+
+    return ToCWaitResult(pipe->handle.ReadEx(data, timeout));
 }
 
 bool stk_pipe_tryread(stk_pipe_t *pipe, void *data)
@@ -613,6 +657,22 @@ size_t stk_pipe_write_bulk(stk_pipe_t *pipe, const void *src, size_t count, stk_
     return pipe->handle.WriteBulk(src, count, timeout);
 }
 
+stk_wait_result_t stk_pipe_write_bulk_ex(stk_pipe_t *pipe, const void *src, size_t count,
+                                         size_t *written, stk_timeout_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    size_t n = 0U;
+    const EWaitResult wr = pipe->handle.WriteBulkEx(src, count, n, timeout);
+
+    if (written != nullptr)
+    {
+        *written = n;
+    }
+
+    return ToCWaitResult(wr);
+}
+
 size_t stk_pipe_trywrite_bulk(stk_pipe_t *pipe, const void *src, size_t count)
 {
     STK_ASSERT(pipe != nullptr);
@@ -625,6 +685,22 @@ size_t stk_pipe_read_bulk(stk_pipe_t *pipe, void *dst, size_t count, stk_timeout
     STK_ASSERT(pipe != nullptr);
 
     return pipe->handle.ReadBulk(dst, count, timeout);
+}
+
+stk_wait_result_t stk_pipe_read_bulk_ex(stk_pipe_t *pipe, void *dst, size_t count,
+                                        size_t *read_count, stk_timeout_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    size_t n = 0U;
+    const EWaitResult wr = pipe->handle.ReadBulkEx(dst, count, n, timeout);
+
+    if (read_count != nullptr)
+    {
+        *read_count = n;
+    }
+
+    return ToCWaitResult(wr);
 }
 
 size_t stk_pipe_tryread_bulk(stk_pipe_t *pipe, void *dst, size_t count)
@@ -643,6 +719,26 @@ size_t stk_pipe_read_bulk_triggered(stk_pipe_t   *pipe,
     STK_ASSERT(pipe != nullptr);
 
     return pipe->handle.ReadBulkTriggered(dst, trigger, max_count, timeout);
+}
+
+stk_wait_result_t stk_pipe_read_bulk_triggered_ex(stk_pipe_t   *pipe,
+                                                  void         *dst,
+                                                  size_t        trigger,
+                                                  size_t        max_count,
+                                                  size_t       *read_count,
+                                                  stk_timeout_t timeout)
+{
+    STK_ASSERT(pipe != nullptr);
+
+    size_t n = 0U;
+    const EWaitResult wr = pipe->handle.ReadBulkTriggeredEx(dst, trigger, max_count, n, timeout);
+
+    if (read_count != nullptr)
+    {
+        *read_count = n;
+    }
+
+    return ToCWaitResult(wr);
 }
 
 size_t stk_pipe_tryread_bulk_triggered(stk_pipe_t *pipe, void *dst, size_t max_count)
@@ -764,6 +860,14 @@ bool stk_msgq_put(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout)
     return mq->handle.Put(msg, timeout);
 }
 
+stk_wait_result_t stk_msgq_put_ex(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout)
+{
+    STK_ASSERT(mq != nullptr);
+    STK_ASSERT(msg != nullptr);
+
+    return ToCWaitResult(mq->handle.PutEx(msg, timeout));
+}
+
 bool stk_msgq_tryput(stk_msgq_t *mq, const void *msg)
 {
     STK_ASSERT(mq != nullptr);
@@ -778,6 +882,14 @@ bool stk_msgq_putfront(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout)
     STK_ASSERT(msg != nullptr);
 
     return mq->handle.PutFront(msg, timeout);
+}
+
+stk_wait_result_t stk_msgq_putfront_ex(stk_msgq_t *mq, const void *msg, stk_timeout_t timeout)
+{
+    STK_ASSERT(mq != nullptr);
+    STK_ASSERT(msg != nullptr);
+
+    return ToCWaitResult(mq->handle.PutFrontEx(msg, timeout));
 }
 
 bool stk_msgq_tryputfront(stk_msgq_t *mq, const void *msg)
@@ -796,6 +908,14 @@ bool stk_msgq_get(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
     return mq->handle.Get(msg, timeout);
 }
 
+stk_wait_result_t stk_msgq_get_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
+{
+    STK_ASSERT(mq != nullptr);
+    STK_ASSERT(msg != nullptr);
+
+    return ToCWaitResult(mq->handle.GetEx(msg, timeout));
+}
+
 bool stk_msgq_tryget(stk_msgq_t *mq, void *msg)
 {
     STK_ASSERT(mq != nullptr);
@@ -812,6 +932,14 @@ bool stk_msgq_peek(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
     return mq->handle.Peek(msg, timeout);
 }
 
+stk_wait_result_t stk_msgq_peek_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
+{
+    STK_ASSERT(mq != nullptr);
+    STK_ASSERT(msg != nullptr);
+
+    return ToCWaitResult(mq->handle.PeekEx(msg, timeout));
+}
+
 bool stk_msgq_trypeek(stk_msgq_t *mq, void *msg)
 {
     STK_ASSERT(mq != nullptr);
@@ -826,6 +954,14 @@ bool stk_msgq_peekfront(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
     STK_ASSERT(msg != nullptr);
 
     return mq->handle.PeekFront(msg, timeout);
+}
+
+stk_wait_result_t stk_msgq_peekfront_ex(stk_msgq_t *mq, void *msg, stk_timeout_t timeout)
+{
+    STK_ASSERT(mq != nullptr);
+    STK_ASSERT(msg != nullptr);
+
+    return ToCWaitResult(mq->handle.PeekFrontEx(msg, timeout));
 }
 
 bool stk_msgq_trypeekfront(stk_msgq_t *mq, void *msg)
@@ -956,6 +1092,13 @@ bool stk_rwmutex_timed_read_lock(stk_rwmutex_t *rw, stk_timeout_t timeout)
     return rw->handle.TimedReadLock(timeout);
 }
 
+stk_wait_result_t stk_rwmutex_timed_read_lock_ex(stk_rwmutex_t *rw, stk_timeout_t timeout)
+{
+    STK_ASSERT(rw != nullptr);
+
+    return ToCWaitResult(rw->handle.TimedReadLockEx(timeout));
+}
+
 void stk_rwmutex_read_unlock(stk_rwmutex_t *rw)
 {
     STK_ASSERT(rw != nullptr);
@@ -982,6 +1125,13 @@ bool stk_rwmutex_timed_lock(stk_rwmutex_t *rw, stk_timeout_t timeout)
     STK_ASSERT(rw != nullptr);
 
     return rw->handle.TimedLock(timeout);
+}
+
+stk_wait_result_t stk_rwmutex_timed_lock_ex(stk_rwmutex_t *rw, stk_timeout_t timeout)
+{
+    STK_ASSERT(rw != nullptr);
+
+    return ToCWaitResult(rw->handle.TimedLockEx(timeout));
 }
 
 void stk_rwmutex_unlock(stk_rwmutex_t *rw)

@@ -30,15 +30,17 @@ stk::sync::Barrier g_Barrier(5U);   // 5 tasks must call Wait() before any is re
 
 | Method | Signature | Description |
 |--------|-----------|--------------|
-| `Wait` | `bool Wait()` | Blocks the calling task until `count` tasks (as passed to the constructor) have called `Wait()`. Returns `true` for the one task that triggered the release (i.e. the last to arrive), `false` for every other task. ISR-unsafe. |
+| `WaitEx` | `EResult WaitEx()` | Same as `Wait()`, but preserves the full outcome: `BARRIER_LAST_ARRIVAL` (this task tripped the barrier), `BARRIER_RELEASED` (released because the barrier tripped; not the last arrival), `BARRIER_CANCELED` (wait cancelled via `IKernel::CancelTaskWait()` or `SleepCancel()` before the barrier tripped; the task's arrival is **rolled back**). ISR-unsafe. |
+| `Wait` | `bool Wait()` | Blocks the calling task until `count` tasks (as passed to the constructor) have called `Wait()`. Returns `true` for the one task that triggered the release (i.e. the last to arrive), `false` otherwise (released waiter, or cancelled wait); use `WaitEx()` to tell these apart. ISR-unsafe. |
 | `GetThreshold` | `uint32_t GetThreshold() const` | Returns the number of tasks required to trip the barrier. ISR-safe. |
 | `~Barrier` | (destructor) | The underlying `Mutex`/`ConditionVariable` members assert `IsEmpty()` on their own wait lists in debug builds if destroyed with tasks still waiting. |
 
-**Round lifecycle in `Wait()`:**
+**Round lifecycle in `Wait()` / `WaitEx()`:**
 
 ```
---m_count > 0          →  block on m_cond until m_generation changes, then return false
---m_count == 0         →  ++m_generation, m_count = m_threshold, NotifyAll(), return true
+--m_count > 0          →  block on m_cond until m_generation changes, then return false (BARRIER_RELEASED)
+                          if cancelled before that: ++m_count (arrival rolled back), return BARRIER_CANCELED
+--m_count == 0         →  ++m_generation, m_count = m_threshold, NotifyAll(), return true (BARRIER_LAST_ARRIVAL)
 ```
 
 **Key invariants:**
@@ -52,6 +54,16 @@ stk::sync::Barrier g_Barrier(5U);   // 5 tasks must call Wait() before any is re
   subsequent rounds without reconstruction.
 - A task blocked in `Wait()` is only ever woken by the completion of *its own* generation; a
   wakeup intended for a different (later) generation cannot prematurely release it.
+- A cancelled wait (`BARRIER_CANCELED`) is distinct from a release and rolls the task's arrival
+  back: it no longer counts toward the round, the remaining parties keep waiting, and the
+  barrier does **not** trip short-handed on the cancelled task's behalf. It takes a replacement
+  arrival to complete the round.
+- A cancel that loses the race against the trip is a no-op: if the barrier tripped first (the
+  task has already been released, or the cancel only takes effect after the trip), the task is
+  reported as `BARRIER_RELEASED` and its arrival, which the trip has already consumed, is **not**
+  rolled back. The count stays consistent for the next round.
+- The internal mutex is released on every path, including cancellation. Its re-acquisition
+  inside the wait is not cancelable (`Mutex::Lock()` absorbs a cancel and retries).
 
 ---
 
@@ -81,13 +93,35 @@ Tests 1, 2, 3, 5, 7, and 8 add all five tasks against `g_TestBarrier5`. Test 4
 (`BlocksUntilLastArrives`) adds only tasks 0–1 against `g_TestBarrier2`. Test 6
 (`PartialGroupThreshold`) adds only tasks 0–2 against `g_TestBarrier3`.
 
+The cancellation tests (9–18) use their own barrier, `g_CancelBarrier`, which — unlike the
+statics above — **is** re-constructed for every test by `ResetTestState()`: its threshold (2 or 3)
+depends on the scenario, and a failed cancel must not leave a corrupted count behind for the next
+test. It lives in raw storage (`g_CancelBarrierStorage`) and is accessed through the pointer
+returned by placement new, because `Barrier` has a `const` member (`m_threshold`), so the old
+name must not be used to refer to a re-constructed object. These tests add all five tasks: tasks
+0–3 are the parties of the barrier, task 4 is the verifier and watchdog. They use the following
+shared state, also reset by `ResetTestState()` (the first index is always the task id):
+
+| Variable | Purpose |
+|----------|---------|
+| `g_CancelTask[]` / `g_CancelTid[]` | Task (and its `TId`) published by every task when it starts; task 1 is the victim, the verifier uses the others to release stuck tasks |
+| `g_CancelResult[][2]` | `Barrier::EResult` of the 1st / 2nd `WaitEx()` call of each task (`-100` = not recorded) |
+| `g_CancelElapsed[][2]` | Milliseconds spent inside the 1st / 2nd `WaitEx()` call of each task |
+| `g_CancelDone[]` | `1` once the task has finished its script (lets the watchdog tell stuck tasks from finished ones) |
+| `g_CancelParam` | Scenario selector (see below); a global rather than a constructor argument because tasks 0–1 are `static` and would keep the value of the first case |
+| `g_CancelThreshold` | Threshold of `g_CancelBarrier` for the scenario |
+
+The helper `CancelVictim(use_sleep_cancel)` cancels the victim either with
+`g_Kernel.CancelTaskWait(g_CancelTask[1])` or with `stk::SleepCancel(g_CancelTid[1])`.
+
 ---
 
 ## Platform Notes
 
-On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link seven distinct task
-class templates simultaneously. Tests 1–7 are skipped on M0 and only `StressTest` (test 8) runs,
-under `#ifndef __ARM_ARCH_6M__`.
+On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link eight distinct task
+class templates simultaneously. Tests 1–7 and the cancellation tests 9–18 are skipped on M0 and
+only `StressTest` (test 8) runs, under `#ifndef __ARM_ARCH_6M__`. `CancelWaitTask` is the eighth
+template (shared by all ten cancellation tests).
 
 `StressTest` runs on M0 because it uses a single task class template (`StressTestTask`)
 instantiated for all five task slots, fitting within the available memory.
@@ -206,6 +240,166 @@ repeated full-group synchronization.
 
 ---
 
+### Cancellation tests (Tests 9–18)
+
+Tests 9–18 verify that a task blocked in `Barrier::WaitEx()` can be cancelled, that its arrival
+is rolled back, and that the barrier stays consistent for the remaining parties. All use the
+same task class (`CancelWaitTask`) and **all five tasks**: tasks 0–3 are the parties of the
+barrier under test (`g_CancelBarrier`, threshold 2 or 3 depending on the scenario), task 1 is
+always the *victim*, task 0 issues the cancel, task 4 is the verifier and watchdog. Tests 9–13
+cancel with `IKernel::CancelTaskWait()`; tests 14–18 repeat each scenario with
+`stk::SleepCancel()`. The scenario is selected by `param` (`1..5`); adding `100` selects
+`SleepCancel`.
+
+Unlike the other primitives, the blocked tasks here are the participants themselves, so the
+results are recorded per task and per call (`g_CancelResult[task][call]`) and evaluated by task 4
+at about tick 200, after every script has finished. Common timeline (ticks; deviations are noted
+per test):
+
+| Task | Role | Timeline |
+|------|------|----------|
+| 0 | canceller (and a party in most scenarios) | cancels the victim at ~60; in most scenarios arrives at the barrier later |
+| 1 | victim | arrives at ~10 with `WaitEx()` and records the result and the elapsed time |
+| 2, 3 | other parties | arrive at ~20–100 depending on the test; idle in the tests that do not need them (9, 12) |
+| 4 | verifier and watchdog | sleeps until tick 200, evaluates the scenario, then releases any party still blocked |
+
+`StressTest` keeps the number 8 but runs last in `main()`, after the cancellation tests.
+
+> **Safety net:** if a cancel does not work, or leaves the barrier with a wrong count, some
+> parties would stay blocked forever and the kernel would never stop. After evaluating the
+> scenario, task 4 therefore cancels every party that has not finished (up to four rounds, since
+> a released party may block again in its next call), so a broken cancel is reported as a test
+> failure rather than a hang.
+
+> **Back-to-back calls:** tests 12 and 13 (and 17, 18) rely on there being no scheduling point
+> between two consecutive calls of task 0 (`WaitEx()` then `CancelVictim()` in test 12,
+> `CancelVictim()` then `WaitEx()` in test 13), the same assumption the `SignalWins` tests of the
+> other suites make.
+
+> **Kernel requirement:** tests 14–18 depend on `SleepCancel()` also cancelling a wait on a
+> sync object (`OnTaskSleepCancel()` routes through `WaitObject::Cancel()`). Against a kernel
+> where `SleepCancel()` only wakes the task, they fail by design: that is the stale wait
+> entry regression they exist to catch.
+
+---
+
+### Test 9 — `CancelWait_Basic`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `1` &nbsp;|&nbsp; **Runs on M0: no**
+
+Task 1 calls `WaitEx()` at about tick 10 and blocks, one party short. Task 0 cancels it at
+about tick 60 via `CancelTaskWait()`.
+
+**Pass condition:** `result == BARRIER_CANCELED` and elapsed in `[35, 75]` ms
+
+---
+
+### Test 10 — `CancelWait_Rollback`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `2`
+
+The victim is cancelled at about tick 60. Task 2 then arrives alone at about tick 90 and must
+**block**: the victim's arrival no longer counts. Task 0 arrives at about tick 130 and completes
+the round. Had the arrival not been rolled back, task 2 would trip the barrier by itself at once
+(`BARRIER_LAST_ARRIVAL`, elapsed ~0) and task 0 would be left waiting for a second party.
+
+**Pass condition:** victim `BARRIER_CANCELED`, task 2 `BARRIER_RELEASED` with elapsed in
+`[30, 70]` ms, task 0 `BARRIER_LAST_ARRIVAL`
+
+---
+
+### Test 11 — `CancelWait_OneOfMany`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 3 &nbsp;|&nbsp; **Param:** `3`
+
+The victim (arrived at ~10) and task 2 (arrived at ~20) are both waiting when task 0 cancels only
+the victim at about tick 60. Task 2 must stay blocked: the other waiters are not disturbed. The
+round is completed by replacement arrivals, task 3 at about tick 100 and task 0 at about tick
+130; had the victim's arrival not been rolled back, task 3 would have tripped the barrier at tick
+100.
+
+**Pass condition:** victim `BARRIER_CANCELED`, task 2 `BARRIER_RELEASED` with elapsed in
+`[90, 130]` ms, task 3 `BARRIER_RELEASED`, task 0 `BARRIER_LAST_ARRIVAL`
+
+---
+
+### Test 12 — `CancelWait_SignalWins`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `4`
+
+Task 0 arrives at about tick 60 and trips the barrier, then cancels the victim immediately after
+(no scheduling point in between). The victim has already been released by the trip, so the cancel
+must be a no-op and the victim must report `BARRIER_RELEASED`. Both tasks then go through a
+**second round** (the victim arrives at ~60, task 0 at ~100), which shows that the count is
+consistent and that the cancel left nothing behind that would hit the victim's next wait.
+
+**Pass condition:** round 1: task 0 `BARRIER_LAST_ARRIVAL`, victim `BARRIER_RELEASED`;
+round 2: victim `BARRIER_RELEASED` with elapsed `>= 30` ms, task 0 `BARRIER_LAST_ARRIVAL`
+
+---
+
+### Test 13 — `CancelWait_TripAfterCancel`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 3 &nbsp;|&nbsp; **Param:** `5`
+
+The reverse race of test 12. The victim (~10) and task 2 (~20) are waiting. At about tick 60
+task 0 cancels the victim and arrives right after, with no scheduling point in between: the
+cancel is pending but the victim has not run yet, so its arrival is still counted and task 0
+trips the barrier. When the victim finally runs, the barrier has already tripped, so it must
+report `BARRIER_RELEASED` and must **not** roll its arrival back: that arrival was consumed by
+the trip, and rolling it back would leave the count one too high for every following round.
+
+All three tasks then go through a **second round**. With a consistent count exactly one of them
+trips it and the others are released; with a corrupted count the round never completes and the
+watchdog has to release the stuck tasks.
+
+**Pass condition:** round 1: task 0 `BARRIER_LAST_ARRIVAL`, victim and task 2 `BARRIER_RELEASED`;
+round 2: exactly one `BARRIER_LAST_ARRIVAL` and two `BARRIER_RELEASED`
+
+---
+
+### Test 14 — `CancelWait_SleepCancel`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `101`
+
+Test 9 using `stk::SleepCancel(tid)` instead of `CancelTaskWait()`.
+
+**Pass condition:** same as test 9
+
+---
+
+### Test 15 — `CancelWait_SleepCancelRollback`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `102`
+
+Test 10 using `SleepCancel()`.
+
+**Pass condition:** same as test 10
+
+---
+
+### Test 16 — `CancelWait_SleepCancelOneOfMany`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 3 &nbsp;|&nbsp; **Param:** `103`
+
+Test 11 using `SleepCancel()`.
+
+**Pass condition:** same as test 11
+
+---
+
+### Test 17 — `CancelWait_SleepCancelSignal`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 2 &nbsp;|&nbsp; **Param:** `104`
+
+Test 12 using `SleepCancel()`. The release has already been delivered when the cancel arrives,
+so this checks that a `SleepCancel()` after the release does not disturb it, nor the victim's
+next wait.
+
+**Pass condition:** same as test 12
+
+---
+
+### Test 18 — `CancelWait_SleepCancelTrip`
+**Tasks:** 0–4 &nbsp;|&nbsp; **Threshold:** 3 &nbsp;|&nbsp; **Param:** `105`
+
+Test 13 using `SleepCancel()`.
+
+**Pass condition:** same as test 13
+
+---
+
 ## Summary Table
 
 | # | Test | Tasks | Barrier | Pass condition | What it verifies |
@@ -218,3 +412,13 @@ repeated full-group synchronization.
 | 6 | `PartialGroupThresholdTask` | 0–2 | `g_TestBarrier3` (3) | `counter == 3`, `true_count == 1` | Barrier threshold works correctly for a subset of the kernel's task pool |
 | 7 | `StaggeredArrivalTask` | 0–4 | `g_TestBarrier5` (5) | `counter == 15` | Generation counter stays correct across rounds despite staggered, uneven arrival timing |
 | 8 | `StressTestTask` | 0–4 | `g_TestBarrier5` (5) | `counter == 500` | No corruption or deadlock under 100 consecutive full five-task barrier rounds; runs on all platforms |
+| 9 | `CancelWait_Basic` | 0–4 | `g_CancelBarrier` (2) | `CANCELED`, elapsed `[35, 75]` ms | Cancelling a blocked `WaitEx()` via `CancelTaskWait()` returns `BARRIER_CANCELED` |
+| 10 | `CancelWait_Rollback` | 0–4 | `g_CancelBarrier` (2) | `CANCELED`; next arriver blocks `[30, 70]` ms, then `RELEASED`; last `LAST_ARRIVAL` | The cancelled arrival is rolled back: it does not count toward the round |
+| 11 | `CancelWait_OneOfMany` | 0–4 | `g_CancelBarrier` (3) | victim `CANCELED`, others `RELEASED`, one `LAST_ARRIVAL`, task 2 elapsed `[90, 130]` ms | Other waiters stay blocked; replacement arrivals complete the round |
+| 12 | `CancelWait_SignalWins` | 0–4 | `g_CancelBarrier` (2) | round 1 `LAST`/`RELEASED`; round 2 `RELEASED`/`LAST` | A trip that happened before the cancel wins; the cancel is a no-op and leaves nothing behind |
+| 13 | `CancelWait_TripAfterCancel` | 0–4 | `g_CancelBarrier` (3) | round 1 `LAST`/`RELEASED`/`RELEASED`; round 2: one `LAST`, two `RELEASED` | A pending cancel that the victim acts on only after the trip does not roll back an arrival the trip consumed; the count stays consistent |
+| 14 | `CancelWait_SleepCancel` | 0–4 | `g_CancelBarrier` (2) | as test 9 | `SleepCancel()` cancels a sync-object wait |
+| 15 | `CancelWait_SleepCancelRollback` | 0–4 | `g_CancelBarrier` (2) | as test 10 | `SleepCancel()` also rolls the arrival back |
+| 16 | `CancelWait_SleepCancelOneOfMany` | 0–4 | `g_CancelBarrier` (3) | as test 11 | `SleepCancel()` leaves the other waiters undisturbed |
+| 17 | `CancelWait_SleepCancelSignal` | 0–4 | `g_CancelBarrier` (2) | as test 12 | `SleepCancel()` after a trip is a harmless no-op |
+| 18 | `CancelWait_SleepCancelTrip` | 0–4 | `g_CancelBarrier` (3) | as test 13 | `SleepCancel()` pending across a trip does not corrupt the count |

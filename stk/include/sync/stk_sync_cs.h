@@ -55,6 +55,7 @@ class ScopedCriticalSection final : public IMutex
     friend class Event;
     friend class EventFlags;
     friend class Mutex;
+    friend class FastMutex;
     friend class RWMutex;
     friend class Semaphore;
     friend class Pipe;

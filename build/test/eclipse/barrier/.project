@@ -36,6 +36,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/test_barrier.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/test/barrier/test_barrier.cpp</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -49,11 +54,6 @@
 			<name>deps/test/stktest_context.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/test/stktest_context.h</locationURI>
-		</link>
-		<link>
-			<name>deps/test/test_barrier.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/test/barrier/test_barrier.cpp</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/arch</name>
@@ -141,6 +141,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync.h</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/sync/stk_sync_barrier.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_barrier.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include/sync/stk_sync_cs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_cs.h</locationURI>
@@ -164,11 +169,6 @@
 			<name>deps/stk/include/sync/stk_sync_pipe.h</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_pipe.h</locationURI>
-		</link>
-		<link>
-			<name>deps/stk/include/sync/stk_sync_barrier.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/stk/include/sync/stk_sync_barrier.h</locationURI>
 		</link>
 		<link>
 			<name>deps/stk/include/sync/stk_sync_semaphore.h</name>

@@ -151,11 +151,18 @@ inline Barrier::EResult Barrier::WaitEx()
         {
             if (m_cond.WaitEx(m_mutex, WAIT_INFINITE) == WAIT_RESULT_CANCELED)
             {
-                // bail out before the barrier tripped: undo our own arrival so the count
-                // stays consistent for whichever tasks remain in this generation - do NOT
-                // let the barrier trip short-handed on our behalf
-                ++m_count;
-                result = BARRIER_CANCELED;
+                // the cancel wakes this task before m_mutex is re-acquired, so the barrier may have
+                // tripped in between (the trip has then already consumed our arrival and reset
+                // m_count): signal wins, report a normal release and leave the count alone
+                if (gen == m_generation)
+                {
+                    // bail out before the barrier tripped: undo our own arrival so the count
+                    // stays consistent for whichever tasks remain in this generation - do NOT
+                    // let the barrier trip short-handed on our behalf
+                    ++m_count;
+                    result = BARRIER_CANCELED;
+                }
+
                 break;
             }
             // else: WAIT_RESULT_SIGNAL - NotifyAll() always pairs with ++m_generation, so a

@@ -148,6 +148,38 @@ static __stk_forceinline osStatus_t StkWaitFailToCmsis(stk::Timeout timeout)
 }
 
 // -----------------------------------------------------------------------------
+// Map the full outcome of an STK wait (the *Ex() APIs) to a CMSIS status.
+//
+// CMSIS has no "canceled" status, so a wait cancelled via IKernel::CancelTaskWait(),
+// or IKernelService::SleepCancel() and a wait rejected by the kernel (WAIT_RESULT_FAIL)
+// are both reported as the generic osError instead of being disguised as a timeout.
+// A timeout keeps the usual mapping: NO_WAIT -> osErrorResource, otherwise -> osErrorTimeout.
+// -----------------------------------------------------------------------------
+static __stk_forceinline osStatus_t StkWaitResultToCmsis(stk::EWaitResult wr, stk::Timeout timeout)
+{
+    osStatus_t result;
+
+    switch (wr)
+    {
+    case stk::WAIT_RESULT_SIGNAL:
+        result = osOK;
+        break;
+
+    case stk::WAIT_RESULT_TIMEOUT:
+        result = StkWaitFailToCmsis(timeout);
+        break;
+
+    case stk::WAIT_RESULT_CANCELED:
+    case stk::WAIT_RESULT_FAIL:
+    default:
+        result = osError;
+        break;
+    }
+
+    return result;
+}
+
+// -----------------------------------------------------------------------------
 // ISR context check
 // -----------------------------------------------------------------------------
 static __stk_forceinline bool IsIrqContext()
@@ -325,7 +357,7 @@ struct StkMutex : StkMutexBase
 
     osStatus_t Acquire(stk::Timeout timeout) override
     {
-        return (m_mutex.TimedLock(timeout) ? osOK : StkWaitFailToCmsis(timeout));
+        return StkWaitResultToCmsis(m_mutex.TimedLockEx(timeout), timeout);
     }
 
     void Unlock() override { return m_mutex.Unlock(); }
@@ -358,7 +390,7 @@ struct StkFastMutex : StkMutexBase
         }
         else
         {
-            result = (m_mutex.TimedLock(timeout) ? osOK : StkWaitFailToCmsis(timeout));
+            result = StkWaitResultToCmsis(m_mutex.TimedLockEx(timeout), timeout);
         }
 
         return result;
@@ -651,6 +683,12 @@ static __stk_forceinline uint32_t StkFlagsResultToCmsis(uint32_t result)
     else if (result == stk::sync::EventFlags::ERROR_ISR)
     {
         cmsis_result = osFlagsErrorISR;
+    }
+    else if ((result == stk::sync::EventFlags::ERROR_CANCELED) ||
+             (result == stk::sync::EventFlags::ERROR_FAIL))
+    {
+        // CMSIS has no "canceled" flags status: report cancellation and a kernel-rejected wait explicitly
+        cmsis_result = osFlagsErrorUnknown;
     }
     else
     {
@@ -1361,7 +1399,13 @@ osStatus_t osThreadJoin(osThreadId_t thread_id)
                     while (th->m_join_state == StkThread::JoinState::Joined)
                     {
                         // WAIT_INFINITE - CMSIS osThreadJoin has no timeout parameter.
-                        STK_UNUSED(th->m_join_cv.Wait(cs_, stk::WAIT_INFINITE));
+                        // A cancelled wait is harmless (the predicate is re-checked), but a rejected one
+                        // (WAIT_RESULT_FAIL) returns at once without releasing cs_: bail out instead of
+                        // spinning with interrupts disabled. The state check below turns it into osError.
+                        if (th->m_join_cv.WaitEx(cs_, stk::WAIT_INFINITE) == stk::WAIT_RESULT_FAIL)
+                        {
+                            break;
+                        }
                     }
                 }
                 // else Exited: OnExit() already fired, nothing to wait for
@@ -2131,7 +2175,7 @@ osStatus_t osSemaphoreAcquire(osSemaphoreId_t semaphore_id, uint32_t timeout)
         StkSemaphore *sem = static_cast<StkSemaphore *>(semaphore_id);
         const stk::Timeout stk_timeout = CmsisTimeoutToStk(timeout);
 
-        result = (sem->m_semaphore.Wait(stk_timeout) ? osOK : StkWaitFailToCmsis(stk_timeout));
+        result = StkWaitResultToCmsis(sem->m_semaphore.WaitEx(stk_timeout), stk_timeout);
     }
 
     return result;
@@ -2479,14 +2523,8 @@ osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id, const void *msg_ptr,
     {
         const stk::Timeout stk_timeout = CmsisTimeoutToStk(timeout);
 
-        if (!static_cast<StkMessageQueue *>(mq_id)->m_mq.Put(msg_ptr, stk_timeout))
-        {
-            result = StkWaitFailToCmsis(stk_timeout);
-        }
-        else
-        {
-            result = osOK;
-        }
+        result = StkWaitResultToCmsis(
+            static_cast<StkMessageQueue *>(mq_id)->m_mq.PutEx(msg_ptr, stk_timeout), stk_timeout);
     }
 
     return result;
@@ -2509,17 +2547,12 @@ osStatus_t osMessageQueueGet(osMessageQueueId_t mq_id, void *msg_ptr,
     {
         const stk::Timeout stk_timeout = CmsisTimeoutToStk(timeout);
 
-        if (!static_cast<StkMessageQueue *>(mq_id)->m_mq.Get(msg_ptr, stk_timeout))
+        result = StkWaitResultToCmsis(
+            static_cast<StkMessageQueue *>(mq_id)->m_mq.GetEx(msg_ptr, stk_timeout), stk_timeout);
+
+        if ((result == osOK) && (msg_prio != nullptr))
         {
-            result = StkWaitFailToCmsis(stk_timeout);
-        }
-        else
-        {
-            if (msg_prio != nullptr)
-            {
-                *msg_prio = 0U; // STK queues have no priority lanes.
-            }
-            result = osOK;
+            *msg_prio = 0U; // STK queues have no priority lanes.
         }
     }
 

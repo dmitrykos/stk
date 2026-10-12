@@ -10,6 +10,8 @@
 #ifndef STK_SYNC_MSGQUEUE_H_
 #define STK_SYNC_MSGQUEUE_H_
 
+#include <cstddef> // for std::max_align_t
+
 #include "stk_sync_cv.h"
 
 /*! \file  stk_sync_msgqueue.h
@@ -31,11 +33,12 @@ namespace sync {
      - \c Get() blocks if the queue is empty until a message is produced or the
        timeout expires.
 
-    Unlike stk::sync::Pipe, which is parameterised on an element \e type,
-    MessageQueue is parameterised on a \e byte count (\c MSG). This makes it
+    Like stk::sync::Pipe (and unlike the type-safe stk::sync::PipeT), MessageQueue is
+    parameterised on a \e byte count (\c MSG) rather than on an element \e type. This makes it
     suitable for passing heterogeneous or C-ABI structs without requiring the
     message type to be copyable via the C++ assignment operator. The message
-    payload is always copied with \c memcpy.
+    payload is always copied with \c memcpy. In addition to the plain FIFO operations
+    it supports front insertion (\c PutFront()) and non-destructive reads (\c Peek()).
 
     \code
     // Caller owns and provides the buffer (e.g. from a static pool):
@@ -48,8 +51,12 @@ namespace sync {
           the entire lifetime of the queue object.
     \note Maximum number of messages (\a capacity) must not exceed CAPACITY_MAX.
     \note Message size (\a msg_size) must be at least 1.
+    \note The boolean calls (\c Put(), \c PutFront(), \c Get(), \c Peek(), \c PeekFront()) collapse a
+          timeout and a cancellation (IKernel::CancelTaskWait()) into the same failure result. Use the
+          \c *Ex() variants (\c PutEx(), \c PutFrontEx(), \c GetEx(), \c PeekEx(), \c PeekFrontEx()) if
+          the caller needs to tell them apart.
 
-    \see  MessageQueueT, Pipe, ConditionVariable, Semaphore
+    \see  MessageQueueT, Pipe, PipeT, ConditionVariable, Semaphore
     \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
 */
 class MessageQueue : public ITraceable
@@ -75,6 +82,22 @@ public:
     */
     STK_VIRT_DTOR ~MessageQueue() = default;
 
+    /*! \brief     Put a message into the back of the queue (FIFO order), preserving the full wait outcome.
+        \details   Identical to \c Put(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[in] msg_ptr: Pointer to the message payload (must be at least \a msg_size bytes).
+        \param[in] timeout_ticks: Maximum time to wait for a free slot (ticks).
+                   Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
+                   non-blocking attempt.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if the message was enqueued, \c WAIT_RESULT_TIMEOUT if no slot
+                   became available before the timeout expired (or \a NO_WAIT was passed on a full
+                   queue), \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                   IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the kernel rejected the wait.
+                   Nothing is enqueued on a non-signal result.
+    */
+    EWaitResult PutEx(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Put a message into the back of the queue (FIFO order).
         \details   Copies \a msg_size bytes from \a msg_ptr into the next available
                    slot in the ring buffer. If the queue is full the calling task
@@ -85,10 +108,13 @@ public:
                    Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
                    non-blocking attempt.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if the message was successfully enqueued,
-                   \c false if the timeout expired before space became available.
+        \return    \c true if the message was successfully enqueued, \c false otherwise (timeout,
+                   cancellation or NO_WAIT on a full queue). Use \c PutEx() to tell these apart.
     */
-    bool Put(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+    bool Put(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (PutEx(msg_ptr, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to put a message into the back of the queue without blocking.
         \details   Enqueues the message only if a free slot is immediately
@@ -100,6 +126,19 @@ public:
     */
     bool TryPut(const void *msg_ptr) { return Put(msg_ptr, NO_WAIT); }
 
+    /*! \brief     Put a message into the front of the queue (LIFO / priority-insert order),
+                   preserving the full wait outcome.
+        \details   Identical to \c PutFront(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[in] msg_ptr: Pointer to the message payload (must be at least \a msg_size bytes).
+        \param[in] timeout_ticks: Maximum time to wait for a free slot (ticks).
+                   Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
+                   non-blocking attempt.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    Same values as \c PutEx(). Nothing is enqueued on a non-signal result.
+    */
+    EWaitResult PutFrontEx(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Put a message into the front of the queue (LIFO / priority-insert order).
         \details   Copies \a msg_size bytes from \a msg_ptr into the slot immediately
                    before the current read pointer, making it the next message that
@@ -110,11 +149,15 @@ public:
                    Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
                    non-blocking attempt.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return    \c true if the message was successfully enqueued at the front,
-                   \c false if the timeout expired before space became available.
+        \return    \c true if the message was successfully enqueued at the front, \c false otherwise
+                   (timeout, cancellation or NO_WAIT on a full queue). Use \c PutFrontEx() to tell
+                   these apart.
         \see       Put, TryPutFront
     */
-    bool PutFront(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+    bool PutFront(const void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (PutFrontEx(msg_ptr, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to put a message into the front of the queue without blocking.
         \details   Enqueues the message at the front only if a free slot is immediately
@@ -127,6 +170,23 @@ public:
     */
     bool TryPutFront(const void *msg_ptr) { return PutFront(msg_ptr, NO_WAIT); }
 
+    /*! \brief     Get a message from the queue, preserving the full wait outcome.
+        \details   Identical to \c Get(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[out] msg_ptr: Destination buffer for the retrieved message
+                    (must be at least \a msg_size bytes).
+        \param[in]  timeout_ticks: Maximum time to wait for a message (ticks).
+                    Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
+                    non-blocking attempt.
+        \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return     \c WAIT_RESULT_SIGNAL if a message was retrieved, \c WAIT_RESULT_TIMEOUT if no message
+                    became available before the timeout expired (or \a NO_WAIT was passed on an empty
+                    queue), \c WAIT_RESULT_CANCELED if the wait was cancelled via
+                    IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the kernel rejected the wait.
+                    Nothing is dequeued or copied on a non-signal result.
+    */
+    EWaitResult GetEx(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+
     /*! \brief     Get a message from the queue.
         \details   Copies \a msg_size bytes from the oldest slot in the ring buffer
                    into the buffer pointed to by \a msg_ptr. If the queue is
@@ -138,10 +198,13 @@ public:
                     Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
                     non-blocking attempt.
         \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return     \c true if a message was successfully retrieved,
-                    \c false if the timeout expired before a message was available.
+        \return     \c true if a message was successfully retrieved, \c false otherwise (timeout,
+                    cancellation or NO_WAIT on an empty queue). Use \c GetEx() to tell these apart.
     */
-    bool Get(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+    bool Get(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (GetEx(msg_ptr, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to get a message from the queue without blocking.
         \details   Dequeues a message only if one is immediately available.
@@ -153,7 +216,21 @@ public:
     */
     bool TryGet(void *msg_ptr) { return Get(msg_ptr, NO_WAIT); }
 
-    /*! \brief     Peek at the next message to be delivered (back of the FIFO) without removing it.
+    /*! \brief     Peek at the next message to be delivered without removing it, preserving the
+                   full wait outcome.
+        \details   Identical to \c Peek(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[out] msg_ptr: Destination buffer for the peeked message
+                    (must be at least \a msg_size bytes).
+        \param[in]  timeout_ticks: Maximum time to wait for a message (ticks).
+                    Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
+                    non-blocking attempt.
+        \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return     Same values as \c GetEx(). Nothing is copied on a non-signal result.
+    */
+    EWaitResult PeekEx(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+
+    /*! \brief     Peek at the next message to be delivered (the one \c Get() returns next) without removing it.
         \details   Copies \a msg_size bytes from the oldest slot in the ring buffer
                    into the buffer pointed to by \a msg_ptr, leaving the message in
                    place so that a subsequent \c Get() will return the same message.
@@ -165,11 +242,17 @@ public:
                     Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
                     non-blocking attempt.
         \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return     \c true if a message was successfully peeked,
-                    \c false if the timeout expired before a message was available.
+        \return     \c true if a message was successfully peeked, \c false otherwise (timeout,
+                    cancellation or NO_WAIT on an empty queue). Use \c PeekEx() to tell these apart.
+        \note       A successful peek hands the wake-up on to the next waiting task (if any), so a
+                    \c Get() waiter queued behind a \c Peek() waiter is not left blocked while a
+                    message is available.
         \see        Get, TryPeek, PeekFront
     */
-    bool Peek(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+    bool Peek(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (PeekEx(msg_ptr, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to peek at the next message without blocking.
         \details   Copies the oldest message into \a msg_ptr only if one is
@@ -182,26 +265,45 @@ public:
     */
     bool TryPeek(void *msg_ptr) { return Peek(msg_ptr, NO_WAIT); }
 
-    /*! \brief     Peek at the most recently front-inserted message (front of the FIFO) without removing it.
-        \details   Copies \a msg_size bytes from the slot immediately before the
-                   current write pointer (i.e. the message that \c PutFront() most
-                   recently placed) into the buffer pointed to by \a msg_ptr, leaving
-                   the message in place. If the queue is empty the calling task is
-                   suspended until a message is produced or the timeout expires.
+    /*! \brief     Peek at the front of the queue without removing it, preserving the full wait outcome.
+        \details   Identical to \c PeekFront(), except the caller gets the raw \c EWaitResult, so a
+                   cancellation (via IKernel::CancelTaskWait()) can be distinguished from a timeout.
+        \param[out] msg_ptr: Destination buffer for the peeked message
+                    (must be at least \a msg_size bytes).
+        \param[in]  timeout_ticks: Maximum time to wait for a message (ticks).
+                    Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
+                    non-blocking attempt.
+        \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return     Same values as \c GetEx(). Nothing is copied on a non-signal result.
+    */
+    EWaitResult PeekFrontEx(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+
+    /*! \brief     Peek at the front of the queue (the message \c Get() returns next) without removing it.
+        \details   Copies \a msg_size bytes from the read slot (the one \c Get() would return next)
+                   into the buffer pointed to by \a msg_ptr, leaving the message in place. Because
+                   \c PutFront() inserts at the read slot, this is the most recently
+                   \c PutFront()-inserted message if one is still pending, otherwise the oldest
+                   \c Put() message. The behavior is identical to \c Peek(); this method exists for
+                   symmetry with \c PutFront(). If the queue is empty the calling task is suspended
+                   until a message is produced or the timeout expires.
         \param[out] msg_ptr: Destination buffer for the peeked message
                     (must be at least \a msg_size bytes).
         \param[in]  timeout_ticks: Maximum time to wait for a message (ticks).
                     Use \c WAIT_INFINITE to block indefinitely, \c NO_WAIT for a
                     non-blocking attempt.
         \warning    ISR-safe only with \a timeout_ticks= \c NO_WAIT, ISR-unsafe otherwise.
-        \return     \c true if a message was successfully peeked,
-                    \c false if the timeout expired before a message was available.
+        \return     \c true if a message was successfully peeked, \c false otherwise (timeout,
+                    cancellation or NO_WAIT on an empty queue). Use \c PeekFrontEx() to tell these
+                    apart.
         \see        PutFront, TryPeekFront, Peek
     */
-    bool PeekFront(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE);
+    bool PeekFront(void *msg_ptr, Timeout timeout_ticks = WAIT_INFINITE)
+    {
+        return (PeekFrontEx(msg_ptr, timeout_ticks) == WAIT_RESULT_SIGNAL);
+    }
 
     /*! \brief     Attempt to peek at the front message without blocking.
-        \details   Copies the most recently front-inserted message into \a msg_ptr
+        \details   Copies the message that \c Get() would return next into \a msg_ptr
                    only if one is immediately available. The message is not removed
                    from the queue. Returns \c false instantly if the queue is empty.
         \param[out] msg_ptr: Destination buffer for the peeked message.
@@ -287,6 +389,16 @@ private:
     // Uses a branch instead of modular arithmetic to avoid unsigned underflow.
     size_t Prev(size_t idx) const { return (idx == 0U) ? (m_capacity - 1U) : (idx - 1U); }
 
+    // Wait until the queue has a free slot or the wait fails. Caller MUST hold the critical
+    // section \a cs. Returns WAIT_RESULT_SIGNAL if a free slot is available, otherwise the
+    // failed wait outcome (timeout, cancellation, kernel failure).
+    EWaitResult WaitNotFull(IMutex &cs, Timeout timeout_ticks);
+
+    // Wait until the queue has a message or the wait fails. Caller MUST hold the critical
+    // section \a cs. Returns WAIT_RESULT_SIGNAL if a message is available, otherwise the
+    // failed wait outcome (timeout, cancellation, kernel failure).
+    EWaitResult WaitNotEmpty(IMutex &cs, Timeout timeout_ticks);
+
     uint8_t          *m_buffer;       //!< flat byte ring-buffer: capacity slots of msg_size bytes each
     const size_t      m_capacity;     //!< maximum number of messages stored in the queue
     const size_t      m_msg_size;     //!< size of each message in bytes
@@ -316,16 +428,12 @@ inline MessageQueue::MessageQueue(uint8_t *buf, size_t capacity, size_t msg_size
 }
 
 // ---------------------------------------------------------------------------
-// Put
+// WaitNotFull  (private helper, caller must hold the critical section)
 // ---------------------------------------------------------------------------
 
-inline bool MessageQueue::Put(const void *msg_ptr, Timeout timeout_ticks)
+inline EWaitResult MessageQueue::WaitNotFull(IMutex &cs, Timeout timeout_ticks)
 {
-    STK_ASSERT(msg_ptr != nullptr);             // API contract: msg_ptr must not be null
-    STK_ASSERT(m_count <= (CAPACITY_MAX - 1U)); // API contract: must not exceed capacity
-
-    ScopedCriticalSection cs_;
-    bool success = true;
+    EWaitResult result = WAIT_RESULT_SIGNAL;
 
     const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -345,14 +453,69 @@ inline bool MessageQueue::Put(const void *msg_ptr, Timeout timeout_ticks)
             remaining = (now >= deadline ? NO_WAIT : (deadline - now));
         }
 
-        if (!m_cv_not_full.Wait(cs_, remaining))
+        result = m_cv_not_full.WaitEx(cs, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
         {
-            success = false;
+            // timeout, cancellation or kernel failure
             break;
         }
     }
 
-    if (success)
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// WaitNotEmpty  (private helper, caller must hold the critical section)
+// ---------------------------------------------------------------------------
+
+inline EWaitResult MessageQueue::WaitNotEmpty(IMutex &cs, Timeout timeout_ticks)
+{
+    EWaitResult result = WAIT_RESULT_SIGNAL;
+
+    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+
+    // capture an absolute deadline once, before entering the wait loop; a different
+    // consumer can steal the just-produced message (or drain the queue via Get()/TryGet())
+    // between NotifyOne_CS() and this task re-acquiring the critical section (Mesa-style
+    // wakeup, not a direct handoff), so re-passing the original timeout_ticks on each
+    // retry would silently restart it
+    const Timeout deadline = (timed_wait ?
+        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
+
+    while (m_count == 0U)
+    {
+        Timeout remaining = deadline;
+        if (timed_wait)
+        {
+            const Timeout now = static_cast<Timeout>(GetTicks());
+            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
+        }
+
+        result = m_cv_not_empty.WaitEx(cs, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
+        {
+            // timeout, cancellation or kernel failure
+            break;
+        }
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// PutEx
+// ---------------------------------------------------------------------------
+
+inline EWaitResult MessageQueue::PutEx(const void *msg_ptr, Timeout timeout_ticks)
+{
+    STK_ASSERT(msg_ptr != nullptr);             // API contract: msg_ptr must not be null
+    STK_ASSERT(m_count <= (CAPACITY_MAX - 1U)); // API contract: must not exceed capacity
+
+    ScopedCriticalSection cs_;
+
+    const EWaitResult result = WaitNotFull(cs_, timeout_ticks);
+
+    if (result == WAIT_RESULT_SIGNAL)
     {
         STK_MEMCPY(Slot(m_head), msg_ptr, m_msg_size);
         m_head = Next(m_head);
@@ -361,47 +524,23 @@ inline bool MessageQueue::Put(const void *msg_ptr, Timeout timeout_ticks)
         m_cv_not_empty.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// PutFront
+// PutFrontEx
 // ---------------------------------------------------------------------------
 
-inline bool MessageQueue::PutFront(const void *msg_ptr, Timeout timeout_ticks)
+inline EWaitResult MessageQueue::PutFrontEx(const void *msg_ptr, Timeout timeout_ticks)
 {
     STK_ASSERT(msg_ptr != nullptr);             // API contract: msg_ptr must not be null
     STK_ASSERT(m_count <= (CAPACITY_MAX - 1U)); // API contract: must not exceed capacity
 
     ScopedCriticalSection cs_;
-    bool success = true;
 
-    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+    const EWaitResult result = WaitNotFull(cs_, timeout_ticks);
 
-    // capture an absolute deadline once, before entering the wait loop; a different
-    // producer can steal the just-freed slot between NotifyOne_CS() and this task
-    // re-acquiring the critical section (Mesa-style wakeup, not a direct handoff),
-    // so re-passing the original timeout_ticks on each retry would silently restart it
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
-
-    while (m_count == m_capacity)
-    {
-        Timeout remaining = deadline;
-        if (timed_wait)
-        {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
-        }
-
-        if (!m_cv_not_full.Wait(cs_, remaining))
-        {
-            success = false;
-            break;
-        }
-    }
-
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         // retreat the tail pointer to claim the slot that Get() would read next,
         // then write the message there; this makes the new message the head of
@@ -413,46 +552,22 @@ inline bool MessageQueue::PutFront(const void *msg_ptr, Timeout timeout_ticks)
         m_cv_not_empty.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// Get
+// GetEx
 // ---------------------------------------------------------------------------
 
-inline bool MessageQueue::Get(void *msg_ptr, Timeout timeout_ticks)
+inline EWaitResult MessageQueue::GetEx(void *msg_ptr, Timeout timeout_ticks)
 {
     STK_ASSERT(msg_ptr != nullptr); // API contract: msg_ptr must not be null
 
     ScopedCriticalSection cs_;
-    bool success = true;
 
-    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+    const EWaitResult result = WaitNotEmpty(cs_, timeout_ticks);
 
-    // capture an absolute deadline once, before entering the wait loop; a different
-    // consumer can steal the just-produced message between NotifyOne_CS() and this
-    // task re-acquiring the critical section (Mesa-style wakeup, not a direct handoff),
-    // so re-passing the original timeout_ticks on each retry would silently restart it
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
-
-    while (m_count == 0U)
-    {
-        Timeout remaining = deadline;
-        if (timed_wait)
-        {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
-        }
-
-        if (!m_cv_not_empty.Wait(cs_, remaining))
-        {
-            success = false;
-            break;
-        }
-    }
-
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         STK_MEMCPY(msg_ptr, Slot(m_tail), m_msg_size);
         m_tail = Next(m_tail);
@@ -461,100 +576,61 @@ inline bool MessageQueue::Get(void *msg_ptr, Timeout timeout_ticks)
         m_cv_not_full.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// Peek
+// PeekEx
 // ---------------------------------------------------------------------------
 
-inline bool MessageQueue::Peek(void *msg_ptr, Timeout timeout_ticks)
+inline EWaitResult MessageQueue::PeekEx(void *msg_ptr, Timeout timeout_ticks)
 {
     STK_ASSERT(msg_ptr != nullptr); // API contract: msg_ptr must not be null
 
     ScopedCriticalSection cs_;
-    bool success = true;
 
-    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+    const EWaitResult result = WaitNotEmpty(cs_, timeout_ticks);
 
-    // capture an absolute deadline once, before entering the wait loop; a different
-    // consumer can drain the queue via Get()/TryGet() between NotifyOne_CS() and this
-    // task re-acquiring the critical section (Mesa-style wakeup, not a direct handoff),
-    // so re-passing the original timeout_ticks on each retry would silently restart it
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
-
-    while (m_count == 0U)
-    {
-        Timeout remaining = deadline;
-        if (timed_wait)
-        {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
-        }
-
-        if (!m_cv_not_empty.Wait(cs_, remaining))
-        {
-            success = false;
-            break;
-        }
-    }
-
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         // copy from the tail slot without advancing the index or decrementing
         // the count, so the message remains available for the next Get()
         STK_MEMCPY(msg_ptr, Slot(m_tail), m_msg_size);
+
+        // the message was not consumed: pass the wake-up on to the next waiter (if any),
+        // otherwise a Get() waiter queued behind this Peek() would stay blocked although
+        // a message is available (Put() notifies only one waiter)
+        m_cv_not_empty.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
-// PeekFront
+// PeekFrontEx
 // ---------------------------------------------------------------------------
 
-inline bool MessageQueue::PeekFront(void *msg_ptr, Timeout timeout_ticks)
+inline EWaitResult MessageQueue::PeekFrontEx(void *msg_ptr, Timeout timeout_ticks)
 {
     STK_ASSERT(msg_ptr != nullptr); // API contract: msg_ptr must not be null
 
     ScopedCriticalSection cs_;
-    bool success = true;
 
-    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+    const EWaitResult result = WaitNotEmpty(cs_, timeout_ticks);
 
-    // capture an absolute deadline once, before entering the wait loop; a different
-    // consumer can drain the queue via Get()/TryGet() between NotifyOne_CS() and this
-    // task re-acquiring the critical section (Mesa-style wakeup, not a direct handoff),
-    // so re-passing the original timeout_ticks on each retry would silently restart it
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
-
-    while (m_count == 0U)
-    {
-        Timeout remaining = deadline;
-        if (timed_wait)
-        {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
-        }
-
-        if (!m_cv_not_empty.Wait(cs_, remaining))
-        {
-            success = false;
-            break;
-        }
-    }
-
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         // the front-inserted message is at m_tail (PutFront retreats m_tail then
         // writes, so the newly placed message is always at the current m_tail);
         // for a pure-Put queue this is equally correct: m_tail is the oldest slot
         STK_MEMCPY(msg_ptr, Slot(m_tail), m_msg_size);
+
+        // the message was not consumed: pass the wake-up on to the next waiter (if any),
+        // see PeekEx()
+        m_cv_not_empty.NotifyOne_CS();
     }
 
-    return success;
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +684,7 @@ inline void MessageQueue::Reset()
     }
     \endcode
 
-    \see  MessageQueue, Pipe, ConditionVariable, Semaphore
+    \see  MessageQueue, Pipe, PipeT, ConditionVariable, Semaphore
     \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
 */
 template <size_t N, size_t MSG>
@@ -635,7 +711,7 @@ public:
 private:
     STK_NONCOPYABLE_CLASS(MessageQueueT);
 
-    alignas(alignof(max_align_t)) uint8_t m_storage[N * MSG]; //!< flat byte ring-buffer: N slots of MSG bytes each
+    alignas(alignof(std::max_align_t)) uint8_t m_storage[N * MSG]; //!< flat byte ring-buffer: N slots of MSG bytes each
 };
 
 } // namespace sync

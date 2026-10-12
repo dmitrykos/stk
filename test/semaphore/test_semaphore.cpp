@@ -58,6 +58,28 @@ static Kernel<KERNEL_DYNAMIC | KERNEL_SYNC, _STK_SEM_TEST_TASKS_MAX, SwitchStrat
 // Test semaphore (re-constructed per test via ResetTestState)
 static sync::Semaphore g_TestSemaphore;
 
+// Cancellation test state (see CancelWaitTask)
+static ITask * volatile g_Victim                 = nullptr;      // task whose wait gets cancelled (task 1)
+static volatile TId     g_VictimTid              = TID_NONE;     // same, as TId (for SleepCancel)
+static volatile int32_t g_VictimResult[2]        = {-100, -100}; // EWaitResult of task 1 / task 2 (-100 = not set)
+static volatile int64_t g_VictimElapsed[2]       = {0, 0};       // ms spent in the wait by task 1 / task 2
+static volatile int64_t g_VictimSleepElapsed     = 0;            // ms spent in Sleep() by task 1 after its wait ended
+
+// Scenario selector of CancelWaitTask. It is a global, not a constructor argument, because RunTest() declares
+// tasks 0-2 as 'static': a static local is constructed only once per template instantiation (on the first
+// RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first case.
+// Set by main() before each RunTest() call.
+static volatile int32_t g_CancelParam            = 0;
+
+// Cancel the wait of g_Victim either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_VictimTid);
+    else
+        g_Kernel.CancelTaskWait(g_Victim);
+}
+
 /*! \class BasicSignalWaitTask
     \brief Tests basic Signal/Wait functionality.
     \note  Verifies that Wait() blocks until Signal() is called, and that every
@@ -592,6 +614,262 @@ private:
     }
 };
 
+static const int32_t CW_INFINITE         = 1;
+static const int32_t CW_NOT_TIMEOUT      = 2;
+static const int32_t CW_NO_STALE_WAITER  = 3;
+static const int32_t CW_TWO_WAITERS      = 4;
+static const int32_t CW_SIGNAL_WINS      = 5;
+static const int32_t CW_BOOL_WAIT        = 6;
+static const int32_t CW_RETRY_AFTER      = 7;
+static const int32_t CW_VIA_SLEEPCANCEL  = 100;
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of Semaphore waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Task 0 is the canceller/checker, task 1 is the victim (blocked in WaitEx()), task 2 is a second
+           waiter used by the two-waiters scenario. The semaphore starts at count 0, so a Signal() either
+           hands its token to a waiter (count stays 0, Direct Handover) or is remembered (count + 1): which
+           of the two happened shows whether a cancelled task is still, wrongly, in the wait list. The
+           scenario is selected by g_CancelParam: 1 = cancel an infinite wait (WAIT_RESULT_CANCELED),
+           2 = cancel is not reported as a timeout, 3 = cancel leaves no stale waiter behind (the next
+           Signal() calls are remembered, none is swallowed), 4 = cancelling one of two waiters hands the
+           next token to the other one, 5 = a Signal() that arrived first wins over a late cancel (the token
+           is neither lost nor duplicated), 6 = the boolean Wait() collapses a cancel into false, 7 = a
+           cancelled task can wait on the same semaphore again and receives the next token. Adding 100 to
+           g_CancelParam cancels via stk::SleepCancel() instead of IKernel::CancelTaskWait().
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_SEM_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        if (m_task_id == 0)
+            RunCanceller();
+        else
+        if (m_task_id == 1)
+            RunVictim();
+        else
+            RunSecondWaiter();
+    }
+
+    // Task 1: block on the semaphore, record how the wait ended
+    void RunVictim()
+    {
+        stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP);
+
+        g_Victim    = static_cast<ITask *>(this);
+        g_VictimTid = stk::GetTid();
+
+        const Timeout timeout = (m_scenario == CW_NOT_TIMEOUT ? 300 : WAIT_INFINITE);
+
+        const int64_t start = GetTimeNowMs();
+        int32_t result;
+
+        if (m_scenario == CW_BOOL_WAIT)
+        {
+            // boolean variant: a cancel is reported as false, same as a timeout (an infinite wait can not
+            // time out, so false means cancelled here); stored as 1 = acquired / 0 = not acquired
+            result = g_TestSemaphore.Wait(timeout) ? 1 : 0;
+        }
+        else
+        {
+            result = static_cast<int32_t>(g_TestSemaphore.WaitEx(timeout));
+        }
+
+        g_VictimElapsed[0] = GetTimeNowMs() - start;
+        g_VictimResult[0]  = result;
+
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            // a stale wait entry left behind by the cancel would cut this sleep short
+            const int64_t sleep_start = GetTimeNowMs();
+            stk::Sleep(60);
+            g_VictimSleepElapsed = GetTimeNowMs() - sleep_start;
+        }
+        else
+        if ((m_scenario == CW_RETRY_AFTER) && (result == WAIT_RESULT_CANCELED))
+        {
+            // wait on the same semaphore again after having been cancelled
+            const int64_t start2 = GetTimeNowMs();
+            const EWaitResult r2 = g_TestSemaphore.WaitEx(WAIT_INFINITE);
+
+            g_VictimElapsed[1] = GetTimeNowMs() - start2;
+            g_VictimResult[1]  = static_cast<int32_t>(r2);
+        }
+    }
+
+    // Task 2: second waiter, queued behind task 1
+    void RunSecondWaiter()
+    {
+        if (m_scenario != CW_TWO_WAITERS)
+            return;
+
+        stk::Sleep(2 * _STK_SEM_TEST_SHORT_SLEEP); // block after task 1
+
+        const int64_t start = GetTimeNowMs();
+        const EWaitResult r = g_TestSemaphore.WaitEx(WAIT_INFINITE);
+
+        g_VictimElapsed[1] = GetTimeNowMs() - start;
+        g_VictimResult[1]  = static_cast<int32_t>(r);
+    }
+
+    // Task 0: cancel and verify
+    void RunCanceller()
+    {
+        bool pass = false;
+
+        stk::Sleep(60); // task 1 (and task 2) are blocked in the wait by now
+
+        if (m_scenario == CW_INFINITE)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            // started waiting at ~10 ms, cancelled at ~60 ms; the cancel must not create a permit
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   (g_TestSemaphore.GetCount() == 0U);
+        }
+        else
+        if (m_scenario == CW_NOT_TIMEOUT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            // 300 ms timeout is far away: the wait must end early and as CANCELED, not TIMEOUT
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimElapsed[0] < 150) &&
+                   (g_TestSemaphore.GetCount() == 0U);
+        }
+        else
+        if (m_scenario == CW_NO_STALE_WAITER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP); // victim returns and starts its Sleep(60)
+
+            // nobody waits: both tokens must be remembered; a stale wait entry would swallow the first one
+            g_TestSemaphore.Signal();
+            g_TestSemaphore.Signal();
+
+            const int32_t count_after = (int32_t)g_TestSemaphore.GetCount();
+
+            const bool take1 = g_TestSemaphore.Wait(NO_WAIT);
+            const bool take2 = g_TestSemaphore.Wait(NO_WAIT);
+            const bool take3 = g_TestSemaphore.Wait(NO_WAIT); // nothing left
+
+            stk::Sleep(70); // let the victim finish its sleep
+
+            printf("cancel no stale waiter: result=%d count=%d take=%d%d%d victim_sleep=%d ms\n",
+                (int)g_VictimResult[0], (int)count_after, (int)take1, (int)take2, (int)take3,
+                (int)g_VictimSleepElapsed);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (count_after == 2) && take1 && take2 && !take3 &&
+                   (g_VictimSleepElapsed >= 55); // not woken early by a ghost wait entry
+        }
+        else
+        if (m_scenario == CW_TWO_WAITERS)
+        {
+            CancelVictim(m_use_sleep_cancel);                // cancel the first waiter only
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP);
+
+            g_TestSemaphore.Signal();                        // must be handed over to the second waiter
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            const int32_t count_after = (int32_t)g_TestSemaphore.GetCount(); // handed over, not remembered
+            const bool    leftover    = g_TestSemaphore.Wait(NO_WAIT);
+
+            printf("cancel two waiters: first=%d second=%d count=%d leftover=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1], (int)count_after, (int)leftover);
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_CANCELED) &&
+                   (g_VictimResult[1] == WAIT_RESULT_SIGNAL) &&
+                   (count_after == 0) && !leftover;
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // back to back, no scheduling point in between: the waiter already received the token and is
+            // removed from the wait list when the cancel arrives, so the cancel must be a no-op
+            g_TestSemaphore.Signal();
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            const int32_t count_after = (int32_t)g_TestSemaphore.GetCount();
+            const bool    leftover    = g_TestSemaphore.Wait(NO_WAIT); // the token must not be duplicated
+
+            pass = (g_VictimResult[0] == WAIT_RESULT_SIGNAL) && (count_after == 0) && !leftover;
+        }
+        else
+        if (m_scenario == CW_BOOL_WAIT)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP);
+
+            g_TestSemaphore.Signal();                        // nobody waits: must be remembered
+
+            const int32_t count_after = (int32_t)g_TestSemaphore.GetCount();
+            const bool    take        = g_TestSemaphore.Wait(NO_WAIT);
+
+            printf("cancel bool wait: acquired=%d elapsed=%d ms count=%d take=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimElapsed[0], (int)count_after, (int)take);
+
+            // an infinite wait can not time out: false after ~50 ms means the cancel ended it
+            pass = (g_VictimResult[0] == 0) &&
+                   (g_VictimElapsed[0] >= 35) && (g_VictimElapsed[0] <= 75) &&
+                   (count_after == 1) && take;
+        }
+        else
+        if (m_scenario == CW_RETRY_AFTER)
+        {
+            CancelVictim(m_use_sleep_cancel);
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            // victim got CANCELED and is waiting again
+            const bool waiting_again = (g_VictimResult[0] == WAIT_RESULT_CANCELED) && (g_VictimResult[1] == -100);
+
+            g_TestSemaphore.Signal();                        // must be handed over to the retrying victim
+            stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP * 2);
+
+            const int32_t count_after = (int32_t)g_TestSemaphore.GetCount();
+
+            printf("cancel retry: first=%d second=%d count=%d\n",
+                (int)g_VictimResult[0], (int)g_VictimResult[1], (int)count_after);
+
+            pass = waiting_again && (g_VictimResult[1] == WAIT_RESULT_SIGNAL) && (count_after == 0);
+        }
+
+        // Safety net: if the cancel did not work a waiter is still blocked forever and the kernel would
+        // never stop, release any such waiter so that the test fails instead of hanging.
+        if (!pass)
+        {
+            for (int32_t i = 0; i < 3; ++i)
+            {
+                g_TestSemaphore.Signal();
+                stk::Sleep(_STK_SEM_TEST_SHORT_SLEEP);
+            }
+        }
+
+        printf("cancel wait (scenario=%d, via %s): result[0]=%d elapsed[0]=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait",
+            (int)g_VictimResult[0], (int)g_VictimElapsed[0]);
+
+        if (pass)
+            g_TestResult = 1;
+    }
+};
+
 // Helper function to reset test state
 static void ResetTestState(uint32_t initial_count = 0, uint32_t max_count = sync::Semaphore::COUNT_MAX)
 {
@@ -602,6 +880,16 @@ static void ResetTestState(uint32_t initial_count = 0, uint32_t max_count = sync
 
     for (int32_t i = 0; i < _STK_SEM_TEST_TASKS_MAX; ++i)
         g_AcquisitionOrder[i] = 0;
+
+    g_Victim             = nullptr;
+    g_VictimTid          = TID_NONE;
+    g_VictimSleepElapsed = 0;
+
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        g_VictimResult[i]  = -100;
+        g_VictimElapsed[i] = 0;
+    }
 
     // Re-construct the semaphore in-place with the requested initial count and max count
     g_TestSemaphore.~Semaphore();
@@ -619,7 +907,8 @@ static bool NeedsExtendedTasks(const char *test_name)
            (strcmp(test_name, "SignalBeforeWait") != 0) &&
            (strcmp(test_name, "BoundedBuffer") != 0) &&
            (strcmp(test_name, "TrySignalSaturation") != 0) &&
-           (strcmp(test_name, "AlreadySignaledOnInit") != 0);
+           (strcmp(test_name, "AlreadySignaledOnInit") != 0) &&
+           (strncmp(test_name, "CancelWait", 10) != 0); // cancel tests use tasks 0-2 only
 }
 
 /*! \fn    RunTest
@@ -738,9 +1027,42 @@ int main(int argc, char **argv)
     else
         total_success++;
 
+    // Tests 10-21: cancelability of Semaphore waits (tasks 0-2 only), via IKernel::CancelTaskWait()
+    // and via stk::SleepCancel() (param + 100)
+    {
+        struct CancelCase { const char *name; int32_t param; };
+
+        static const CancelCase cases[] =
+        {
+            { "CancelWait_Infinite",            CW_INFINITE                              },
+            { "CancelWait_NotTimeout",          CW_NOT_TIMEOUT                           },
+            { "CancelWait_NoStaleWaiter",       CW_NO_STALE_WAITER                       },
+            { "CancelWait_TwoWaiters",          CW_TWO_WAITERS                           },
+            { "CancelWait_SignalWins",          CW_SIGNAL_WINS                           },
+            { "CancelWait_BoolWait",            CW_BOOL_WAIT                             },
+            { "CancelWait_RetryAfter",          CW_RETRY_AFTER                           },
+            { "CancelWait_SleepCancel",         CW_VIA_SLEEPCANCEL + CW_INFINITE         },
+            { "CancelWait_SleepCancelNoStale",  CW_VIA_SLEEPCANCEL + CW_NO_STALE_WAITER  },
+            { "CancelWait_SleepCancelTwo",      CW_VIA_SLEEPCANCEL + CW_TWO_WAITERS      },
+            { "CancelWait_SleepCancelSignal",   CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS      },
+            { "CancelWait_SleepCancelBool",     CW_VIA_SLEEPCANCEL + CW_BOOL_WAIT        }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam = cases[i].param;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param)
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
+
 #endif // __ARM_ARCH_6M__
 
-    // Test 10: Stress test (no signals lost)
+    // Test 22: Stress test (no signals lost)
     if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", 400) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
     else

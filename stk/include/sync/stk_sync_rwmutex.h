@@ -90,18 +90,24 @@ public:
             \param[in] timeout_ticks: Maximum time to wait (ticks). Use NO_WAIT for non-blocking (TryLock).
         */
         explicit ScopedTimedLock(RWMutex &rw, Timeout timeout_ticks = WAIT_INFINITE)
-            : m_rw(rw), m_locked(rw.TimedLock(timeout_ticks))
+            : m_rw(rw), m_result(rw.TimedLockEx(timeout_ticks))
         {}
 
-        ~ScopedTimedLock() { if (m_locked) { m_rw.Unlock(); } }
+        ~ScopedTimedLock() { if (IsLocked()) { m_rw.Unlock(); } }
 
-        bool IsLocked() const { return m_locked; }
+        /*! \return True if the write lock is held by this guard.
+        */
+        bool IsLocked() const { return (m_result == WAIT_RESULT_SIGNAL); }
+
+        /*! \return Full outcome of the lock attempt (see RWMutex::TimedLockEx()).
+        */
+        EWaitResult GetResult() const { return m_result; }
 
     private:
         STK_NONCOPYABLE_CLASS(ScopedTimedLock);
 
-        RWMutex &m_rw;
-        bool     m_locked;
+        RWMutex    &m_rw;
+        EWaitResult m_result;
     };
 
     /*! \class ScopedTimedReadMutex
@@ -115,35 +121,58 @@ public:
             \param[in] timeout_ticks: Maximum time to wait (ticks). Use NO_WAIT for non-blocking (TryReadLock).
         */
         explicit ScopedTimedReadMutex(RWMutex &rw, Timeout timeout_ticks = WAIT_INFINITE)
-            : m_rw(rw), m_locked(rw.TimedReadLock(timeout_ticks))
+            : m_rw(rw), m_result(rw.TimedReadLockEx(timeout_ticks))
         {}
 
-        ~ScopedTimedReadMutex() { if (m_locked) { m_rw.ReadUnlock(); } }
+        ~ScopedTimedReadMutex() { if (IsLocked()) { m_rw.ReadUnlock(); } }
 
-        bool IsLocked() const { return m_locked; }
+        /*! \return True if the read lock is held by this guard.
+        */
+        bool IsLocked() const { return (m_result == WAIT_RESULT_SIGNAL); }
+
+        /*! \return Full outcome of the lock attempt (see RWMutex::TimedReadLockEx()).
+        */
+        EWaitResult GetResult() const { return m_result; }
 
     private:
         STK_NONCOPYABLE_CLASS(ScopedTimedReadMutex);
 
-        RWMutex &m_rw;
-        bool     m_locked;
+        RWMutex    &m_rw;
+        EWaitResult m_result;
     };
+
+    /*! \brief     Acquire the lock for shared reading with a timeout, preserving the full wait outcome.
+        \param[in] timeout_ticks: Maximum time to wait (ticks).
+        \note      Non-recursive.
+        \return    \c WAIT_RESULT_SIGNAL if the lock was acquired (here "signal" means "lock acquired":
+                   the predicate is re-checked after every wake), \c WAIT_RESULT_TIMEOUT if the timeout
+                   expired (or \a NO_WAIT was passed and the lock was busy), \c WAIT_RESULT_CANCELED if
+                   the wait was cancelled via IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the
+                   kernel rejected the wait.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+    */
+    EWaitResult TimedReadLockEx(Timeout timeout_ticks);
 
     /*! \brief     Acquire the lock for shared reading with a timeout.
         \param[in] timeout_ticks: Maximum time to wait (ticks).
         \note      Non-recursive.
-        \return    True if lock acquired, false if timeout occurred.
+        \return    True if lock acquired, false otherwise (timeout, cancellation or NO_WAIT on a busy
+                   lock). Use \c TimedReadLockEx() to tell these apart.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
     */
-    bool TimedReadLock(Timeout timeout_ticks);
+    bool TimedReadLock(Timeout timeout_ticks) { return (TimedReadLockEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief     Acquire the lock for shared reading.
         \details   Blocks the calling task if a writer is currently active or if there
                    are writers waiting to acquire the lock.
         \note      Non-recursive.
+        \note      Not cancelable: a \c void ReadLock() cannot report failure and must return with the
+                   lock held, so a cancellation (IKernel::CancelTaskWait()) is absorbed and the wait is
+                   retried. Use \c TimedReadLockEx() if cancellation must be observed. Panics
+                   (KERNEL_PANIC_ASSERT) on any other failure.
         \warning   ISR-unsafe.
     */
-    void ReadLock() { STK_UNUSED(TimedReadLock(WAIT_INFINITE)); }
+    void ReadLock();
 
     /*! \brief     Attempt to acquire the lock for shared reading without blocking.
         \details   Checks if a writer is active or waiting. If the resource is available
@@ -161,21 +190,40 @@ public:
     */
     void ReadUnlock();
 
-    /*! \brief     Acquire the lock for exclusive writing with a timeout.
+    /*! \brief     Acquire the lock for exclusive writing with a timeout, preserving the full wait outcome.
         \param[in] timeout_ticks: Maximum time to wait (ticks).
-        \return    True if lock acquired, false if timeout occurred.
+        \return    \c WAIT_RESULT_SIGNAL if the lock was acquired (here "signal" means "lock acquired":
+                   the predicate is re-checked after every wake), \c WAIT_RESULT_TIMEOUT if the timeout
+                   expired (or \a NO_WAIT was passed and the lock was busy), \c WAIT_RESULT_CANCELED if
+                   the wait was cancelled via IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the
+                   kernel rejected the wait.
         \note      Non-recursive.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
     */
-    bool TimedLock(Timeout timeout_ticks);
+    EWaitResult TimedLockEx(Timeout timeout_ticks);
+
+    /*! \brief     Acquire the lock for exclusive writing with a timeout.
+        \param[in] timeout_ticks: Maximum time to wait (ticks).
+        \return    True if lock acquired, false otherwise (timeout, cancellation or NO_WAIT on a busy
+                   lock). Use \c TimedLockEx() to tell these apart.
+        \note      Non-recursive.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+    */
+    bool TimedLock(Timeout timeout_ticks) { return (TimedLockEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief     Acquire the lock for exclusive writing (IMutex interface).
         \details   Blocks the calling task until all active readers have released their
                    locks and no other writer is active.
         \note      Non-recursive.
-        \warning   ISR-safe.
+        \note      Not cancelable: a \c void Lock() cannot report failure and must return with the
+                   lock held, so a cancellation (IKernel::CancelTaskWait()) is absorbed and the wait is
+                   retried. This also keeps the mutex re-acquisition at the end of
+                   ConditionVariable::Wait() reliable (the kernel re-locks via this method).
+                   Use \c TimedLockEx() if cancellation must be observed. Panics
+                   (KERNEL_PANIC_ASSERT) on any other failure.
+        \warning   ISR-unsafe.
     */
-    void Lock() override { STK_UNUSED(TimedLock(WAIT_INFINITE)); }
+    void Lock() override;
 
     /*! \brief     Attempt to acquire the lock for exclusive writing without blocking.
         \details   Checks if any readers are active or if another writer is active.
@@ -209,47 +257,69 @@ private:
 // TimedReadLock
 // ---------------------------------------------------------------------------
 
-inline bool RWMutex::TimedReadLock(Timeout timeout_ticks)
+inline EWaitResult RWMutex::TimedReadLockEx(Timeout timeout_ticks)
 {
-    bool success = true;
+    EWaitResult result = WAIT_RESULT_SIGNAL;
     ScopedCriticalSection cs_;
 
     const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
     // capture an absolute deadline once, before entering the wait loop,
     // this prevents the timeout from being silently restarted on each
-    // spurious wakeup
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
+    // spurious wakeup; kept as 64-bit Ticks (not truncated to 32-bit Timeout) so that
+    // the deadline and the current time stay comparable across the 32-bit tick wraparound
+    const Ticks deadline = (timed_wait ?
+        (GetTicks() + timeout_ticks) : static_cast<Ticks>(0));
 
     // wait if there is an active writer or if writers are waiting (Writer Preference)
     while (m_writer_active || (m_writers_waiting != 0U))
     {
-        Timeout remaining = deadline;
+        Timeout remaining = timeout_ticks;
         if (timed_wait)
         {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
+            // left <= timeout_ticks < WAIT_INFINITE, so the narrowing cast is lossless
+            const Ticks left = (deadline - GetTicks());
+            remaining = ((left > 0) ? static_cast<Timeout>(left) : NO_WAIT);
         }
 
-        if (!m_cv_readers.Wait(cs_, remaining))
+        result = m_cv_readers.WaitEx(cs_, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
         {
-            success = false; // timeout (or cancellation, see ConditionVariable::Wait())
-            break;
+            break; // timeout, cancellation or kernel failure: propagate to the caller
         }
 
         // re-check on wake: another writer may have queued up while this task was sleeping
     }
 
-    // only increment reader count if the lock was successfully acquired without timing out
-    if (success)
+    // only increment reader count if the lock was successfully acquired
+    if (result == WAIT_RESULT_SIGNAL)
     {
         STK_ASSERT(m_readers < READERS_MAX); // API contract: reader count must not exceed maximum
 
         m_readers = static_cast<uint16_t>(m_readers + 1U);
     }
 
-    return success;
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// ReadLock
+// ---------------------------------------------------------------------------
+
+inline void RWMutex::ReadLock()
+{
+    EWaitResult result;
+
+    do
+    {
+        result = TimedReadLockEx(WAIT_INFINITE);
+    }
+    while (result == WAIT_RESULT_CANCELED);
+
+    if (result != WAIT_RESULT_SIGNAL)
+    {
+        STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -275,9 +345,9 @@ inline void RWMutex::ReadUnlock()
 // TimedLock
 // ---------------------------------------------------------------------------
 
-inline bool RWMutex::TimedLock(Timeout timeout_ticks)
+inline EWaitResult RWMutex::TimedLockEx(Timeout timeout_ticks)
 {
-    bool success = true;
+    EWaitResult result = WAIT_RESULT_SIGNAL;
     ScopedCriticalSection cs_;
 
     STK_ASSERT(m_writers_waiting < WRITERS_MAX); // API contract: waiting writer count must not exceed maximum
@@ -288,32 +358,56 @@ inline bool RWMutex::TimedLock(Timeout timeout_ticks)
 
     // capture an absolute deadline once, before entering the wait loop,
     // this prevents the timeout from being silently restarted on each
-    // spurious wakeup
-    const Timeout deadline = (timed_wait ?
-        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
+    // spurious wakeup; kept as 64-bit Ticks (not truncated to 32-bit Timeout) so that
+    // the deadline and the current time stay comparable across the 32-bit tick wraparound
+    const Ticks deadline = (timed_wait ?
+        (GetTicks() + timeout_ticks) : static_cast<Ticks>(0));
 
     // wait until there are no active readers and no active writer
     while (m_writer_active || (m_readers != 0U))
     {
-        Timeout remaining = deadline;
+        Timeout remaining = timeout_ticks;
         if (timed_wait)
         {
-            const Timeout now = static_cast<Timeout>(GetTicks());
-            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
+            // left <= timeout_ticks < WAIT_INFINITE, so the narrowing cast is lossless
+            const Ticks left = (deadline - GetTicks());
+            remaining = ((left > 0) ? static_cast<Timeout>(left) : NO_WAIT);
         }
 
-        if (!m_cv_writers.Wait(cs_, remaining))
+        result = m_cv_writers.WaitEx(cs_, remaining);
+        if (result != WAIT_RESULT_SIGNAL)
         {
-            // timed out (or cancelled, see ConditionVariable::Wait()): withdraw from the
-            // waiting writers queue
+            // timeout, cancellation or kernel failure: withdraw from the waiting writers queue
             m_writers_waiting = static_cast<uint16_t>(m_writers_waiting - 1U);
-            success = false;
+
+            // readers may have been blocked only by this writer's preference: with no writer left
+            // and none active, let them re-evaluate (otherwise they sleep until their own timeout,
+            // or forever with WAIT_INFINITE)
+            if (!m_writer_active)
+            {
+                if (m_writers_waiting == 0U)
+                {
+                    m_cv_readers.NotifyAll_CS();
+                }
+                // the withdrawing writer may have consumed a NotifyOne() meant for the next writer:
+                // if the lock is free, pass the wake on (a spurious wake is harmless, the predicate
+                // is re-checked by the woken writer)
+                else if (m_readers == 0U)
+                {
+                    m_cv_writers.NotifyOne_CS();
+                }
+                else
+                {
+                    // readers still active, the last ReadUnlock() will wake the next writer
+                }
+            }
+
             break;
         }
     }
 
     // only finalize state if the wait didn't time out
-    if (success)
+    if (result == WAIT_RESULT_SIGNAL)
     {
         m_writers_waiting = static_cast<uint16_t>(m_writers_waiting - 1U);
 
@@ -326,7 +420,27 @@ inline bool RWMutex::TimedLock(Timeout timeout_ticks)
         m_writer_active = true;
     }
 
-    return success;
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Lock
+// ---------------------------------------------------------------------------
+
+inline void RWMutex::Lock()
+{
+    EWaitResult result;
+
+    do
+    {
+        result = TimedLockEx(WAIT_INFINITE);
+    }
+    while (result == WAIT_RESULT_CANCELED);
+
+    if (result != WAIT_RESULT_SIGNAL)
+    {
+        STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
+    }
 }
 
 // ---------------------------------------------------------------------------

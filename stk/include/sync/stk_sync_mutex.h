@@ -71,22 +71,43 @@ public:
         STK_ASSERT(m_wait_list.IsEmpty()); // API contract: must not be destroyed with waiting tasks
     }
 
+    /*! \brief     Acquire lock, preserving the full wait outcome.
+        \param[in] timeout_ticks: Maximum time to wait (ticks).
+        \note      Maximum number of recursive locks must not exceed 0xFFFEU.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+        \return    \c WAIT_RESULT_SIGNAL if the lock was acquired (note: here "signal" means
+                   "lock acquired", including the immediate and recursive paths where no
+                   notification was involved), \c WAIT_RESULT_TIMEOUT if the lock was busy and the
+                   timeout expired (or \a NO_WAIT was passed), \c WAIT_RESULT_CANCELED if the wait
+                   was cancelled via IKernel::CancelTaskWait(), \c WAIT_RESULT_FAIL if the kernel
+                   rejected the wait.
+    */
+    EWaitResult TimedLockEx(Timeout timeout_ticks);
+
     /*! \brief     Acquire lock.
         \param[in] timeout_ticks: Maximum time to wait (ticks).
         \note      Maximum number of recursive locks must not exceed 0xFFFEU.
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
-        \return    True if lock acquired, false if timeout occurred.
+        \return    True if lock acquired, false otherwise (timeout, cancellation or NO_WAIT on a busy
+                   mutex). Use \c TimedLockEx() to tell these apart.
     */
-    bool TimedLock(Timeout timeout_ticks);
+    bool TimedLock(Timeout timeout_ticks) { return (TimedLockEx(timeout_ticks) == WAIT_RESULT_SIGNAL); }
 
     /*! \brief     Acquire lock.
+        \note      Not cancelable: a \c void Lock() cannot report failure and must return with the
+                   lock held, so a cancellation (IKernel::CancelTaskWait()) is absorbed and the wait is
+                   retried. This also keeps the mutex re-acquisition at the end of
+                   ConditionVariable::Wait() reliable (the kernel re-locks via this method).
+                   Use \c TimedLockEx() if cancellation must be observed. Panics
+                   (KERNEL_PANIC_ASSERT) on any other failure.
         \warning   ISR-unsafe.
     */
-    void Lock() override { STK_UNUSED(TimedLock(WAIT_INFINITE)); }
+    void Lock() override;
 
-    /*! \brief     Acquire the lock.
+    /*! \brief     Try to acquire the lock without blocking.
         \warning   ISR-safe.
-        \return    True if lock acquired, false if lock is already acquired by another task.
+        \return    True if lock acquired (including a recursive acquisition by the owner), false if
+                   the lock is owned by another thread.
     */
     bool TryLock() { return TimedLock(NO_WAIT); }
 
@@ -97,8 +118,15 @@ public:
 
     /*! \brief     Get owner of the mutex.
         \warning   ISR-safe.
+        \return    Thread id of the owner, or TID_NONE if the mutex is free.
     */
     TId GetOwner() const { return m_owner_tid; }
+
+    /*! \brief     Check if the mutex is currently locked.
+        \note      Snapshot only, may be stale immediately for a non-owner.
+        \warning   ISR-safe.
+    */
+    bool IsLocked() const { return (m_owner_tid != TID_NONE); }
 
     /*! \brief     Get current recursion depth.
         \note      Reads the counter without a critical section. The value is only
@@ -122,7 +150,7 @@ private:
 // TimedLock
 // ---------------------------------------------------------------------------
 
-inline bool Mutex::TimedLock(Timeout timeout_ticks)
+inline EWaitResult Mutex::TimedLockEx(Timeout timeout_ticks)
 {
     IKernelService *const svc = IKernelService::GetInstance();
     const TId current_tid = svc->GetTid();
@@ -130,7 +158,9 @@ inline bool Mutex::TimedLock(Timeout timeout_ticks)
     ScopedCriticalSection cs_;
 
     const TId owner_tid = m_owner_tid;
-    bool success = false;
+
+    // NO_WAIT on a busy mutex is reported as an immediately-expired timeout
+    EWaitResult result = WAIT_RESULT_TIMEOUT;
 
     STK_ASSERT(current_tid != TID_NONE); // API contract: must be called inside STK task
 
@@ -140,7 +170,7 @@ inline bool Mutex::TimedLock(Timeout timeout_ticks)
         STK_ASSERT(m_recursion_count < RECURSION_MAX); // API contract: caller must not exceed max recursion depth
 
         m_recursion_count = static_cast<uint16_t>(m_recursion_count + 1U);
-        success = true;
+        result = WAIT_RESULT_SIGNAL;
     }
     // fast path: mutex is free
     else if (m_recursion_count == 0U)
@@ -155,7 +185,7 @@ inline bool Mutex::TimedLock(Timeout timeout_ticks)
         m_owner_tid       = current_tid;
         __stk_full_memfence();
 
-        success = true;
+        result = WAIT_RESULT_SIGNAL;
     }
     // slow path: block until available or timeout expires
     else if (timeout_ticks != NO_WAIT)
@@ -167,16 +197,21 @@ inline bool Mutex::TimedLock(Timeout timeout_ticks)
         svc->InheritWeight(owner_tid, GetUserTaskFromTid(current_tid)->GetWeight());
 
         // mutex owned by another thread (slow path/blocking)
-        if (svc->Wait(this, &cs_, timeout_ticks) != WAIT_RESULT_SIGNAL)
+        result = svc->Wait(this, &cs_, timeout_ticks);
+
+        if (result != WAIT_RESULT_SIGNAL)
         {
+            // kernel invariant: a wait that did not end in a signal must not leave this thread as the
+            // owner (Unlock() hands over ownership only together with a signal), otherwise the caller
+            // would be told it failed while owning a lock nobody will release
+            STK_ASSERT(m_owner_tid != current_tid);
+
             // if owner did not change, undo priority boost to avoid stuck elevated priority: lookup for a
             // higher weight within existing wait objects, noop if ISwitchStrategy::PRIORITY_INHERITANCE_API = 0
             if (owner_tid == m_owner_tid)
             {
                 svc->RestoreWeight(owner_tid, this);
             }
-
-            success = false;
         }
         else
         {
@@ -186,18 +221,36 @@ inline bool Mutex::TimedLock(Timeout timeout_ticks)
             {
                 STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
             }
-
-            success = true;
         }
     }
     // try-lock variant: owned by someone else, but no-wait requested
     else
     {
-        // success is false already, noop
+        // result is WAIT_RESULT_TIMEOUT already, noop
     }
 
-    return success;
-}    
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Lock
+// ---------------------------------------------------------------------------
+
+inline void Mutex::Lock()
+{
+    EWaitResult result;
+
+    do
+    {
+        result = TimedLockEx(WAIT_INFINITE);
+    }
+    while (result == WAIT_RESULT_CANCELED);
+
+    if (result != WAIT_RESULT_SIGNAL)
+    {
+        STK_KERNEL_PANIC(KERNEL_PANIC_ASSERT);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Unlock
@@ -207,7 +260,7 @@ inline void Mutex::Unlock()
 {
     const ScopedCriticalSection cs_;
 
-    STK_ASSERT((m_owner_tid == GetTid()) &&
+    STK_ASSERT((m_owner_tid == IKernelService::GetInstance()->GetTid()) &&
                (m_owner_tid != TID_NONE)); // API contract: caller must own the lock
     STK_ASSERT(m_recursion_count != 0U);   // API contract: must have matching Lock()
 
@@ -236,10 +289,13 @@ inline void Mutex::Unlock()
             // wake up
             waiter->Wake(false);
 
-            // boost priority from the highest-priority task currently in wait list,
-            // noop if the list is empty or if ISwitchStrategy::PRIORITY_INHERITANCE_API = 0
-            svc->InheritWeight(m_owner_tid,
-                FindWeightHigherThan(GetUserTaskFromTid(m_owner_tid)->GetWeight()));
+            // boost priority from the highest-priority task still in wait list, skip the lookup if none left,
+            // noop if ISwitchStrategy::PRIORITY_INHERITANCE_API = 0
+            if (!m_wait_list.IsEmpty())
+            {
+                svc->InheritWeight(m_owner_tid,
+                    FindWeightHigherThan(GetUserTaskFromTid(m_owner_tid)->GetWeight()));
+            }
         }
         else
         {

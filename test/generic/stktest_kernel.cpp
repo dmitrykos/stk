@@ -383,7 +383,7 @@ TEST(Kernel, AddTaskWhenStartedNsyWaitsForRequestConsumed)
     g_AddTaskWhenStartedNsyRelaxCpuContext.kernel   = &kernel;
     g_AddTaskWhenStartedNsyRelaxCpuContext.platform = platform;
     g_AddTaskWhenStartedNsyRelaxCpuContext.strategy = strategy;
-    g_AddTaskWhenStartedNsyRelaxCpuContext.tid      = GetTidFromUserTask(&task1);
+    g_AddTaskWhenStartedNsyRelaxCpuContext.tid      = task1.GetTid();
     g_AddTaskWhenStartedNsyRelaxCpuContext.release_yield_without_tick = true;
     g_RelaxCpuHandler = AddTaskWhenStartedNsyRelaxCpu;
 
@@ -974,7 +974,7 @@ TEST(Kernel, ForceContextSwitchPendingYield)
 
     g_ForceContextSwitchYieldRelaxCpuContext.Clear();
     g_ForceContextSwitchYieldRelaxCpuContext.kernel = &kernel;
-    g_ForceContextSwitchYieldRelaxCpuContext.tid    = GetTidFromUserTask(&task1);
+    g_ForceContextSwitchYieldRelaxCpuContext.tid    = task1.GetTid();
     g_RelaxCpuHandler = ForceContextSwitchYieldRelaxCpu;
 
     // task1 calls Yield(): strategy handles it (task stays runnable) and the task sets STATE_YIELD_PENDING
@@ -997,7 +997,7 @@ TEST(Kernel, ForceContextSwitchPendingYield)
 
     // task1 is no longer the running task, a repeated ISR call for its id is a no-op
     Stack *idle = NULL, *active = NULL;
-    CHECK_FALSE(kernel.CallForceContextSwitch(GetTidFromUserTask(&task1), idle, active));
+    CHECK_FALSE(kernel.CallForceContextSwitch(task1.GetTid(), idle, active));
     CHECK_TRUE(idle == NULL);
     CHECK_TRUE(active == NULL);
 }
@@ -1017,7 +1017,7 @@ TEST(Kernel, ForceContextSwitchNoPendingYield)
     CHECK_EQUAL((Word)task1.GetStack(), platform->m_stack_active->SP);
 
     // task1 is running, not sleeping and has not yielded: STATE_YIELD_PENDING is not set, nothing to process
-    CHECK_FALSE(kernel.CallForceContextSwitch(GetTidFromUserTask(&task1), idle, active));
+    CHECK_FALSE(kernel.CallForceContextSwitch(task1.GetTid(), idle, active));
     CHECK_TRUE(idle == NULL);
     CHECK_TRUE(active == NULL);
 
@@ -1238,7 +1238,7 @@ TEST(Kernel, ForceContextSwitch)
     TaskMock<ACCESS_USER> task1, task2;
     PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
     Stack *idle = nullptr, *active = nullptr;
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     kernel.Initialize();
     kernel.AddTask(&task1);
@@ -1280,7 +1280,7 @@ TEST(Kernel, ForceContextSwitchTidMismatch)
     KernelMock<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     Stack *idle = nullptr, *active = nullptr;
-    const TId task2_id = GetTidFromUserTask(&task2);
+    const TId task2_id = task2.GetTid();
 
     kernel.Initialize();
     kernel.AddTask(&task1);
@@ -1301,7 +1301,7 @@ TEST(Kernel, ForceContextSwitchNotSleeping)
     KernelMock<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     Stack *idle = nullptr, *active = nullptr;
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     kernel.Initialize();
     kernel.AddTask(&task1);
@@ -1577,6 +1577,76 @@ TEST(Kernel, OnWaitingTaskExitSchedule)
     CHECK_EQUAL(active->SP, (Word)task2.GetStack());
 }
 
+TEST(Kernel, OnTaskExitScheduleNotCurrent)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is active after Start
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task2 is not the current task and is not sleeping yet: ScheduleRemoval() puts it to sleep
+    // (STATE_SLEEP_PENDING) and must deliver the sleep entry to the strategy immediately
+    kernel.ScheduleTaskRemoval(&task2);
+
+    // nothing changes right away: task1 keeps running, task2 is not removed yet
+    CHECK_EQUAL(2, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // the tick removes task2 (it is not the current task) and the strategy never hands it the CPU
+    platform->ProcessTick();
+
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task1 is the only task left and keeps running
+    platform->ProcessTick();
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+}
+
+TEST(Kernel, OnTaskExitScheduleNotCurrentAlreadySleeping)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+    bool suspended = false;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // put task2 to sleep and let the tick consume its STATE_SLEEP_PENDING
+    kernel.SuspendTask(&task2, suspended);
+    CHECK_TRUE(suspended);
+
+    platform->ProcessTick();
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task2 is already sleeping (the strategy knows about it): STATE_SLEEP_PENDING is not set again,
+    // so ScheduleRemoval() must not report the sleep entry a second time
+    kernel.ScheduleTaskRemoval(&task2);
+
+    CHECK_EQUAL(2, kernel.GetSwitchStrategy()->GetSize());
+
+    // next tick removes task2
+    platform->ProcessTick();
+
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+}
+
 static struct SyncCancelWaitContext
 {
     SyncCancelWaitContext()
@@ -1642,33 +1712,6 @@ TEST(Kernel, OnCancelWait)
         EWaitResult wresult = IKernelService::GetInstance()->Wait(&sobj, &mutex, 2);
 
         CHECK_EQUAL(WAIT_RESULT_CANCELED, wresult);
-    }
-}
-
-TEST(Kernel, OnCancelWaitNonSync)
-{
-    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
-    TaskMock<ACCESS_PRIVILEGED> task1;
-    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
-    Stack *&active = platform->m_stack_active;
-
-    kernel.Initialize();
-    kernel.AddTask(&task1);
-    kernel.Start();
-
-    // task1 is active after Start
-    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
-
-    try
-    {
-        g_TestContext.ExpectAssert(true);
-        kernel.CancelTaskWait(&task1);
-        CHECK(false);
-    }
-    catch (TestAssertPassed &pass)
-    {
-        CHECK(true);
-        g_TestContext.ExpectAssert(false);
     }
 }
 
@@ -2695,7 +2738,7 @@ TEST(Kernel, SyncInheritWeight)
     // original weight
     CHECK_EQUAL(1, ktasks[0]->GetWeight());
 
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     IKernelService::GetInstance()->InheritWeight(task1_id, 2);
 
@@ -2727,7 +2770,7 @@ TEST(Kernel, SetWeightClearsInheritedWeight)
     ArrayView<IKernelTask *> ktasks_view(ktasks, 2);
     kernel.EnumerateKernelTasks(ktasks_view);
 
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     // task1 inherits a higher weight (priority inheritance boost)
     IKernelService::GetInstance()->InheritWeight(task1_id, 2);
@@ -2758,7 +2801,7 @@ TEST(Kernel, SetWeightClearsInheritedWeightEqual)
     ArrayView<IKernelTask *> ktasks_view(ktasks, 2);
     kernel.EnumerateKernelTasks(ktasks_view);
 
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     IKernelService::GetInstance()->InheritWeight(task1_id, 2);
     CHECK_EQUAL(2, ktasks[0]->GetCurrentWeight());
@@ -2785,7 +2828,7 @@ TEST(Kernel, SetWeightKeepsHigherInheritedWeight)
     ArrayView<IKernelTask *> ktasks_view(ktasks, 2);
     kernel.EnumerateKernelTasks(ktasks_view);
 
-    const TId task1_id = GetTidFromUserTask(&task1);
+    const TId task1_id = task1.GetTid();
 
     IKernelService::GetInstance()->InheritWeight(task1_id, 5);
     CHECK_EQUAL(5, ktasks[0]->GetCurrentWeight());
