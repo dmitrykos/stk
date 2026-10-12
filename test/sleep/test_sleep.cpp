@@ -53,7 +53,7 @@ STK_TEST_DECL_ASSERT;
 #define _STK_SLEEP_STACK_SIZE          256 // ARM Cortex-M0
 #define STK_TASK
 #else
-#define _STK_SLEEP_STACK_SIZE          256
+#define _STK_SLEEP_STACK_SIZE          384
 #define STK_TASK                       static
 #endif
 
