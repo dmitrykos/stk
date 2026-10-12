@@ -34,6 +34,11 @@ STK_TEST_DECL_ASSERT;
 #define STK_TASK                        static
 #endif
 
+#ifndef _NEW
+inline void *operator new(std::size_t, void *ptr) noexcept { return ptr; }
+inline void operator delete(void *, void *) noexcept { /* nothing for placement delete */ }
+#endif
+
 namespace stk {
 namespace test {
 
@@ -67,6 +72,37 @@ static sync::Barrier g_TestBarrier2(2);                           // partial gro
 // Helper mutex used only for test bookkeeping (protecting shared counters/arrays below);
 // it is NOT the primitive under test - Barrier itself provides no mutual exclusion guarantee.
 static sync::Mutex g_CounterMtx;
+
+// Barrier of the cancellation tests (see CancelWaitTask). Unlike the barriers above it is re-constructed for every
+// test (its threshold depends on the scenario, and a failed cancel must not leave a corrupted count behind for the
+// next test). It lives in raw storage and is accessed through the pointer returned by placement new, because Barrier
+// has a const member (m_threshold): the old name must not be used to refer to a re-constructed object.
+alignas(sync::Barrier) static uint8_t g_CancelBarrierStorage[sizeof(sync::Barrier)];
+static sync::Barrier * g_CancelBarrier = nullptr;
+
+// Cancellation test state (see CancelWaitTask); the first index is the task id
+static const int32_t    CR_NOT_SET      = -100; // result not recorded yet
+static ITask * volatile g_CancelTask[_STK_BARRIER_TEST_TASKS_MAX];      // published by every task when it starts
+static volatile TId     g_CancelTid[_STK_BARRIER_TEST_TASKS_MAX];       // same, as TId (for SleepCancel)
+static volatile int32_t g_CancelResult[_STK_BARRIER_TEST_TASKS_MAX][2]; // Barrier::EResult of the 1st / 2nd WaitEx() call
+static volatile int64_t g_CancelElapsed[_STK_BARRIER_TEST_TASKS_MAX][2];// ms spent in the 1st / 2nd WaitEx() call
+static volatile int32_t g_CancelDone[_STK_BARRIER_TEST_TASKS_MAX];      // 1 once the task has finished its script
+
+// Scenario selector and threshold of the cancellation tests. Globals, not constructor arguments, because RunTest()
+// declares tasks 0-1 as 'static': a static local is constructed only once per template instantiation (on the first
+// RunTest<CancelWaitTask> call), so a constructor argument would silently keep the value of the first case.
+// Set by main() before each RunTest() call.
+static volatile int32_t  g_CancelParam     = 0;
+static volatile uint32_t g_CancelThreshold = 2U;
+
+// Cancel the wait of the victim (task 1) either via IKernel::CancelTaskWait() or via stk::SleepCancel()
+static void CancelVictim(bool use_sleep_cancel)
+{
+    if (use_sleep_cancel)
+        stk::SleepCancel(g_CancelTid[1]);
+    else
+        g_Kernel.CancelTaskWait(g_CancelTask[1]);
+}
 
 /*! \class BasicRendezvousTask
     \brief Tests the core barrier property: no task proceeds past Wait() until all have arrived.
@@ -433,6 +469,336 @@ private:
     }
 };
 
+static const int32_t CW_BASIC             = 1;
+static const int32_t CW_ROLLBACK          = 2;
+static const int32_t CW_ONE_OF_MANY       = 3;
+static const int32_t CW_SIGNAL_WINS       = 4;
+static const int32_t CW_TRIP_AFTER_CANCEL = 5;
+static const int32_t CW_VIA_SLEEPCANCEL   = 100;
+
+static const int32_t CW_VERIFY_AT         = 200; // tick at which task 4 evaluates a scenario (every script is over by ~140)
+
+static const int32_t CR_RELEASED          = static_cast<int32_t>(sync::Barrier::BARRIER_RELEASED);
+static const int32_t CR_LAST              = static_cast<int32_t>(sync::Barrier::BARRIER_LAST_ARRIVAL);
+static const int32_t CR_CANCELED          = static_cast<int32_t>(sync::Barrier::BARRIER_CANCELED);
+
+/*! \class CancelWaitTask
+    \brief Tests cancelability of Barrier waits (IKernel::CancelTaskWait() and stk::SleepCancel()).
+    \note  Tasks 0-3 are the parties of the barrier under test (threshold 2 or 3, see g_CancelThreshold), task 1 is
+           the victim whose wait gets cancelled, task 0 issues the cancel and task 4 is the verifier and watchdog:
+           it evaluates the recorded results at tick CW_VERIFY_AT and then cancels every task still blocked in the
+           barrier, so that a failed cancel is reported as a test failure instead of hanging the kernel.
+           The scenario is selected by g_CancelParam: 1 = a cancelled wait ends as CANCELED, 2 = the cancelled
+           arrival is rolled back (it does not count toward the round), 3 = cancelling one of several waiters
+           leaves the others waiting and the round is completed by replacement arrivals, 4 = a barrier that
+           tripped before the cancel wins (the cancel is a no-op and the barrier stays consistent for the next
+           round), 5 = a cancel issued before the barrier tripped, but not yet acted upon by the victim when the
+           barrier trips, must not roll back an arrival that the trip has already consumed. Adding 100 to
+           g_CancelParam cancels via stk::SleepCancel() instead of IKernel::CancelTaskWait().
+           Scenarios 4 and 5 rely on there being no scheduling point between two back-to-back calls of task 0.
+*/
+template <EAccessMode _AccessMode>
+class CancelWaitTask : public Task<_STK_BARRIER_STACK_SIZE, _AccessMode>
+{
+    uint8_t m_task_id;
+    int32_t m_scenario;
+    bool    m_use_sleep_cancel;
+
+public:
+    CancelWaitTask(uint8_t task_id, int32_t) // scenario is taken from g_CancelParam in Run(), see g_CancelParam
+        : m_task_id(task_id), m_scenario(0), m_use_sleep_cancel(false)
+    {}
+
+private:
+    void Run()
+    {
+        m_scenario         = g_CancelParam % CW_VIA_SLEEPCANCEL;
+        m_use_sleep_cancel = (g_CancelParam >= CW_VIA_SLEEPCANCEL);
+
+        // publish this task for the canceller (task 1 is the victim) and for the watchdog
+        g_CancelTask[m_task_id] = static_cast<ITask *>(this);
+        g_CancelTid[m_task_id]  = stk::GetTid();
+
+        if (m_task_id == (_STK_BARRIER_TEST_TASKS_MAX - 1))
+        {
+            RunVerifier();
+        }
+        else
+        {
+            RunParty();
+            g_CancelDone[m_task_id] = 1;
+        }
+    }
+
+    // Record how the call-th WaitEx() of this task ended
+    void Record(int32_t call, sync::Barrier::EResult r, int64_t start)
+    {
+        g_CancelElapsed[m_task_id][call] = GetTimeNowMs() - start;
+        g_CancelResult[m_task_id][call]  = static_cast<int32_t>(r);
+    }
+
+    // Arrive at the barrier for the call-th time
+    void Arrive(int32_t call)
+    {
+        const int64_t start = GetTimeNowMs();
+        const sync::Barrier::EResult r = g_CancelBarrier->WaitEx();
+
+        Record(call, r, start);
+    }
+
+    // Tasks 0-3: the script of this task in the selected scenario
+    void RunParty()
+    {
+        if (m_scenario == CW_BASIC)
+        {
+            // threshold 2: the victim waits for a second party that never comes, until it is cancelled
+            if (m_task_id == 0)
+            {
+                stk::Sleep(60);
+                CancelVictim(m_use_sleep_cancel);
+            }
+            else
+            if (m_task_id == 1)
+            {
+                stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+            }
+        }
+        else
+        if (m_scenario == CW_ROLLBACK)
+        {
+            // threshold 2: victim cancelled at ~60, task 2 arrives at ~90, task 0 completes the round at ~130
+            if (m_task_id == 0)
+            {
+                stk::Sleep(60);
+                CancelVictim(m_use_sleep_cancel);
+                stk::Sleep(70);
+                Arrive(0);
+            }
+            else
+            if (m_task_id == 1)
+            {
+                stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+            }
+            else
+            if (m_task_id == 2)
+            {
+                stk::Sleep(90);
+                Arrive(0);
+            }
+        }
+        else
+        if (m_scenario == CW_ONE_OF_MANY)
+        {
+            // threshold 3: victim (~10) and task 2 (~20) wait, victim cancelled at ~60; replacement arrivals
+            // of task 3 (~100) and task 0 (~130) complete the round
+            if (m_task_id == 0)
+            {
+                stk::Sleep(60);
+                CancelVictim(m_use_sleep_cancel);
+                stk::Sleep(70);
+                Arrive(0);
+            }
+            else
+            if (m_task_id == 1)
+            {
+                stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+            }
+            else
+            if (m_task_id == 2)
+            {
+                stk::Sleep(2 * _STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+            }
+            else
+            {
+                stk::Sleep(100);
+                Arrive(0);
+            }
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // threshold 2: task 0 trips the barrier at ~60 and cancels the victim right after, then both
+            // tasks go through a second round (victim at ~60, task 0 at ~100)
+            if (m_task_id == 0)
+            {
+                stk::Sleep(60);
+
+                const int64_t start = GetTimeNowMs();
+                const sync::Barrier::EResult r = g_CancelBarrier->WaitEx();
+                CancelVictim(m_use_sleep_cancel); // back to back: the victim is released by the trip but has not run yet
+                Record(0, r, start);
+
+                stk::Sleep(40);
+                Arrive(1);
+            }
+            else
+            if (m_task_id == 1)
+            {
+                stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+                Arrive(1);
+            }
+        }
+        else
+        if (m_scenario == CW_TRIP_AFTER_CANCEL)
+        {
+            // threshold 3: victim (~10) and task 2 (~20) wait; task 0 cancels the victim and arrives right after,
+            // so that the barrier trips before the victim has run; then all three go through a second round
+            if (m_task_id == 0)
+            {
+                stk::Sleep(60);
+
+                const int64_t start = GetTimeNowMs();
+                CancelVictim(m_use_sleep_cancel);
+                const sync::Barrier::EResult r = g_CancelBarrier->WaitEx(); // back to back with the cancel
+                Record(0, r, start);
+
+                Arrive(1);
+            }
+            else
+            if (m_task_id == 1)
+            {
+                stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+                Arrive(1);
+            }
+            else
+            if (m_task_id == 2)
+            {
+                stk::Sleep(2 * _STK_BARRIER_TEST_SHORT_SLEEP);
+                Arrive(0);
+                Arrive(1);
+            }
+        }
+        else
+        {
+            // unknown scenario: nothing to do
+        }
+    }
+
+    // True if every party (tasks 0-3) has finished its script
+    static bool AllDone()
+    {
+        for (int32_t id = 0; id < (_STK_BARRIER_TEST_TASKS_MAX - 1); ++id)
+        {
+            if (g_CancelDone[id] == 0)
+                return false;
+        }
+
+        return true;
+    }
+
+    // Task 4: evaluate the scenario, then release anything still blocked
+    void RunVerifier()
+    {
+        stk::Sleep(CW_VERIFY_AT);
+
+        const bool pass = Evaluate();
+
+        // Safety net: if the cancel did not work (or left the barrier with a wrong count) some parties are blocked
+        // forever and the kernel would never stop. Cancel them so that the test fails instead of hanging; repeat,
+        // because a released party may block again in its next barrier call.
+        for (int32_t i = 0; (i < 4) && !AllDone(); ++i)
+        {
+            for (int32_t id = 0; id < (_STK_BARRIER_TEST_TASKS_MAX - 1); ++id)
+            {
+                if (g_CancelDone[id] == 0)
+                    g_Kernel.CancelTaskWait(g_CancelTask[id]);
+            }
+
+            stk::Sleep(_STK_BARRIER_TEST_SHORT_SLEEP);
+        }
+
+        if (pass)
+            g_TestResult = 1;
+    }
+
+    // Check the recorded results of the selected scenario
+    bool Evaluate() const
+    {
+        bool pass = false;
+
+        if (m_scenario == CW_BASIC)
+        {
+            // started waiting at ~10 ms, cancelled at ~60 ms
+            pass = (g_CancelResult[1][0] == CR_CANCELED) &&
+                   (g_CancelElapsed[1][0] >= 35) && (g_CancelElapsed[1][0] <= 75);
+        }
+        else
+        if (m_scenario == CW_ROLLBACK)
+        {
+            // task 2 arrives at ~90 ms and task 0 at ~130 ms: had the victim's arrival not been rolled back, task 2
+            // would have tripped the barrier by itself at once (LAST, elapsed ~0) and task 0 would be left waiting
+            pass = (g_CancelResult[1][0] == CR_CANCELED) &&
+                   (g_CancelResult[2][0] == CR_RELEASED) &&
+                   (g_CancelElapsed[2][0] >= 30) && (g_CancelElapsed[2][0] <= 70) &&
+                   (g_CancelResult[0][0] == CR_LAST);
+        }
+        else
+        if (m_scenario == CW_ONE_OF_MANY)
+        {
+            // task 2 arrived at ~20 ms and must stay blocked until the round is completed at ~130 ms; had the
+            // victim's arrival not been rolled back, task 3 (~100 ms) would have tripped the barrier too early
+            pass = (g_CancelResult[1][0] == CR_CANCELED) &&
+                   (g_CancelResult[2][0] == CR_RELEASED) &&
+                   (g_CancelElapsed[2][0] >= 90) && (g_CancelElapsed[2][0] <= 130) &&
+                   (g_CancelResult[3][0] == CR_RELEASED) &&
+                   (g_CancelResult[0][0] == CR_LAST);
+        }
+        else
+        if (m_scenario == CW_SIGNAL_WINS)
+        {
+            // round 1: the victim is released by the trip, the cancel is a no-op; round 2 (the victim waits from
+            // ~60 ms, task 0 completes it at ~100 ms) shows that the barrier is consistent and that the cancel
+            // left nothing behind that would hit the victim's next wait
+            pass = (g_CancelResult[0][0] == CR_LAST) &&
+                   (g_CancelResult[1][0] == CR_RELEASED) &&
+                   (g_CancelResult[1][1] == CR_RELEASED) && (g_CancelElapsed[1][1] >= 30) &&
+                   (g_CancelResult[0][1] == CR_LAST);
+        }
+        else
+        if (m_scenario == CW_TRIP_AFTER_CANCEL)
+        {
+            // round 1: task 0 completes the round while the victim's cancel is still pending, so the victim has
+            // been released by the trip, not cancelled out of it
+            const bool round1 = (g_CancelResult[0][0] == CR_LAST) &&
+                                (g_CancelResult[1][0] == CR_RELEASED) &&
+                                (g_CancelResult[2][0] == CR_RELEASED);
+
+            // round 2: all three arrive again: exactly one of them trips the barrier and the others are released
+            // (with a corrupted count the barrier would need more arrivals and the round would never complete)
+            int32_t last = 0, released = 0;
+            for (int32_t id = 0; id < 3; ++id)
+            {
+                if (g_CancelResult[id][1] == CR_LAST)
+                    ++last;
+                else
+                if (g_CancelResult[id][1] == CR_RELEASED)
+                    ++released;
+            }
+
+            pass = round1 && (last == 1) && (released == 2);
+        }
+        else
+        {
+            // unknown scenario: fail
+        }
+
+        printf("cancel wait (scenario=%d, via %s, threshold=%d): call0=[%d,%d,%d,%d] call1=[%d,%d,%d,%d] "
+               "elapsed(1,0)=%d elapsed(2,0)=%d ms\n",
+            (int)m_scenario, m_use_sleep_cancel ? "SleepCancel" : "CancelTaskWait", (int)g_CancelThreshold,
+            (int)g_CancelResult[0][0], (int)g_CancelResult[1][0], (int)g_CancelResult[2][0], (int)g_CancelResult[3][0],
+            (int)g_CancelResult[0][1], (int)g_CancelResult[1][1], (int)g_CancelResult[2][1], (int)g_CancelResult[3][1],
+            (int)g_CancelElapsed[1][0], (int)g_CancelElapsed[2][0]);
+
+        return pass;
+    }
+};
+
 // Helper function to reset test state
 static void ResetTestState()
 {
@@ -448,7 +814,23 @@ static void ResetTestState()
         g_ArrivalSnapshot[i] = 0;
         g_Phase1[i] = 0;
         g_Phase2Sum[i] = 0;
+
+        g_CancelTask[i] = nullptr;
+        g_CancelTid[i]  = TID_NONE;
+        g_CancelDone[i] = 0;
+
+        for (int32_t call = 0; call < 2; ++call)
+        {
+            g_CancelResult[i][call]  = CR_NOT_SET;
+            g_CancelElapsed[i][call] = 0;
+        }
     }
+
+    // Re-construct the barrier of the cancellation tests with the threshold of the scenario
+    if (g_CancelBarrier != nullptr)
+        g_CancelBarrier->~Barrier();
+
+    g_CancelBarrier = new (g_CancelBarrierStorage) sync::Barrier(g_CancelThreshold);
 }
 
 } // namespace barrier
@@ -579,9 +961,41 @@ int main(int argc, char **argv)
     else
         total_success++;
 
+    // Tests 9-18: cancelability of Barrier waits (all five tasks: 0-3 are the parties, 4 verifies), via
+    // IKernel::CancelTaskWait() and via stk::SleepCancel() (param + 100)
+    {
+        struct CancelCase { const char *name; int32_t param; uint32_t threshold; };
+
+        static const CancelCase cases[] =
+        {
+            { "CancelWait_Basic",                 CW_BASIC,                                  2 },
+            { "CancelWait_Rollback",              CW_ROLLBACK,                               2 },
+            { "CancelWait_OneOfMany",             CW_ONE_OF_MANY,                            3 },
+            { "CancelWait_SignalWins",            CW_SIGNAL_WINS,                            2 },
+            { "CancelWait_TripAfterCancel",       CW_TRIP_AFTER_CANCEL,                      3 },
+            { "CancelWait_SleepCancel",           CW_VIA_SLEEPCANCEL + CW_BASIC,             2 },
+            { "CancelWait_SleepCancelRollback",   CW_VIA_SLEEPCANCEL + CW_ROLLBACK,          2 },
+            { "CancelWait_SleepCancelOneOfMany",  CW_VIA_SLEEPCANCEL + CW_ONE_OF_MANY,       3 },
+            { "CancelWait_SleepCancelSignal",     CW_VIA_SLEEPCANCEL + CW_SIGNAL_WINS,       2 },
+            { "CancelWait_SleepCancelTrip",       CW_VIA_SLEEPCANCEL + CW_TRIP_AFTER_CANCEL, 3 }
+        };
+
+        for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i)
+        {
+            g_CancelParam     = cases[i].param;
+            g_CancelThreshold = cases[i].threshold;
+
+            if (RunTest<CancelWaitTask<ACCESS_PRIVILEGED>>(cases[i].name, cases[i].param)
+                != TestContext::SUCCESS_EXIT_CODE)
+                total_failures++;
+            else
+                total_success++;
+        }
+    }
+
 #endif // __ARM_ARCH_6M__
 
-    // Test 8: Stress test
+    // Test 8 (runs last, after the cancellation tests): Stress test
     if (RunTest<StressTestTask<ACCESS_PRIVILEGED>>("StressTest", _STK_BARRIER_STRESS_ITERATIONS) != TestContext::SUCCESS_EXIT_CODE)
         total_failures++;
     else

@@ -45,14 +45,15 @@ assert(g_Pool.IsStorageValid());
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `Alloc` | `void *Alloc()` | Blocks indefinitely until a block is available. Never returns `nullptr`. ISR-unsafe. |
-| `AllocT<T>` | `T *AllocT<T>()` | Typed wrapper around `Alloc()`. ISR-unsafe. |
+| `Alloc` | `void *Alloc()` | Blocks indefinitely until a block is available. Returns `nullptr` only if the wait is cancelled via `IKernel::CancelTaskWait()` or `SleepCancel()` — never on timeout (there is none). Use `TimedAllocEx()` to tell a cancel from other failures. ISR-unsafe. |
+| `AllocT<T>` | `T *AllocT<T>()` | Typed wrapper around `Alloc()`; `nullptr` only on cancel. ISR-unsafe. |
 | `TryAlloc` | `void *TryAlloc()` | Non-blocking; returns `nullptr` immediately if the pool is empty. ISR-safe. |
 | `TryAllocT<T>` | `T *TryAllocT<T>()` | Typed wrapper around `TryAlloc()`. ISR-safe. |
-| `TimedAlloc` | `void *TimedAlloc(Timeout timeout = WAIT_INFINITE)` | Blocks up to `timeout` ticks. `NO_WAIT` is identical to `TryAlloc()`. Returns `nullptr` on timeout. ISR-safe only when `timeout == NO_WAIT`. |
+| `TimedAllocEx` | `EWaitResult TimedAllocEx(void **block, Timeout timeout = WAIT_INFINITE)` | Same as `TimedAlloc()`, but preserves the full outcome: `WAIT_RESULT_SIGNAL` (a block was allocated, immediately or after waiting; `*block` is set), `WAIT_RESULT_TIMEOUT` (no block within the timeout, or `NO_WAIT` on an empty pool), `WAIT_RESULT_CANCELED` (wait cancelled via `IKernel::CancelTaskWait()` or `SleepCancel()`; nothing is allocated), `WAIT_RESULT_FAIL` (null `block` or the kernel rejected the wait). `*block` is `nullptr` for every result except `SIGNAL`. ISR-safe only with `NO_WAIT`. |
+| `TimedAlloc` | `void *TimedAlloc(Timeout timeout = WAIT_INFINITE)` | Blocks up to `timeout` ticks. `NO_WAIT` is identical to `TryAlloc()`. Returns `nullptr` on timeout or cancellation (use `TimedAllocEx()` to tell these apart). ISR-safe only when `timeout == NO_WAIT`. |
 | `TimedAllocT<T>` | `T *TimedAllocT<T>(Timeout timeout = WAIT_INFINITE)` | Typed wrapper around `TimedAlloc()`. Asserts `sizeof(T) <= GetBlockSize()`. |
 | `Free` | `bool Free(void *ptr)` | Returns a block to the free-list in O(1) and wakes one blocked allocator. Returns `false` for `nullptr`, out-of-range, or misaligned pointers. ISR-safe. |
-| `IsStorageValid` | `bool IsStorageValid() const` | `true` if backing storage is initialised. For heap pools, `false` if `operator new` failed. |
+| `IsStorageValid` | `bool IsStorageValid() const` | `true` if backing storage is initialised. For heap pools, `false` if the storage allocation failed. |
 | `GetCapacity` | `size_t GetCapacity() const` | Total number of blocks in the pool. |
 | `GetBlockSize` | `size_t GetBlockSize() const` | Aligned block size in bytes (`>= BLOCK_ALIGN`). |
 | `GetUsedCount` | `size_t GetUsedCount() const` | Number of currently allocated (outstanding) blocks. |
@@ -61,13 +62,16 @@ assert(g_Pool.IsStorageValid());
 | `IsEmpty` | `bool IsEmpty() const` | `true` when no blocks are outstanding. |
 | `AlignBlockSize` | `static size_t AlignBlockSize(size_t raw_size)` | Rounds `raw_size` up to the nearest multiple of `BLOCK_ALIGN` (= `sizeof(void*)`), with a minimum of `BLOCK_ALIGN`. Use to size external storage buffers. |
 
-**`TimedAlloc()` paths:**
+**`TimedAlloc()` / `TimedAllocEx()` paths** (`TimedAlloc()` is `TimedAllocEx()` with every
+non-`SIGNAL` result mapped to `nullptr`):
 
 ```
-pool not empty        →  pop free-list head, return block immediately (O(1))
-pool empty, NO_WAIT   →  return nullptr immediately (TryAlloc fast-path)
+pool not empty        →  pop free-list head, return block immediately (O(1)), SIGNAL
+pool empty, NO_WAIT   →  return nullptr immediately (TryAlloc fast-path), TIMEOUT
 pool empty, timeout   →  suspend via ConditionVariable; wake when Free() signals,
-                          or return nullptr if timeout expires first
+                          or return nullptr / TIMEOUT if the timeout expires first
+                          (a block freed at the very moment of expiry is still returned: SIGNAL)
+pool empty, cancelled →  wait ends early, return nullptr, CANCELED (nothing allocated)
 ```
 
 **`Free()` path:**
@@ -88,6 +92,14 @@ otherwise             →  push to free-list head (O(1)), NotifyOne() to wake on
   detected in debug builds with an O(n) free-list walk.
 - `GetBlockSize()` always equals `AlignBlockSize(raw_block_size)` passed at construction.
 - `GetFreeCount() + GetUsedCount() == GetCapacity()` at all times.
+- A cancelled allocation (`WAIT_RESULT_CANCELED`) never takes a block from the pool and
+  leaves no stale entry in the wait list: a later `Free()` simply pushes the block back
+  (or wakes the next real waiter) and pool accounting stays exact.
+- If a `Free()` reaches a waiter before a cancel does, the allocation wins
+  (`WAIT_RESULT_SIGNAL`, block returned) and the cancel is a no-op.
+- The timeout deadline of a timed wait is captured once as an absolute 64-bit tick value, so
+  a wake-up that loses the block to another allocator does not restart the timeout, and the
+  deadline cannot wrap on long uptimes.
 - Destroying a pool while tasks are blocked in `Alloc()` or `TimedAlloc()` is a logic
   error; an assertion fires in debug builds inside the `ConditionVariable` destructor.
 
@@ -108,18 +120,40 @@ otherwise             →  push to free-list head (O(1)), NotifyOne() to wake on
 A fresh `BlockMemoryPool` instance backed by the static `g_PoolStorage` buffer is
 constructed at the start of every `RunTest()` call and destroyed at the end. This
 ensures every test starts with a fully empty pool in a known state. `ResetTestState()`
-resets `g_TestResult`, `g_InstancesDone`, and `g_SharedCounter` between tests.
+resets `g_TestResult`, `g_InstancesDone`, `g_SharedCounter` and the cancellation
+state (below) between tests.
 
-All eleven tests add all five tasks (0–4) unconditionally — there is no
-`NeedsExtendedTasks` gating in this suite.
+Task registration in `RunTest()` is gated by name: task 0 is always added; task 1 is
+added when `NeedsTwoTasks()` matches; task 2 is added when `NeedsThreeTasks()` (the
+`"CancelAlloc*"` tests) or `NeedsAllTasks()` matches; tasks 3–4 are added only when
+`NeedsAllTasks()` matches.
+
+The cancellation tests (12–22) additionally use a small amount of shared state, reset by
+`ResetTestState()`:
+
+| Variable | Purpose |
+|----------|---------|
+| `g_Victim` / `g_VictimTid` | Task (and its `TId`) whose wait is cancelled; published by task 1 right before it blocks |
+| `g_VictimResult[2]` | `EWaitResult` observed by task 1 / task 2 (`-100` = not set) |
+| `g_VictimGotBlock[2]` | Whether task 1 / task 2 received a block from the allocation call |
+| `g_VictimElapsed[2]` | Milliseconds spent inside the allocation call by task 1 / task 2 |
+| `g_VictimSleepElapsed` | Milliseconds task 1 spends in a `Sleep(60)` after its wait was cancelled |
+| `g_CancelParam` | Scenario selector (`1..6`, `+100` = `SleepCancel`); a global because the tasks are `static` and constructed once, so a constructor argument would keep the first case's value |
+
+The helper `CancelVictim(use_sleep_cancel)` cancels the victim either with
+`g_Kernel.CancelTaskWait(g_Victim)` or with `stk::SleepCancel(g_VictimTid)`.
 
 ---
 
 ## Platform Notes
 
 On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link ten
-distinct task class templates simultaneously. Tests 1–10 are skipped on M0 and only
-`Stress` (test 11) runs, under `#ifndef __ARM_ARCH_6M__`.
+distinct task class templates simultaneously. Tests 1–10 and the cancellation tests
+(12–22) are skipped on M0 under `#ifndef __ARM_ARCH_6M__`; only `Stress` (test 11) runs.
+In the source the cancellation tests execute after test 10 and before `Stress`.
+
+The cancellation tests add one more task class template (`CancelAllocTask`, shared by
+all eleven cases), further increasing the static memory footprint.
 
 `StressTask` runs on M0 because it uses a single task class template instantiated for
 all five task slots, fitting within the available memory.
@@ -127,7 +161,7 @@ all five task slots, fitting within the available memory.
 | Platform | `_STK_POOL_STACK_SIZE` | Tests run |
 |----------|------------------------|-----------|
 | Cortex-M0 (`__ARM_ARCH_6M__`) | `128` words | Test 11 only |
-| All others | `256` words | Tests 1–11 |
+| All others | `256` words | Tests 1–22 |
 
 ---
 
@@ -290,6 +324,155 @@ succeeded and that the pool is fully empty (no leaked blocks).
 
 ---
 
+### Cancellation tests (Tests 12–22)
+
+Tests 12–22 verify that a blocked allocation can be cancelled, that a cancel is reported
+as `WAIT_RESULT_CANCELED` (never as a timeout and never with a block), and that nothing
+is left behind (no lost block, no stale waiter). All use the same task class
+(`CancelAllocTask`) and **tasks 0–2 only** (`"CancelAlloc*"` names). The pool is a
+fresh 8-block pool.
+
+Task 0 is the canceller: it drains the pool with `TryAlloc()`, sleeps 60 ticks, cancels,
+verifies, and finally releases every block it still holds. Task 1 is the *victim*: after
+`_STK_POOL_TEST_SHORT_SLEEP` ticks it blocks in `TimedAllocEx()` (or `Alloc()`). Task 2
+is a second waiter used only by the two-waiters tests. Tests 12–17 cancel with
+`IKernel::CancelTaskWait()`; tests 18–22 repeat the key scenarios with
+`stk::SleepCancel()`. The scenario is selected by `g_CancelParam` (`1..6`); adding `100`
+selects `SleepCancel`.
+
+Every test also requires `leak_free`: after task 0 releases its blocks, `IsEmpty()` must
+be `true`.
+
+> **Safety net:** if a cancel does not work, the victim would stay blocked forever and the
+> kernel would never stop. Task 0 therefore always frees every block it holds at the end
+> (`ReleaseAll()`), which wakes any stuck waiter, so a broken cancel is reported as a test
+> failure rather than a hang.
+
+> **Kernel requirement:** tests 18–22 depend on `SleepCancel()` also cancelling a wait on a
+> sync object. Against a kernel where `SleepCancel()` only wakes the task, they fail by
+> design: that is the stale wait entry regression they exist to catch.
+
+---
+
+### Test 12 — `CancelAlloc_Infinite`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `1` &nbsp;|&nbsp; **Runs on M0: no**
+
+Task 1 calls `TimedAllocEx(&blk, WAIT_INFINITE)` on the empty pool at about tick 10. Task 0
+cancels it at about tick 60 via `CancelTaskWait()` and waits `2 × _STK_POOL_TEST_SHORT_SLEEP`
+for the victim to record its result.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, no block returned, elapsed in `[35, 75]` ms, `IsFull()` (the cancel allocated nothing)
+
+---
+
+### Test 13 — `CancelAlloc_NotTimeout`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `2`
+
+Same as test 12 but task 1 waits with a finite 300-tick timeout. Verifies that a cancel is
+reported as `WAIT_RESULT_CANCELED`, not `WAIT_RESULT_TIMEOUT`, and that the wait ends early
+instead of running to its deadline.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, no block returned, elapsed `< 150` ms
+
+---
+
+### Test 14 — `CancelAlloc_PlainAlloc`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `3`
+
+Task 1 uses the plain blocking `Alloc()`, which has no result code. Verifies the documented
+contract that `Alloc()` returns `nullptr` only when the wait was cancelled.
+
+**Pass condition:** `Alloc() == nullptr`, elapsed in `[35, 75]` ms, `IsFull()`
+
+---
+
+### Test 15 — `CancelAlloc_NoStaleWaiter`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `4`
+
+After the cancel, task 1 starts a `Sleep(60)` and measures it. Task 0 then calls `Free()`
+on one block with nobody waiting, checks `GetUsedCount() == 7`, and confirms the freed
+block is allocatable again exactly once (`TryAlloc()` succeeds, the next `TryAlloc()`
+returns `nullptr`). Verifies that the cancelled waiter was unlinked: the freed block must
+not be handed to a ghost waiter, and the victim's sleep must not be cut short by a leftover
+wait entry.
+
+**Pass condition:** `result == WAIT_RESULT_CANCELED`, no block returned, `Free() == true`, `GetUsedCount() == 7`, re-`TryAlloc()` succeeds, extra `TryAlloc() == nullptr`, victim sleep `>= 55` ms
+
+---
+
+### Test 16 — `CancelAlloc_TwoWaiters`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `5`
+
+Task 1 blocks first, task 2 blocks behind it (`Sleep(2 × _STK_POOL_TEST_SHORT_SLEEP)`
+before `TimedAllocEx(WAIT_INFINITE)`). Task 0 cancels only task 1, then calls `Free()`.
+The block must reach task 2, which proves the wait list stayed intact after the removal of
+its first entry; task 2 returns the block, so only task 0's remaining 7 blocks stay
+outstanding.
+
+**Pass condition:** task 1 `WAIT_RESULT_CANCELED` with no block, task 2 `WAIT_RESULT_SIGNAL` with a block, `Free() == true`, `GetUsedCount() == 7`
+
+---
+
+### Test 17 — `CancelAlloc_SignalWins`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `6`
+
+Task 0 calls `Free()` and immediately cancels the victim, with no scheduling point in
+between. The victim is already signaled and unlinked when the cancel arrives, so the cancel
+must be a no-op and exactly one outcome must occur: the victim receives the block.
+
+**Pass condition:** `Free() == true`, `result == WAIT_RESULT_SIGNAL`, block returned, `GetUsedCount() == 7` (the victim returned it)
+
+---
+
+### Test 18 — `CancelAlloc_SleepCancel`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `101`
+
+Test 12 using `stk::SleepCancel(tid)` instead of `CancelTaskWait()`.
+
+**Pass condition:** same as test 12
+
+---
+
+### Test 19 — `CancelAlloc_SleepCancelPlain`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `103`
+
+Test 14 using `SleepCancel()`: plain `Alloc()` must return `nullptr`.
+
+**Pass condition:** same as test 14
+
+---
+
+### Test 20 — `CancelAlloc_SleepCancelNoStale`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `104`
+
+Test 15 using `SleepCancel()`. This is the primary regression test for `SleepCancel()`
+cancelling sync-object waits: without it the wait entry stays linked in the pool's
+`ConditionVariable` after the task is woken.
+
+**Pass condition:** same as test 15
+
+---
+
+### Test 21 — `CancelAlloc_SleepCancelTwo`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `105`
+
+Test 16 using `SleepCancel()`.
+
+**Pass condition:** same as test 16
+
+---
+
+### Test 22 — `CancelAlloc_SleepCancelSignal`
+**Tasks:** 0–2 &nbsp;|&nbsp; **Param:** `106`
+
+Test 17 using `SleepCancel()`. The task is no longer waiting but may still be marked as
+sleeping after the wake, so this also checks that `SleepCancel()` falls through to a plain
+wake without disturbing the already-delivered block.
+
+**Pass condition:** same as test 17
+
+---
+
 ## Summary Table
 
 | # | Test | Tasks | Pass condition | What it verifies |
@@ -305,3 +488,14 @@ succeeded and that the pool is fully empty (no leaked blocks).
 | 9 | `AlignBlockSizeTask` | 0 only | all four rounding checks pass; `GetBlockSize()` matches | `AlignBlockSize()` rounds up to `BLOCK_ALIGN` multiples correctly across boundary inputs |
 | 10 | `StorageModeTask` | 0 only | all accessor checks pass; heap pool cycle succeeds | Both storage constructors initialise correctly; `IsStorageValid`, `GetCapacity`, `GetBlockSize` report expected values |
 | 11 | `StressTask` | 0–4 | `counter > 0` and `IsEmpty()` | No corruption, leak, or deadlock under five-task contention mixing `TryAlloc()`, `Alloc()`, and `TimedAlloc(20)` — runs on all platforms |
+| 12 | `CancelAllocTask` (`Infinite`) | 0–2 | `CANCELED`, no block, elapsed in `[35, 75]` ms, `IsFull()` | `CancelTaskWait()` ends an infinite `TimedAllocEx()` without allocating |
+| 13 | `CancelAllocTask` (`NotTimeout`) | 0–2 | `CANCELED`, elapsed `< 150` ms | Cancel is reported as `CANCELED`, not `TIMEOUT`, and ends a finite wait early |
+| 14 | `CancelAllocTask` (`PlainAlloc`) | 0–2 | `Alloc() == nullptr`, elapsed in `[35, 75]` ms | `Alloc()` returns `nullptr` only when cancelled |
+| 15 | `CancelAllocTask` (`NoStaleWaiter`) | 0–2 | `Free()` ok, `GetUsedCount() == 7`, block re-allocatable once, victim sleep `>= 55` ms | Cancelled waiter is unlinked; no block lost to a ghost waiter |
+| 16 | `CancelAllocTask` (`TwoWaiters`) | 0–2 | task 1 `CANCELED`, task 2 `SIGNAL` with block, `GetUsedCount() == 7` | Cancelling one waiter leaves the other's wait list entry intact |
+| 17 | `CancelAllocTask` (`SignalWins`) | 0–2 | `SIGNAL` with block, `GetUsedCount() == 7` | A `Free()` that arrived first wins over a late cancel |
+| 18 | `CancelAllocTask` (`SleepCancel`) | 0–2 | same as 12 | `SleepCancel()` cancels a pool wait like test 12 |
+| 19 | `CancelAllocTask` (`SleepCancelPlain`) | 0–2 | same as 14 | `SleepCancel()` with plain `Alloc()` |
+| 20 | `CancelAllocTask` (`SleepCancelNoStale`) | 0–2 | same as 15 | `SleepCancel()` leaves no stale wait entry |
+| 21 | `CancelAllocTask` (`SleepCancelTwo`) | 0–2 | same as 16 | `SleepCancel()` keeps the second waiter intact |
+| 22 | `CancelAllocTask` (`SleepCancelSignal`) | 0–2 | same as 17 | `SleepCancel()` after a `Free()` is a no-op |

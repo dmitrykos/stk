@@ -122,7 +122,7 @@ public:
     /*! \brief     Construct a pool with \b heap-allocated storage.
         \details   Allocates a flat byte buffer of
                    \c capacity * AlignBlockSize(raw_block_size) bytes via
-                   \c operator new (std::nothrow). When exceptions are disabled
+                   \c MemoryAllocator::AllocateArrayT (non-throwing). When exceptions are disabled
                    (embedded default), check \c IsStorageValid() immediately after
                    construction to detect allocation failure before first use.
         \param[in] capacity:       Total number of blocks.
@@ -168,11 +168,30 @@ public:
                    \c WAIT_INFINITE - block indefinitely (default).
                    \c NO_WAIT       - return \c nullptr immediately if pool is empty
                                       (identical to \c TryAlloc(); ISR-safe).
-        \return    Pointer to an uninitialized block of at least \c GetRawBlockSize() bytes,
-                   or \c nullptr if the timeout expired before a block became available.
+        \return    Pointer to an uninitialized block of at least \c GetBlockSize() bytes,
+                   or \c nullptr if the timeout expired or the wait was cancelled via
+                   \c IKernel::CancelTaskWait() before a block became available.
+        \note      Collapses timeout and cancellation. Use \c TimedAllocEx() to tell them apart.
         \warning   ISR-safe \b only when \a timeout_ticks = \c NO_WAIT; ISR-unsafe otherwise.
     */
     void *TimedAlloc(Timeout timeout_ticks = WAIT_INFINITE);
+
+    /*! \brief     Allocate one block, preserving the full wait outcome.
+        \details   Identical to \c TimedAlloc(), except the caller gets the raw \c EWaitResult
+                   so a cancellation (via \c IKernel::CancelTaskWait()) can be distinguished
+                   from a timeout. Mirrors \c sync::Event::WaitEx().
+        \param[out] block: Receives the allocated block on \c WAIT_RESULT_SIGNAL, \c nullptr on
+                   any other result. Must not be \c nullptr.
+        \param[in] timeout_ticks: Same as \c TimedAlloc().
+        \return    \c WAIT_RESULT_SIGNAL   - a block was allocated (immediately or after waiting),
+                   \c WAIT_RESULT_TIMEOUT  - no block became available before the timeout (or \c NO_WAIT
+                                             was passed on an empty pool); a block freed at the very
+                                             moment the timeout expired is still returned as SIGNAL,
+                   \c WAIT_RESULT_CANCELED - the wait was cancelled, nothing was allocated,
+                   \c WAIT_RESULT_FAIL     - invalid arguments or the kernel rejected the wait.
+        \warning   ISR-safe \b only when \a timeout_ticks = \c NO_WAIT; ISR-unsafe otherwise.
+    */
+    EWaitResult TimedAllocEx(void **block, Timeout timeout_ticks = WAIT_INFINITE);
 
     /*! \brief     Allocate one typed block, blocking until one becomes available or the timeout expires.
         \details   Thin typed wrapper around \c TimedAlloc(). Asserts that \c sizeof(T) fits
@@ -184,13 +203,16 @@ public:
     template <typename T> T *TimedAllocT(Timeout timeout_ticks = WAIT_INFINITE);
 
     /*! \brief     Allocate one block, blocking indefinitely until one is available.
-        \return    Pointer to an uninitialized block. Never returns \c nullptr.
+        \return    Pointer to an uninitialized block. Returns \c nullptr only if the wait was
+                   cancelled via \c IKernel::CancelTaskWait(); never on timeout (there is none).
+                   Use \c TimedAllocEx() if cancellation must be told apart from other failures.
         \warning   ISR-unsafe.
     */
     void *Alloc();
 
     /*! \brief     Allocate one typed block, blocking indefinitely until one is available.
-        \return    Typed pointer. Never returns \c nullptr.
+        \return    Typed pointer. Returns \c nullptr only if the wait was cancelled
+                   (see \c Alloc()).
         \warning   ISR-unsafe.
     */
     template <typename T> T *AllocT();
@@ -259,7 +281,7 @@ public:
     /*! \brief     Get the number of currently allocated (outstanding) blocks.
         \return    Point-in-time snapshot. Matches \c osMemoryPoolGetCount().
         \note      May be stale immediately after return in a multi-task environment.
-        \note      ISR-safe on targets where a 16-bit aligned read is a single instruction.
+        \note      ISR-safe on targets where an aligned \c size_t read is a single instruction.
     */
     size_t GetUsedCount() const { return m_used_count; }
 
@@ -402,14 +424,24 @@ inline BlockMemoryPool::~BlockMemoryPool()
 // Alloc / TimedAlloc / TryAlloc
 // ---------------------------------------------------------------------------
 
-inline void *BlockMemoryPool::TimedAlloc(Timeout timeout_ticks)
+inline EWaitResult BlockMemoryPool::TimedAllocEx(void **block, Timeout timeout_ticks)
 {
-    void *block = nullptr;
-  
-    if (!hw::IsInsideISR() || (timeout_ticks == NO_WAIT))
+    EWaitResult result = WAIT_RESULT_FAIL;
+
+    STK_ASSERT(block != nullptr); // API contract: output pointer must be valid
+
+    if (block == nullptr)
+    {
+        // result is WAIT_RESULT_FAIL already, so noop
+    }
+    else if (hw::IsInsideISR() && (timeout_ticks != NO_WAIT))
+    {
+        STK_ASSERT(false); // API contract: ISR callers must pass NO_WAIT / use TryAlloc()
+        *block = nullptr;
+    }
+    else
     {
         sync::ScopedCriticalSection cs_;
-        bool is_timeout = false;
 
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
@@ -417,37 +449,55 @@ inline void *BlockMemoryPool::TimedAlloc(Timeout timeout_ticks)
         // allocator (TryAlloc() from another task or an ISR) can steal the just-freed
         // block between NotifyOne_CS() and this task re-acquiring the critical section
         // (Mesa-style wakeup, not a direct handoff - see Free()'s note), so re-passing
-        // the original timeout_ticks on each retry would silently restart it
-        const Timeout deadline = (timed_wait ?
-            static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
+        // the original timeout_ticks on each retry would silently restart it;
+        // kept as 64-bit Ticks (not truncated to Timeout) so it can't wrap on long uptimes
+        const Ticks deadline = (timed_wait ? (GetTicks() + static_cast<Ticks>(timeout_ticks)) : 0);
+
+        *block = nullptr;
+        result = WAIT_RESULT_SIGNAL; // fast path: a block is already available
 
         while (m_free_list == nullptr)
         {
-            Timeout remaining = deadline;
+            Timeout remaining = timeout_ticks;
             if (timed_wait)
             {
-                const Timeout now = static_cast<Timeout>(GetTicks());
-                remaining = (now >= deadline ? NO_WAIT : (deadline - now));
+                const Ticks left = (deadline - GetTicks());
+                remaining = ((left > 0) ? static_cast<Timeout>(left) : NO_WAIT);
             }
 
             // Atomically release the critical section, suspend the task, and
             // re-acquire before returning - no CPU cycles wasted while waiting.
-            if (!m_cv.Wait(cs_, remaining))
+            result = m_cv.WaitEx(cs_, remaining);
+            if (result != WAIT_RESULT_SIGNAL)
             {
-                is_timeout = true; // timeout expired
-                break;
+                break; // timeout, cancellation or kernel failure: report as is
             }
         }
 
-        // only allocate a block if we didn't time out
-        if (!is_timeout)
+        // timeout raced with a Free(): the lock was re-acquired and a block is available,
+        // so honor it instead of reporting a failure (cancellation is never overridden)
+        if ((result == WAIT_RESULT_TIMEOUT) && (m_free_list != nullptr))
         {
-            block = PopFreeList();
+            result = WAIT_RESULT_SIGNAL;
+        }
+
+        // only allocate a block if the wait ended in a signal (or none was needed)
+        if (result == WAIT_RESULT_SIGNAL)
+        {
+            *block = PopFreeList();
         }
     }
-    else
+
+    return result;
+}
+
+inline void *BlockMemoryPool::TimedAlloc(Timeout timeout_ticks)
+{
+    void *block = nullptr;
+
+    if (TimedAllocEx(&block, timeout_ticks) != WAIT_RESULT_SIGNAL)
     {
-        STK_ASSERT(false); // API contract: ISR callers must pass NO_WAIT / use TryAlloc()
+        block = nullptr;
     }
 
     return block;
@@ -539,7 +589,7 @@ inline bool BlockMemoryPool::Free(void *ptr)
                     auto *const blk = reinterpret_cast<MemoryBlock *>(ptr);
                     blk->next       = m_free_list;
                     m_free_list     = blk;
-                    m_used_count    = static_cast<uint16_t>(m_used_count - 1U);
+                    m_used_count    = (m_used_count - 1U);
 
                     // wake one blocked allocator - true scheduler wait, no spin-yield
                     m_cv.NotifyOne_CS();
@@ -582,7 +632,7 @@ inline void *BlockMemoryPool::PopFreeList()
     MemoryBlock *const blk = m_free_list;
 
     m_free_list  = blk->next;
-    m_used_count = static_cast<uint16_t>(m_used_count + 1U);
+    m_used_count = (m_used_count + 1U);
 
     return blk;
 }

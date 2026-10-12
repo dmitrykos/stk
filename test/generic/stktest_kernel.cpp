@@ -1577,6 +1577,76 @@ TEST(Kernel, OnWaitingTaskExitSchedule)
     CHECK_EQUAL(active->SP, (Word)task2.GetStack());
 }
 
+TEST(Kernel, OnTaskExitScheduleNotCurrent)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is active after Start
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task2 is not the current task and is not sleeping yet: ScheduleRemoval() puts it to sleep
+    // (STATE_SLEEP_PENDING) and must deliver the sleep entry to the strategy immediately
+    kernel.ScheduleTaskRemoval(&task2);
+
+    // nothing changes right away: task1 keeps running, task2 is not removed yet
+    CHECK_EQUAL(2, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // the tick removes task2 (it is not the current task) and the strategy never hands it the CPU
+    platform->ProcessTick();
+
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task1 is the only task left and keeps running
+    platform->ProcessTick();
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+}
+
+TEST(Kernel, OnTaskExitScheduleNotCurrentAlreadySleeping)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+    bool suspended = false;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // put task2 to sleep and let the tick consume its STATE_SLEEP_PENDING
+    kernel.SuspendTask(&task2, suspended);
+    CHECK_TRUE(suspended);
+
+    platform->ProcessTick();
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task2 is already sleeping (the strategy knows about it): STATE_SLEEP_PENDING is not set again,
+    // so ScheduleRemoval() must not report the sleep entry a second time
+    kernel.ScheduleTaskRemoval(&task2);
+
+    CHECK_EQUAL(2, kernel.GetSwitchStrategy()->GetSize());
+
+    // next tick removes task2
+    platform->ProcessTick();
+
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+}
+
 static struct SyncCancelWaitContext
 {
     SyncCancelWaitContext()
