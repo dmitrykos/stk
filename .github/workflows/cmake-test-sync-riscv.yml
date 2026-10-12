@@ -142,6 +142,7 @@ jobs:
         -DBUILD_LIB=ON
         -DBUILD_TESTS=ON
         -DTEST_GENERIC=OFF
+        -DENABLE_256K_RAM=ON
         -D${{matrix.test.cmake_flag}}
 
     - name: Build

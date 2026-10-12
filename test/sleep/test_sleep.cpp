@@ -49,11 +49,14 @@ STK_TEST_DECL_ASSERT;
 #define _STK_SLEEP_TEST_LONG_MS        500  // sleep/wait time of a task that is going to be cancelled (ms)
 #define _STK_SLEEP_TEST_CANCEL_AT_MS   20   // time at which the canceller acts (ms)
 
-#ifdef __ARM_ARCH_6M__
+#if defined(__ARM_ARCH_6M__)
 #define _STK_SLEEP_STACK_SIZE          256 // ARM Cortex-M0
 #define STK_TASK
-#else
+#elif defined(_STK_ARCH_RISC_V)
 #define _STK_SLEEP_STACK_SIZE          384
+#define STK_TASK                       static
+#else
+#define _STK_SLEEP_STACK_SIZE          256
 #define STK_TASK                       static
 #endif
 

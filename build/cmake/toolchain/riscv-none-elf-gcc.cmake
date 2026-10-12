@@ -20,7 +20,7 @@ option(ENABLE_SMALL     "enable Small build (Os)"  OFF)
 option(TARGET_RV32I     "target RV32IMA_ZICSR CPU" ON)
 option(TARGET_RV32E     "target RV32EMA_ZICSR CPU" OFF)
 option(ENABLE_128K_RAM  "enable 128K RAM"          OFF)
-option(ENABLE_256K_RAM  "enable 256K RAM"          OFF)
+option(ENABLE_256K_RAM  "enable 256K RAM"          ON)
 
 # CPU platform
 set(RISCV TRUE)
