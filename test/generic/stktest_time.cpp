@@ -57,6 +57,12 @@ namespace stk
             (void)weight;
             return weight;
         }
+        Timeout SetTimeSlice(TId tid, Timeout ticks) override
+        {
+            (void)tid;
+            (void)ticks;
+            return NO_TIME_SLICE;
+        }
     }
     s_KernelServiceMock;
 

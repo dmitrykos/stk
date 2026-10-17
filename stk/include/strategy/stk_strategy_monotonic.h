@@ -79,7 +79,8 @@ public:
         SLEEP_EVENT_API          = 0, //!< This strategy does not use OnTaskSleep() / OnTaskWake() events. Sleeping tasks remain in \c m_tasks and are skipped by GetNext() via IKernelTask::IsSleeping(). Delivering these events will trigger an assertion.
         DEADLINE_MISSED_API      = 0, //!< This strategy does not use OnTaskDeadlineMissed() events.
         PRIORITY_INHERITANCE_API = 0, //!< This strategy does not require Priority Inheritance and OnTaskPriorityChange() events.
-        NOSLEEP_YIELD_API        = 0  //!< This strategy does not handle Yield() itself (OnTaskYield() is not used); the kernel puts the yielding task to sleep for a tick.
+        NOSLEEP_YIELD_API        = 0, //!< This strategy does not handle Yield() itself (OnTaskYield() is not used); the kernel puts the yielding task to sleep for a tick.
+        TIMESLICE_API            = 0  //!< This strategy does not support KERNEL_TIMESLICE mode.
     };
 
     /*! \brief Construct an empty strategy with no tasks.

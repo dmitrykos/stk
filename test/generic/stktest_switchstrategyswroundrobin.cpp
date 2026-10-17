@@ -509,5 +509,22 @@ TEST(SwitchStrategySWRoundRobin, YieldNoSleepSleepingTaskNotHandled)
     CHECK_FALSE_TEXT(g_SWRRYieldSleepingContext.result, "sleeping task is not in runnable list: yield not handled");
 }
 
+
+TEST(SwitchStrategySWRoundRobin, TimeSliceNotSupported)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategySWRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task, k1->GetUserTask());
+
+    // not handled for any of the tasks (not supported by this strategy)
+    CHECK_FALSE(strategy->OnTaskTimeSlice(k1));
+}
+
 } // namespace stk
 } // namespace test

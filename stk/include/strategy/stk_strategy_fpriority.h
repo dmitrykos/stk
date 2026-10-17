@@ -78,7 +78,8 @@ public:
         SLEEP_EVENT_API          = 1, //!< This strategy requires OnTaskSleep() / OnTaskWake() events to maintain per-priority runnable lists and keep \c m_ready_bitmap accurate.
         DEADLINE_MISSED_API      = 0, //!< This strategy does not use OnTaskDeadlineMissed() events.
         PRIORITY_INHERITANCE_API = 1, //!< This strategy expects OnTaskPriorityChange() events to support priority inheritance requests.
-        NOSLEEP_YIELD_API        = NoSleepYield //!< (1) enables OnTaskYield(): yielding task stays runnable and hands the CPU to same-priority peers.
+        NOSLEEP_YIELD_API        = NoSleepYield, //!< (1) enables OnTaskYield(): yielding task stays runnable and hands the CPU to same-priority peers.
+        TIMESLICE_API            = 0  //!< This strategy does not support KERNEL_TIMESLICE mode.
     };
 
     /*! \enum  EPriority

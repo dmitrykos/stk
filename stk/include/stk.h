@@ -53,10 +53,15 @@ template <> __stk_forceinline Timeout GetInitialSleepTicks<false>() { return 1; 
                         - KERNEL_HRT      - Hard Real-Time mode (must combine with STATIC or DYNAMIC).
                         - KERNEL_SYNC     - enables synchronization primitives (Mutex, Event, etc.).
                         - KERNEL_TICKLESS - enables tickless low-power operation. Requires
-                                           STK_TICKLESS_IDLE=1 in stk_config.h. Incompatible with
-                                           KERNEL_HRT (tickless suppresses the timer, which destroys
-                                           the precise periodicity HRT depends on - enforced by the
-                                           compile-time assertion TICKLESS_HRT_CONFLICT).
+                                            STK_TICKLESS_IDLE=1 in stk_config.h. Incompatible with
+                                            KERNEL_HRT (tickless suppresses the timer, which destroys
+                                            the precise periodicity HRT depends on - enforced by the
+                                            compile-time assertion TICKLESS_HRT_CONFLICT).
+                       - KERNEL_TIMESLICE - enables time-slicing: a running task is rotated behind its
+                                            same-priority peers when its quantum (ITask::GetTimeSlice,
+                                            IKernelService::SetTimeSlice) expires. Requires a strategy with
+                                            TIMESLICE_API == 1 (e.g. SwitchStrategyPT32_TS), incompatible
+                                            with KERNEL_HRT (TIMESLICE_HRT_CONFLICT).
                        KERNEL_STATIC and KERNEL_DYNAMIC are mutually exclusive.
     \tparam TSize:     Maximum number of concurrent tasks. Must be > 0.
     \tparam TStrategy: Task-switching strategy type (e.g. SwitchStrategyRoundRobin). Must inherit ITaskSwitchStrategy.
@@ -160,12 +165,12 @@ protected:
                    KernelTask at construction so the wait object can wake its owning task.
         */
         explicit KernelTask() : m_user(nullptr), m_stack(), m_state(STATE_NONE), m_time_sleep(NO_WAIT),
-            m_srt(), m_hrt(), m_rt_weight(), m_base_weight(), m_wait_obj()
+            m_srt(), m_hrt(), m_rt_weight(), m_base_weight(), m_wait_obj(), m_ts()
         {
             // bind to wait object
             if __stk_constexpr_cpp17 (IsSyncMode())
             {
-                m_wait_obj->m_task = this;
+                m_wait_obj[0].m_task = this;
             }
         }
 
@@ -371,7 +376,9 @@ protected:
 
             if __stk_constexpr_cpp17 (IsHrtMode())
             {
-                relative_deadline = (m_hrt[0].deadline - m_hrt[0].duration);
+                const typename KernelTask::HrtInfo &hrt = m_hrt[0];
+
+                relative_deadline = (hrt.deadline - hrt.duration);
             }
             else
             {
@@ -388,11 +395,13 @@ protected:
 
             if __stk_constexpr_cpp17 (IsSyncMode())
             {
+                typename KernelTask::WaitObject &wait_obj = m_wait_obj[0];
+
                 // likely task is sleeping during sync operation (see Wait)
-                if (m_wait_obj->IsWaiting())
+                if (wait_obj.IsWaiting())
                 {
                     // note: sync wait time is positive
-                    task_sleep = m_wait_obj->m_time_wait;
+                    task_sleep = wait_obj.m_time_wait;
 
                     // we shall account for only valid time (when task is waiting during sync operation)
                     if (task_sleep > NO_WAIT)
@@ -464,10 +473,38 @@ protected:
                 done        = false;
             }
 
-            Timeout periodicity; //!< Activation period in ticks: the task is re-activated every this many ticks.
-            Timeout deadline;    //!< Maximum allowed active duration in ticks (relative to switch-in). Exceeding this triggers OnDeadlineMissed().
-            Timeout duration;    //!< Ticks spent in the active (non-sleeping) state in the current period. Incremented by UpdateTaskState(); reset to 0 on switch-out.
-            volatile bool done;  //!< Set to true when the task signals work completion (via Yield() or on exit). Triggers HrtOnSwitchedOut() at the next context switch.
+            Timeout       periodicity; //!< Activation period in ticks: the task is re-activated every this many ticks.
+            Timeout       deadline;    //!< Maximum allowed active duration in ticks (relative to switch-in). Exceeding this triggers OnDeadlineMissed().
+            Timeout       duration;    //!< Ticks spent in the active (non-sleeping) state in the current period. Incremented by UpdateTaskState(); reset to 0 on switch-out.
+            volatile bool done;        //!< Set to true when the task signals work completion (via Yield() or on exit). Triggers HrtOnSwitchedOut() at the next context switch.
+        };
+
+        /*! \class TsInfo
+            \brief Per-task time-slice (KERNEL_TIMESLICE) metadata.
+            \note  Allocated only when TMode includes KERNEL_TIMESLICE. Zero-size otherwise.
+        */
+        struct TsInfo
+        {
+            TsInfo() : quantum(NO_TIME_SLICE), left(NO_TIME_SLICE)
+            {}
+
+            /*! \brief Clear all fields, ready for slot re-use.
+            */
+            void Clear()
+            {
+                quantum = NO_TIME_SLICE;
+                left    = NO_TIME_SLICE;
+            }
+
+            /*! \brief Restart the current slice.
+            */
+            void Reload()
+            {
+                left = quantum;
+            }
+
+            Timeout          quantum; //!< Configured slice (ticks), NO_TIME_SLICE if time-slicing is disabled for the task.
+            volatile Timeout left;    //!< Ticks left in the current slice. Written by the tick handler and, under the critical section, by task context.
         };
 
         /*! \class WaitObject
@@ -700,6 +737,18 @@ protected:
             {
                 m_base_weight[0] = NO_WEIGHT;
             }
+
+            // time-slice quantum of the task, the first slice starts full
+            if __stk_constexpr_cpp17 (IsTimesliceMode())
+            {
+                const Timeout quantum = user_task->GetTimeSlice();
+                STK_ASSERT(quantum >= NO_TIME_SLICE);
+
+                typename KernelTask::TsInfo &ts = m_ts[0];
+
+                ts.quantum = quantum;
+                ts.left    = quantum;
+            }
         }
 
         /*! \brief Reset this slot to the free (unbound) state, clearing all scheduling metadata.
@@ -710,7 +759,7 @@ protected:
             if __stk_constexpr_cpp17 (IsSyncMode())
             {
                 // should be freed from waiting on task exit
-                STK_ASSERT(!m_wait_obj->IsWaiting());
+                STK_ASSERT(!m_wait_obj[0].IsWaiting());
             }
 
             m_user       = nullptr;
@@ -724,7 +773,12 @@ protected:
             }
             else
             {
-                m_srt->Clear();
+                m_srt[0].Clear();
+            }
+
+            if __stk_constexpr_cpp17 (IsTimesliceMode())
+            {
+                m_ts[0].Clear();
             }
         }
 
@@ -747,7 +801,7 @@ protected:
             // Wake()/WakeAll() would corrupt whatever task the slot gets rebound to
             if __stk_constexpr_cpp17 (IsSyncMode())
             {
-                m_wait_obj->CancelNoWake();
+                m_wait_obj[0].CancelNoWake();
             }
 
             // make this task sleeping to switch it out from scheduling process
@@ -825,8 +879,10 @@ protected:
             STK_ASSERT(periodicity_tc < INT32_MAX);
             STK_ASSERT(deadline_tc < INT32_MAX);
 
-            m_hrt[0].periodicity = periodicity_tc;
-            m_hrt[0].deadline    = deadline_tc;
+            typename KernelTask::HrtInfo &hrt = m_hrt[0];
+
+            hrt.periodicity = periodicity_tc;
+            hrt.deadline    = deadline_tc;
 
             if (start_delay_tc > 0)
             {
@@ -844,18 +900,20 @@ protected:
         */
         void HrtOnSwitchedOut()
         {
-            const Timeout duration = m_hrt[0].duration;
+            typename KernelTask::HrtInfo &hrt = m_hrt[0];
+
+            const Timeout duration = hrt.duration;
 
             STK_ASSERT(duration >= 0);
 
-            const Timeout sleep = m_hrt[0].periodicity - duration;
+            const Timeout sleep = hrt.periodicity - duration;
             if (sleep > 0)
             {
                 ScheduleSleep(sleep);
             }
 
-            m_hrt[0].duration = 0;
-            m_hrt[0].done     = false;
+            hrt.duration = 0;
+            hrt.done     = false;
         }
 
         /*! \brief     Hard-fail HRT task when it missed its deadline.
@@ -911,6 +969,12 @@ protected:
 
             m_time_sleep = -ticks;
 
+            // task leaves the CPU voluntarily: its next run starts with a full slice
+            if __stk_constexpr_cpp17 (IsTimesliceMode())
+            {
+                m_ts[0].Reload();
+            }
+
             __stk_full_memfence();
         }
 
@@ -921,6 +985,12 @@ protected:
             if __stk_constexpr_cpp17 (TStrategy::NOSLEEP_YIELD_API)
             {
                 m_state |= STATE_YIELD_PENDING;
+
+                // yielding restarts the slice (tx_thread_relinquish semantics)
+                if __stk_constexpr_cpp17 (IsTimesliceMode())
+                {
+                    m_ts[0].Reload();
+                }
 
                 __stk_full_memfence();
             }
@@ -967,6 +1037,7 @@ protected:
         Weight            m_rt_weight  [STK_ALLOCATE_COUNT<TStrategy::WEIGHT_API, 1U, 1U, 0U>::Value]; //!< Run-time weight for weighted-round-robin scheduling. Zero-size for unweighted strategies.
         Weight            m_base_weight[STK_ALLOCATE_COUNT<TStrategy::WEIGHT_API, 1U, 1U, 0U>::Value]; //!< Run-time override of ITask::GetWeight() (NO_WEIGHT = not overridden). Zero-size for unweighted strategies.
         WaitObject        m_wait_obj   [STK_ALLOCATE_COUNT<TMode, KERNEL_SYNC, 1U, 0U>::Value];        //!< Embedded wait object for synchronization. Zero-size (no memory) if KERNEL_SYNC is not set.
+        TsInfo            m_ts         [STK_ALLOCATE_COUNT<TMode, KERNEL_TIMESLICE, 1U, 0U>::Value];   //!< Time-slice metadata. Zero-size (no memory) if KERNEL_TIMESLICE is not set.
     };
 
     /*! \class KernelService
@@ -1146,6 +1217,30 @@ protected:
                 STK_ASSERT(false);
 
                 result = NO_WEIGHT;
+            }
+
+            return result;
+        }
+
+        Timeout SetTimeSlice(TId tid, Timeout ticks) override
+        {
+            Timeout result;
+
+            if __stk_constexpr_cpp17 (IsTimesliceMode())
+            {
+                // critical section: avoid race with OnTick
+
+                const hw::CriticalSection::ScopedLock cs_;
+
+                result = m_kernel->OnSetTimeSlice(tid, ticks);
+            }
+            else
+            {
+                STK_UNUSED(tid);
+                STK_UNUSED(ticks);
+                STK_ASSERT(false);
+
+                result = NO_TIME_SLICE;
             }
 
             return result;
@@ -1493,7 +1588,7 @@ public:
                 // would leave a stale entry behind (later signaled or ticked as a timeout while the task is
                 // not waiting), so cancel the wait itself, this unlinks it, records WAIT_RESULT_CANCELED
                 // and wakes the task
-                canceled_wait = task->m_wait_obj->CancelIfWaiting();
+                canceled_wait = task->m_wait_obj[0].CancelIfWaiting();
             }
 
             if (!canceled_wait && task->IsSleeping())
@@ -1787,14 +1882,16 @@ protected:
         KernelTask *const caller = FindTaskBySP(m_platform.GetCallerSP());
         STK_ASSERT(caller != nullptr);
 
+        typename KernelTask::SrtInfo &srt = caller->m_srt[0];
+
         typename KernelTask::AddTaskRequest req = { .user_task = user_task };
-        caller->m_srt[0].add_task_req = &req;
+        srt.add_task_req = &req;
 
         // notify kernel
         ScheduleAddTask();
 
         // switch out and wait for completion (due to context switch request could be processed here)
-        if (caller->m_srt[0].add_task_req != nullptr)
+        if (srt.add_task_req != nullptr)
         {
             m_service.SwitchToNext();
         }
@@ -1802,13 +1899,13 @@ protected:
         // wait until request is consumed
         if __stk_constexpr_cpp17 (TStrategy::NOSLEEP_YIELD_API)
         {
-            while (caller->m_srt[0].add_task_req != nullptr)
+            while (srt.add_task_req != nullptr)
             {
                 __stk_relax_cpu();
             }
         }
 
-        STK_ASSERT(caller->m_srt[0].add_task_req == nullptr);
+        STK_ASSERT(srt.add_task_req == nullptr);
     }
 
     /*! \brief     Find kernel task by the bound ITask instance.
@@ -2025,8 +2122,11 @@ protected:
         enum { ticks = 1 };
     #endif
 
+        // elapsed ticks must be captured here: in tickless mode "ticks" is overwritten below
+        const Timeout elapsed_ticks = ticks;
+
         // advance internal timestamp
-        m_service.IncrementTicks(ticks);
+        m_service.IncrementTicks(elapsed_ticks);
 
         // consume elapsed and update to ticks to sleep
     #if STK_TICKLESS_IDLE
@@ -2035,7 +2135,13 @@ protected:
         // notify compiler that we ignore a return value of UpdateTasks
         STK_UNUSED(
     #endif
-        UpdateTasks(ticks));
+        UpdateTasks(elapsed_ticks));
+
+        // time-slice accounting for the task that just ran (after sleep/wake updates, before the FSM picks next)
+        if __stk_constexpr_cpp17 (IsTimesliceMode())
+        {
+            UpdateTimeslice(elapsed_ticks);
+        }
 
         // decide on a context switch
         return UpdateFsmState(idle, active);
@@ -2236,6 +2342,8 @@ protected:
             KernelTask *const task = FindTaskBySP(caller_SP);
             STK_ASSERT(task != nullptr);
 
+            typename KernelTask::WaitObject &wait_obj = task->m_wait_obj[0];
+
             // critical section: avoid race with OnTick
             {
                 // keep the task from being de-scheduled between ScheduleSleep() and the end of mutex->Unlock():
@@ -2243,7 +2351,7 @@ protected:
                 const hw::CriticalSection::ScopedLock cs_;
 
                 // configure waiting
-                task->m_wait_obj->SetupWait(sync_obj, timeout);
+                wait_obj.SetupWait(sync_obj, timeout);
 
                 // register ISyncObject if not yet
                 if (sync_obj->GetHead() == nullptr)
@@ -2269,8 +2377,8 @@ protected:
             // extract & clear this wait's result BEFORE mutex->Lock(): a contended Lock() recurses
             // into OnTaskWait() and reuses this same per-task WaitObject, which would otherwise
             // silently overwrite/clear our still-unread result
-            const EWaitResult result = task->m_wait_obj->GetWaitResult();
-            task->m_wait_obj->ClearState();
+            const EWaitResult result = wait_obj.GetWaitResult();
+            wait_obj.ClearState();
 
             // re-lock mutex when returning to the task's execution space
             mutex->Lock();
@@ -2362,6 +2470,55 @@ protected:
         m_strategy.OnTaskWeightChange(task, prev_weight);
 
         return prev_base;
+    }
+
+    Timeout OnSetTimeSlice(TId tid, Timeout ticks)
+    {
+        STK_ASSERT(tid != TID_NONE);
+        STK_ASSERT(ticks >= NO_TIME_SLICE);
+
+        KernelTask *const task = FindTaskByUserTask(GetUserTaskFromTid(tid));
+        STK_ASSERT(task != nullptr);
+
+        typename KernelTask::TsInfo &ts = task->m_ts[0];
+
+        const Timeout prev = ts.quantum;
+
+        ts.quantum = ticks;
+        ts.Reload();
+
+        return prev;
+    }
+
+    /*! \brief     Charge the running task and rotate it behind its same-priority peers when its slice expires.
+        \note      KERNEL_TIMESLICE only. Called from OnTick() after UpdateTasks() and before UpdateFsmState().
+        \param[in] elapsed_ticks: Ticks since the previous OnTick() (always 1 in non-tickless mode).
+    */
+    void UpdateTimeslice(const Timeout elapsed_ticks)
+    {
+        KernelTask *const task = m_task_now;
+
+        // only a real, runnable task is charged: not the sleep trap, not a task which is leaving
+        if ((task != nullptr) &&
+            ((m_fsm_state == FSM_STATE_SWITCHING) || (m_fsm_state == FSM_STATE_WAKING)) &&
+            task->IsBusy() && !task->IsSleeping())
+        {
+            typename KernelTask::TsInfo &ts = task->m_ts[0];
+
+            if (ts.quantum != NO_TIME_SLICE)
+            {
+                ts.left -= elapsed_ticks;
+
+                if (ts.left <= 0)
+                {
+                    ts.Reload();
+
+                    // strategy rotates to a same-priority peer if there is one, otherwise (or if the
+                    // task is not eligible) the task keeps running with a fresh slice
+                    STK_UNUSED(m_strategy.OnTaskTimeSlice(task));
+                }
+            }
+        }
     }
 
     void OnRestoreWeight(TId tid, ISyncObject *sobj)
@@ -2521,10 +2678,12 @@ protected:
                     // in HRT mode we trace how long task spent in active state (doing some work)
                     if (task->IsBusy())
                     {
-                        task->m_hrt[0].duration += elapsed_ticks;
+                        typename KernelTask::HrtInfo &hrt = task->m_hrt[0];
+
+                        hrt.duration += elapsed_ticks;
 
                         // check if deadline is missed (HRT failure)
-                        if (task->HrtIsDeadlineMissed(task->m_hrt[0].duration))
+                        if (task->HrtIsDeadlineMissed(hrt.duration))
                         {
                             // report deadline overrun to the strategy which supports overrun recovery
                             if __stk_constexpr_cpp17 (TStrategy::DEADLINE_MISSED_API)
@@ -2594,11 +2753,13 @@ protected:
                 {
                     KernelTask *const task = &m_task_storage[i];
 
-                    if (task->m_srt[0].add_task_req != nullptr)
-                    {
-                        AllocateAndAddNewTask(task->m_srt[0].add_task_req->user_task);
+                    typename KernelTask::SrtInfo &srt = task->m_srt[0];
 
-                        task->m_srt[0].add_task_req = nullptr;
+                    if (srt.add_task_req != nullptr)
+                    {
+                        AllocateAndAddNewTask(srt.add_task_req->user_task);
+
+                        srt.add_task_req = nullptr;
                         __stk_full_memfence();
                     }
                 }
@@ -2887,6 +3048,7 @@ protected:
     static constexpr bool IsHrtMode()      { return ((TMode & KERNEL_HRT) != 0U); }
     static constexpr bool IsSyncMode()     { return ((TMode & KERNEL_SYNC) != 0U); }
     static constexpr bool IsTicklessMode() { return ((TMode & KERNEL_TICKLESS) != 0U); }
+    static constexpr bool IsTimesliceMode(){ return ((TMode & KERNEL_TIMESLICE) != 0U); }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
     STK_STATIC_ASSERT_N(TASKS_MAX, TASKS_MAX != 0U);
@@ -2906,6 +3068,16 @@ protected:
     // which destroys the precise periodicity HRT depends on.
     STK_STATIC_ASSERT_N(TICKLESS_HRT_CONFLICT,
         (((TMode & KERNEL_TICKLESS) == 0U) || ((TMode & KERNEL_HRT) == 0U)));
+
+    // If hit here: KERNEL_TIMESLICE is incompatible with KERNEL_HRT, HRT tasks are scheduled by
+    // periodicity and Yield() signals job completion.
+    STK_STATIC_ASSERT_N(TIMESLICE_HRT_CONFLICT,
+        (((TMode & KERNEL_TIMESLICE) == 0U) || ((TMode & KERNEL_HRT) == 0U)));
+
+    // If hit here: KERNEL_TIMESLICE requires a strategy with a sticky GetNext() and OnTaskTimeSlice()
+    // (TIMESLICE_API == 1), e.g. SwitchStrategyPT32_TS.
+    STK_STATIC_ASSERT_N(TIMESLICE_STRATEGY_UNSUPPORTED,
+        (((TMode & KERNEL_TIMESLICE) == 0U) || (TStrategy::TIMESLICE_API != 0)));
 
     // If hit here: Strategy which supports Priority Inheritance API must also support Weight API.
     STK_STATIC_ASSERT_N(KERNEL_MODE_MUST_BE_SET, (TStrategy::PRIORITY_INHERITANCE_API && TStrategy::WEIGHT_API) ||

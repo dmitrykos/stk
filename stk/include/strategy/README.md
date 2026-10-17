@@ -13,13 +13,15 @@ Each strategy is a standalone header-only class that implements the `ITaskSwitch
 | `stk_strategy_rrobin.h`     | `SwitchStrategyRoundRobin`                     | `SwitchStrategyRR` / `SwitchStrategyRR_NSY` ¹          | ✅ Free (MIT)  |
 | `stk_strategy_swrrobin.h`   | `SwitchStrategySmoothWeightedRoundRobin`       | `SwitchStrategySWRR` / `SwitchStrategySWRR_NSY` ¹      | ✅ Free (MIT)  |
 | `stk_strategy_fpriority.h`  | `SwitchStrategyFixedPriority<N>`               | `SwitchStrategyFP32` / `SwitchStrategyFP32_NSY` ¹      | ✅ Free (MIT)  |
-| `stk_strategy_pthreshold.h` | `SwitchStrategyPreemptionThreshold<N>`         | `SwitchStrategyPT32`                                   | ✅ Free (MIT)  |
+| `stk_strategy_pthreshold.h` | `SwitchStrategyPreemptionThreshold<N>`         | `SwitchStrategyPT32` / `SwitchStrategyPT32_TS` ²       | ✅ Free (MIT)  |
 | `stk_strategy_edf.h`        | `SwitchStrategyEDF`                            | —                                                      | ✅ Free (MIT)  |
 | `stk_strategy_monotonic.h`  | `SwitchStrategyMonotonic<Type>`                | `SwitchStrategyRM` / `SwitchStrategyDM`                | ✅ Free (MIT)  |
 | `stk_strategy_mcas.h`       | `SwitchStrategyMCAS`                           | —                                                      | 🔒 Commercial |
 | `stk_strategy_mcas4.h`      | `SwitchStrategyMCAS4`                          | —                                                      | 🔒 Commercial |
 
 ¹ `_NSY` = **N**o-**S**leep **Y**ield variant: `Yield()` keeps the task runnable instead of putting it to sleep for one tick. The long form of the Round-Robin variant is `SwitchStrategyRoundRobinNoSleepYield`. See [Yield Behaviour](#yield-behaviour).
+
+² `_TS` = **T**ime-**S**lice variant (`SwitchStrategyPreemptionThreshold<N, true>`): per-task time-slice quanta for use with `KERNEL_TIMESLICE`. See [Time-slicing](#time-slicing-switchstrategypt32_ts).
 
 ---
 
@@ -86,9 +88,22 @@ Fixed-priority scheduling with ThreadX-style preemption-threshold. Each task has
 
 **Algorithm:** Same per-level round-robin structure as Fixed-Priority (ready bitmap, O(1) level selection) plus a *held* bitmap. A task becomes *held* when it is selected while *T* > *P*. A held task keeps (or resumes) the CPU as long as no ready task is above its threshold, and is never time-sliced. The hold ends when the task sleeps, is removed, yields, or its threshold is lowered to its priority. Priority and threshold are packed into the task weight as `(priority << 8) | threshold` (`MakeWeight()` / `FromThreadX()`). Priority inheritance raises the effective priority only; the effective threshold is `max(configured threshold, current priority)`. The threshold can be changed at run-time with `ChangeThreshold()` (equivalent of `tx_thread_preemption_change`). `Yield()` is always handled by the strategy (`tx_thread_relinquish` semantics): the hold is released and the CPU goes to the next task of the same priority.
 
-**Capability flags:** `WEIGHT_API = 1` (weight = encoded priority/threshold), `SLEEP_EVENT_API = 1`, `PRIORITY_INHERITANCE_API = 1`, `NOSLEEP_YIELD_API = 1`
+#### Time-slicing (`SwitchStrategyPT32_TS`)
 
-**Differences from ThreadX:** STK priority numbering, at most 32 priority levels, tick-based time slices (1 tick) with no per-task time-slice length.
+`SwitchStrategyPT32_TS` (`SwitchStrategyPreemptionThreshold<32, true>`) adds ThreadX-style per-task time-slices. Use it with the `KERNEL_TIMESLICE` kernel mode (not compatible with `KERNEL_HRT`):
+
+```cpp
+static stk::Kernel<stk::KERNEL_STATIC | stk::KERNEL_TIMESLICE, 3, stk::SwitchStrategyPT32_TS, stk::PlatformDefault> kernel;
+```
+
+- **Quantum:** returned by `ITask::GetTimeSlice()` (ticks, read once when the task is added); `NO_TIME_SLICE` (default) means the task runs until it blocks, yields or is preempted. Change it at run-time with `stk::SetTimeSlice()` / `IKernelService::SetTimeSlice()` (equivalent of `tx_thread_time_slice_change`), which also reloads the slice.
+- **Rotation:** `GetNext()` is *sticky*: the selected task keeps the CPU until its quantum expires (`OnTaskTimeSlice()`), it yields, or it leaves the runnable set. Only the highest ready priority level is rotated, a lower level never runs while a higher one is ready. When the quantum expires the level rotates to the next task of the same priority; a task alone at its level just continues with a fresh slice.
+- **Held tasks are not time-sliced** (as in ThreadX): a task holding its threshold (*T* > *P*) keeps the CPU until it sleeps, yields or is removed. The slice is reloaded when a task goes to sleep or yields.
+- **Without `_TS`** (`SwitchStrategyPT32`) the slice is fixed at 1 tick: every `GetNext()` rotates the highest ready level.
+
+**Capability flags:** `WEIGHT_API = 1` (weight = encoded priority/threshold), `SLEEP_EVENT_API = 1`, `PRIORITY_INHERITANCE_API = 1`, `NOSLEEP_YIELD_API = 1`, `TIMESLICE_API = 0` (`1` for `_TS`)
+
+**Differences from ThreadX:** STK priority numbering, at most 32 priority levels; without `_TS` the time slice is fixed at 1 tick with no per-task length, with `_TS` the quantum is in kernel ticks.
 
 **Best for:**
 - Protecting short sequences of cooperating tasks from preemption by mid-priority tasks without using mutexes, and reducing needless context switches.
@@ -169,6 +184,7 @@ Is CPU time equal for all tasks?
     ├── Static weights, proportional fairness  → SwitchStrategySWRR
     ├── Hard priorities, classic RTOS model    → SwitchStrategyFP32
     ├── Hard priorities + preemption-threshold → SwitchStrategyPT32
+    ├── ...and per-task time-slices (ThreadX-like) → SwitchStrategyPT32_TS + KERNEL_TIMESLICE
     ├── Periodic tasks, formal guarantees      → SwitchStrategyRM / SwitchStrategyDM
     ├── Dynamic deadlines, max utilisation     → SwitchStrategyEDF
     ├── Mixed-criticality (2-level)            → SwitchStrategyMCAS   [commercial]
@@ -188,7 +204,7 @@ Is CPU time equal for all tasks?
 | Non-HRT, `RR_NSY`                                | Task stays runnable; the CPU goes to the next task in rotation.                                              |
 | Non-HRT, `SWRR_NSY`                              | Task stays runnable; it is skipped in the next selection (unless it is the only runnable task).              |
 | Non-HRT, `FP32_NSY`                              | Task stays runnable; the CPU goes to the next task of the **same** priority only.                            |
-| Non-HRT, `PT32`                                  | Always handled by the strategy; releases the task's threshold hold, then as `FP32_NSY`.                      |
+| Non-HRT, `PT32`, `PT32_TS`                       | Always handled by the strategy; releases the task's threshold hold, then as `FP32_NSY`. `PT32_TS` also restarts the slice. |
 | HRT (`EDF`, `RM`, `DM`)                          | `Yield()` signals completion of the current job: the task sleeps until its next period. Flag is ignored.     |
 
 If a strategy declines a yield (for example the task is not in its runnable set), the kernel falls back to the legacy one-tick sleep.
@@ -197,16 +213,18 @@ If a strategy declines a yield (for example the task is not in its runnable set)
 
 ## Capability Flags Reference
 
-| Flag              | Value | Meaning                                                                |
-|-------------------|-------|------------------------------------------------------------------------|
-| `WEIGHT_API`      | `0`   | Strategy ignores `GetWeight()` / `SetCurrentWeight()`                  |
-| `WEIGHT_API`      | `1`   | Strategy uses `GetWeight()` for priority or SWRR weighting             |
-| `SLEEP_EVENT_API` | `0`   | Strategy does **not** use `OnTaskSleep()` / `OnTaskWake()`             |
-| `SLEEP_EVENT_API` | `1`   | Strategy **requires** `OnTaskSleep()` / `OnTaskWake()` from the kernel |
-| `PRIORITY_INHERITANCE_API` | `0` | Strategy does not handle `OnTaskWeightChange()` events           |
-| `PRIORITY_INHERITANCE_API` | `1` | Strategy handles `OnTaskWeightChange()` (priority inheritance, `SetWeight()`); requires `WEIGHT_API = 1` |
-| `NOSLEEP_YIELD_API` | `0` | Kernel performs the legacy yield: the task sleeps for one tick       |
-| `NOSLEEP_YIELD_API` | `1` | Strategy implements `OnTaskYield()`; the yielding task stays runnable (non-HRT modes only) |
+| Flag                       | Value | Meaning                                                                                                                                 |
+|----------------------------|:-----:|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `WEIGHT_API`               | `0`   | Strategy ignores `GetWeight()` / `SetCurrentWeight()`                                                                                   |
+| `WEIGHT_API`               | `1`   | Strategy uses `GetWeight()` for priority or SWRR weighting                                                                              |
+| `SLEEP_EVENT_API`          | `0`   | Strategy does **not** use `OnTaskSleep()` / `OnTaskWake()`                                                                              |
+| `SLEEP_EVENT_API`          | `1`   | Strategy **requires** `OnTaskSleep()` / `OnTaskWake()` from the kernel                                                                  |
+| `PRIORITY_INHERITANCE_API` | `0`   | Strategy does not handle `OnTaskWeightChange()` events                                                                                  |
+| `PRIORITY_INHERITANCE_API` | `1`   | Strategy handles `OnTaskWeightChange()` (priority inheritance, `SetWeight()`); requires `WEIGHT_API = 1`                                |
+| `NOSLEEP_YIELD_API`        | `0`   | Kernel performs the legacy yield: the task sleeps for one tick                                                                          |
+| `NOSLEEP_YIELD_API`        | `1`   | Strategy implements `OnTaskYield()`; the yielding task stays runnable (non-HRT modes only)                                              |
+| `TIMESLICE_API`            | `0`   | Strategy does not support `KERNEL_TIMESLICE` (`OnTaskTimeSlice()` is never called)                                                      |
+| `TIMESLICE_API`            | `1`   | `GetNext()` is sticky (does not rotate same-priority peers itself) and `OnTaskTimeSlice()` rotates them; required by `KERNEL_TIMESLICE` |
 
 ---
 
