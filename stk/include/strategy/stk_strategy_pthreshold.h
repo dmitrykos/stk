@@ -27,6 +27,11 @@ namespace stk {
            fixed-priority task.
 
     \tparam MAX_PRIORITIES  Number of priority levels, [1, 32].
+    \tparam TIMESLICE       \c true to enable time-slicing with per-task quanta for use with
+                           stk::KERNEL_TIMESLICE: GetNext() becomes sticky (the selected task of a
+                           level keeps running) and the level is rotated only by OnTaskTimeSlice(),
+                           OnTaskYield() or when the running task leaves the runnable set.
+                           \c false (default): fixed 1-tick round-robin on every GetNext().
 
     \par Priority convention
     STK convention is used: \b higher number = higher priority. ThreadX uses the opposite
@@ -60,10 +65,11 @@ namespace stk {
            via IKernelTask::GetBaseWeight().
     \note  Yield() is handled by OnTaskYield() (tx_thread_relinquish semantics) in non-HRT modes.
     \note  Differences from ThreadX: STK priority numbering (higher = more important), at most
-           32 priority levels, tick-based slices (1 tick) with no per-task time-slice length.
+           32 priority levels; without TIMESLICE the slice is fixed at 1 tick, with TIMESLICE
+           (stk::KERNEL_TIMESLICE) the per-task quantum comes from ITask::GetTimeSlice().
     \see   SwitchStrategyPT32, SwitchStrategyFixedPriority
 */
-template <uint8_t MAX_PRIORITIES>
+template <uint8_t MAX_PRIORITIES, bool TIMESLICE = false>
 class SwitchStrategyPreemptionThreshold final : public ITaskSwitchStrategy
 {
 public:
@@ -76,7 +82,8 @@ public:
         SLEEP_EVENT_API          = 1, //!< Requires OnTaskSleep() / OnTaskWake() to maintain per-priority lists.
         DEADLINE_MISSED_API      = 0, //!< Not used.
         PRIORITY_INHERITANCE_API = 1, //!< OnTaskWeightChange() events are handled.
-        NOSLEEP_YIELD_API        = 1  //!< OnTaskYield() events are handled.
+        NOSLEEP_YIELD_API        = 1, //!< OnTaskYield() events are handled.
+        TIMESLICE_API            = (TIMESLICE ? 1 : 0) //!< Sticky GetNext() and OnTaskTimeSlice() (see TIMESLICE template parameter).
     };
 
     /*! \brief     Build a task weight from an STK priority and threshold.
@@ -100,7 +107,7 @@ public:
 
     /*! \brief Construct an empty strategy.
     */
-    explicit SwitchStrategyPreemptionThreshold() : m_tasks(), m_sleep(), m_ready_bitmap(0U), m_held_bitmap(0U), m_running(nullptr), m_prev(), m_held()
+    explicit SwitchStrategyPreemptionThreshold() : m_tasks(), m_sleep(), m_ready_bitmap(0U), m_held_bitmap(0U), m_advance_bitmap(0U), m_running(nullptr), m_prev(), m_held()
     {
         STK_STATIC_ASSERT_DESC(MAX_PRIORITIES <= 32U, "MAX_PRIORITIES exceeds 32-bit bitmap width");
     }
@@ -127,7 +134,8 @@ public:
 
         AddActive(task);
 
-        if (is_tail)
+        // sticky mode: the cursor stays on the running task, a new task must not take over the CPU
+        if (is_tail && !TIMESLICE)
         {
             m_prev[prio] = task;
         }
@@ -180,8 +188,24 @@ public:
 
             if (next == nullptr)
             {
-                next = (*m_prev[hi]->GetNext());
-                m_prev[hi] = next;
+                bool advance = true;
+
+                if __stk_constexpr_cpp17 (TIMESLICE)
+                {
+                    // sticky: the cursor moves only when a rotation was requested for this level
+                    advance = ((m_advance_bitmap & (1U << hi)) != 0U);
+                    m_advance_bitmap &= ~(1U << hi);
+                }
+
+                if (advance)
+                {
+                    next = (*m_prev[hi]->GetNext());
+                    m_prev[hi] = next;
+                }
+                else
+                {
+                    next = m_prev[hi];
+                }
 
                 if (GetTaskThreshold(next) > hi)
                 {
@@ -320,9 +344,46 @@ public:
 
             m_prev[prio] = task;
             handled      = true;
+
+            if __stk_constexpr_cpp17 (TIMESLICE)
+            {
+                m_advance_bitmap |= (1U << prio);
+            }
         }
 
         return handled;
+    }
+
+    /*! \brief     Time slice of the running task expired: rotate to the next task of the same priority.
+        \param[in] task: The running task.
+        \return    \c true if the level was rotated; \c false if the task has no same-priority peer,
+                   is held by its preemption-threshold (held tasks are never time-sliced, as in
+                   ThreadX) or is not in a runnable list.
+        \note      Unlike OnTaskYield() the hold of the task is not released.
+    */
+    bool OnTaskTimeSlice(IKernelTask *task) override
+    {
+        bool rotated = false;
+
+        if __stk_constexpr_cpp17 (TIMESLICE)
+        {
+            STK_ASSERT(task != nullptr);
+
+            const Priority prio = GetTaskPriority(task);
+
+            // rotation requires a same-priority peer: a lone task simply continues (with a fresh slice
+            // reloaded by the kernel), no rotation request is left pending for the level
+            if ((prio < MAX_PRIORITIES) && (task->GetHead() == &m_tasks[prio]) && (m_held[prio] != task) &&
+                (m_tasks[prio].GetSize() > 1U))
+            {
+                m_prev[prio] = task;
+                rotated      = true;
+
+                m_advance_bitmap |= (1U << prio);
+            }
+        }
+
+        return rotated;
     }
 
     /*! \brief     Change the preemption-threshold of a task at run-time (tx_thread_preemption_change).
@@ -383,12 +444,23 @@ protected:
         {
             m_prev[prio] = nullptr;
             m_ready_bitmap &= ~(1U << prio);
+
+            if __stk_constexpr_cpp17 (TIMESLICE)
+            {
+                m_advance_bitmap &= ~(1U << prio);
+            }
         }
         else if (m_prev[prio] == task)
         {
             // cursor was on the removed task: step back so GetNext() returns its successor;
             // otherwise leave the rotation untouched
             m_prev[prio] = (*next->GetPrev());
+
+            if __stk_constexpr_cpp17 (TIMESLICE)
+            {
+                // sticky mode: the successor must run next
+                m_advance_bitmap |= (1U << prio);
+            }
         }
     }
 
@@ -461,6 +533,7 @@ private:
     IKernelTask::ListHeadType m_sleep;                 //!< Sleeping tasks.
     uint32_t                  m_ready_bitmap;          //!< Bit i set when m_tasks[i] is non-empty.
     uint32_t                  m_held_bitmap;           //!< Bit i set when m_held[i] is a task holding its preemption-threshold.
+    uint32_t                  m_advance_bitmap;        //!< Bit i set: next GetNext() at level i advances the cursor (TIMESLICE only).
     IKernelTask              *m_running;               //!< Task returned by the last GetNext() (nullptr if none or it left the runnable set).
     IKernelTask              *m_prev[MAX_PRIORITIES];  //!< Per-level round-robin cursor.
     IKernelTask              *m_held[MAX_PRIORITIES];  //!< Per-level task currently holding its threshold (at most one per level, as in ThreadX).
@@ -470,6 +543,12 @@ private:
     \brief   SwitchStrategyPreemptionThreshold with 32 priority levels.
 */
 typedef SwitchStrategyPreemptionThreshold<32> SwitchStrategyPT32;
+
+/*! \typedef SwitchStrategyPT32_TS
+    \brief   SwitchStrategyPreemptionThreshold with 32 priority levels and per-task time-slicing,
+             for use with stk::KERNEL_TIMESLICE.
+*/
+typedef SwitchStrategyPreemptionThreshold<32, true> SwitchStrategyPT32_TS;
 
 } // namespace stk
 

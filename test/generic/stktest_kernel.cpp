@@ -2842,6 +2842,397 @@ TEST(Kernel, SetWeightKeepsHigherInheritedWeight)
     CHECK_EQUAL(5, ktasks[0]->GetWeight());
 }
 
+// ---------------------------------------------------------------------------- //
+// IKernelService::SetTimeSlice() (KERNEL_TIMESLICE)                             //
+// ---------------------------------------------------------------------------- //
+
+// task mock with a configurable time-slice quantum (ITask::GetTimeSlice)
+template <Timeout TQuantum>
+class TaskMockTS : public TaskMock<ACCESS_USER>
+{
+public:
+    Timeout GetTimeSlice() const override { return TQuantum; }
+
+    // priority == threshold: the task is not "held" by preemption-threshold (held tasks are never
+    // time-sliced), all TaskMockTS tasks share one priority level and therefore rotate
+    Weight GetWeight() const override { return SwitchStrategyPT32_TS::MakeWeight(1, 1); }
+};
+
+typedef Kernel<KERNEL_STATIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> KernelTsType;
+
+TEST(Kernel, SetTimeSliceReturnsPreviousQuantum)
+{
+    KernelTsType kernel;
+    TaskMockTS<5> task1;
+    TaskMockTS<NO_TIME_SLICE> task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    const TId task1_id = task1.GetTid();
+    const TId task2_id = task2.GetTid();
+
+    // initial quantum comes from ITask::GetTimeSlice()
+    CHECK_EQUAL(5, IKernelService::GetInstance()->SetTimeSlice(task1_id, 3));
+
+    // previous value is the one set last (can be passed back to restore)
+    CHECK_EQUAL(3, IKernelService::GetInstance()->SetTimeSlice(task1_id, NO_TIME_SLICE));
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(task1_id, 5));
+
+    // task without time-slicing: previous quantum is NO_TIME_SLICE
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(task2_id, 2));
+    CHECK_EQUAL(2, IKernelService::GetInstance()->SetTimeSlice(task2_id, NO_TIME_SLICE));
+}
+
+TEST(Kernel, SetTimeSliceHelperCallingTask)
+{
+    KernelTsType kernel;
+    TaskMockTS<4> task1;
+    TaskMockTS<NO_TIME_SLICE> task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is the running task after Start(): stk::SetTimeSlice(ticks) resolves it via GetTid()
+    CHECK_EQUAL((Word)task1.GetStack(), platform->m_stack_active->SP);
+    CHECK_EQUAL(4, stk::SetTimeSlice(7));
+    CHECK_EQUAL(7, stk::SetTimeSlice(task1.GetTid(), 4));
+}
+
+TEST(Kernel, SetTimeSliceRotatesOnExpiry)
+{
+    KernelTsType kernel;
+    TaskMockTS<NO_TIME_SLICE> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // no slicing: task1 keeps the CPU
+    platform->ProcessTick();
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // enable a 2 tick quantum at run-time
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(task1.GetTid(), 2));
+
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP); // 1 tick left
+
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task2.GetStack(), active->SP); // slice expired: rotated behind peer
+}
+
+TEST(Kernel, SetTimeSliceReloadsSlice)
+{
+    KernelTsType kernel;
+    TaskMockTS<3> task1;
+    TaskMockTS<NO_TIME_SLICE> task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // consume 2 of 3 ticks of the slice
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // setting the quantum (even to the same value) restarts the slice
+    CHECK_EQUAL(3, IKernelService::GetInstance()->SetTimeSlice(task1.GetTid(), 3));
+
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP); // would have rotated without the reload
+
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task2.GetStack(), active->SP);
+}
+
+TEST(Kernel, SetTimeSliceDisableStopsRotation)
+{
+    KernelTsType kernel;
+    TaskMockTS<2> task1;
+    TaskMockTS<NO_TIME_SLICE> task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    platform->ProcessTick();
+
+    // disable slicing before the slice expires
+    CHECK_EQUAL(2, IKernelService::GetInstance()->SetTimeSlice(task1.GetTid(), NO_TIME_SLICE));
+
+    platform->ProcessTick();
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+}
+
+TEST(Kernel, SetTimeSliceNotSupportedWithoutMode)
+{
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    const TId tid = task.GetTid();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->SetTimeSlice(tid, 1);
+        CHECK_TEXT(false, "SetTimeSlice requires KERNEL_TIMESLICE");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    // release build behavior: returns NO_TIME_SLICE
+    g_TestContext.ExpectAssert(true);
+    g_TestContext.RethrowAssertException(false);
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(tid, 1));
+    g_TestContext.RethrowAssertException(true);
+    g_TestContext.ExpectAssert(false);
+}
+
+TEST(Kernel, SetTimeSliceNegativeFails)
+{
+    KernelTsType kernel;
+    TaskMockTS<2> task1;
+    TaskMockTS<2> task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->SetTimeSlice(task1.GetTid(), -1);
+        CHECK_TEXT(false, "negative quantum must not be accepted");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+TEST(Kernel, SetTimeSliceUnknownTaskFails)
+{
+    KernelTsType kernel;
+    TaskMockTS<2> task1, task2;
+    TaskMockTS<2> not_added;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->SetTimeSlice(not_added.GetTid(), 1);
+        CHECK_TEXT(false, "task is not known to the kernel");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        IKernelService::GetInstance()->SetTimeSlice(TID_NONE, 1);
+        CHECK_TEXT(false, "TID_NONE is not a valid task id");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
+
+TEST(Kernel, SetTimeSliceSlotReuseAfterRemoveTask)
+{
+    // RemoveTask() unbinds the slot (TsInfo::Clear()), a new task must get the slot with its own quantum
+    Kernel<KERNEL_DYNAMIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockTS<3> task1;
+    TaskMockTS<NO_TIME_SLICE> task2, task3;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+
+    // free the slot of task1 (had a 3 tick quantum) and re-use it for task3 (no time-slicing)
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL(1, kernel.GetSwitchStrategy()->GetSize());
+
+    kernel.AddTask(&task3);
+    CHECK_EQUAL(2, kernel.GetSwitchStrategy()->GetSize());
+
+    kernel.Start();
+
+    // either of the two tasks may run first (depends on the order of the strategy), find which one
+    CHECK_TRUE((active->SP == (Word)task2.GetStack()) || (active->SP == (Word)task3.GetStack()));
+    TaskMockTS<NO_TIME_SLICE> &running = ((active->SP == (Word)task2.GetStack()) ? task2 : task3);
+    TaskMockTS<NO_TIME_SLICE> &other   = ((&running == &task2) ? task3 : task2);
+
+    // nobody has a quantum: no rotation, nothing is inherited from the removed task1
+    for (int32_t i = 0; i < 6; ++i)
+        platform->ProcessTick();
+
+    CHECK_EQUAL((Word)running.GetStack(), active->SP);
+
+    // slots of both tasks (including the re-used one) report NO_TIME_SLICE as the previous quantum
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(other.GetTid(), 2));
+    CHECK_EQUAL(NO_TIME_SLICE, IKernelService::GetInstance()->SetTimeSlice(running.GetTid(), 2));
+
+    // the running task now rotates to the other one after 2 ticks
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)running.GetStack(), active->SP);
+
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)other.GetStack(), active->SP);
+}
+
+typedef KernelMock<KERNEL_STATIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> KernelTsMock;
+
+static struct TimesliceYieldRelaxCpuContext
+{
+    TimesliceYieldRelaxCpuContext()
+    {
+        Clear();
+    }
+
+    void Clear()
+    {
+        counter = 0;
+        kernel  = NULL;
+        tid     = TID_NONE;
+        idle    = NULL;
+        active  = NULL;
+    }
+
+    uint32_t       counter;
+    KernelTsMock  *kernel;
+    TId            tid;    //!< id of the yielding task
+    Stack         *idle;   //!< stack switched out by the consumed yield
+    Stack         *active; //!< stack switched in by the consumed yield
+
+    // busy-wait of KernelTask::BusyWaitWhileYielding(): the pending yield is consumed by the ISR
+    // ForceContextSwitch path WITHOUT a tick, thus the yield itself does not charge the time slice
+    void Process()
+    {
+        if (counter == 0)
+        {
+            CHECK_TRUE(kernel->CallForceContextSwitch(tid, idle, active));
+        }
+
+        ++counter;
+    }
+}
+g_TimesliceYieldRelaxCpuContext;
+
+static void TimesliceYieldRelaxCpu()
+{
+    g_TimesliceYieldRelaxCpuContext.Process();
+}
+
+TEST(Kernel, SetTimeSliceYieldRestartsSlice)
+{
+    // KernelTask::ScheduleYield() reloads the slice (tx_thread_relinquish semantics): a task which yielded
+    // starts its next run with a full quantum
+    KernelTsMock kernel;
+    TaskMockTS<3> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&idle = platform->m_stack_idle, *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // consume 2 of 3 ticks of task1 slice: 1 tick is left
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    g_TimesliceYieldRelaxCpuContext.Clear();
+    g_TimesliceYieldRelaxCpuContext.kernel = &kernel;
+    g_TimesliceYieldRelaxCpuContext.tid    = task1.GetTid();
+    g_RelaxCpuHandler = TimesliceYieldRelaxCpu;
+
+    // task1 yields to its peer: the slice of task1 is restarted
+    Yield();
+    CHECK_EQUAL(1, g_TimesliceYieldRelaxCpuContext.counter);
+
+    // the yield is consumed by the ISR path which returns the stacks (the mock platform is not updated by it)
+    CHECK_EQUAL((Word)task1.GetStack(), g_TimesliceYieldRelaxCpuContext.idle->SP);
+    CHECK_EQUAL((Word)task2.GetStack(), g_TimesliceYieldRelaxCpuContext.active->SP);
+
+    // apply the switch to the mock platform (a real platform driver does it on the context switch), otherwise
+    // the next Yield() would be attributed to task1 by its stack pointer
+    idle   = g_TimesliceYieldRelaxCpuContext.idle;
+    active = g_TimesliceYieldRelaxCpuContext.active;
+
+    // task2 yields back to task1 (this does not touch the slice of task1)
+    g_TimesliceYieldRelaxCpuContext.Clear();
+    g_TimesliceYieldRelaxCpuContext.kernel = &kernel;
+    g_TimesliceYieldRelaxCpuContext.tid    = task2.GetTid();
+
+    Yield();
+    CHECK_EQUAL(1, g_TimesliceYieldRelaxCpuContext.counter);
+    CHECK_EQUAL((Word)task2.GetStack(), g_TimesliceYieldRelaxCpuContext.idle->SP);
+    CHECK_EQUAL((Word)task1.GetStack(), g_TimesliceYieldRelaxCpuContext.active->SP);
+
+    idle   = g_TimesliceYieldRelaxCpuContext.idle;
+    active = g_TimesliceYieldRelaxCpuContext.active;
+
+    g_RelaxCpuHandler = NULL;
+
+    // task1 has a full 3 tick slice again (without the reload on yield it would expire on the 1st tick)
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // slice expired: rotated behind the peer
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task2.GetStack(), active->SP);
+}
+
 TEST(Kernel, EnumTasks)
 {
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;

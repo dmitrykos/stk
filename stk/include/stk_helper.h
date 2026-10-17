@@ -576,6 +576,29 @@ static __stk_forceinline Weight SetWeight(Weight weight)
     return SetWeight(GetTid(), weight);
 }
 
+/*! \brief     Change the time-slice quantum of a task at run-time and reload its slice.
+    \param[in] tid: Id of the task.
+    \param[in] ticks: New quantum (ticks), NO_TIME_SLICE disables time-slicing for the task.
+    \return    Previous quantum (pass it back to restore).
+    \note      Requires stk::KERNEL_TIMESLICE, asserts otherwise.
+    \note      Equivalent of ThreadX's tx_thread_time_slice_change.
+    \see       IKernelService::SetTimeSlice, ITask::GetTimeSlice
+*/
+static __stk_forceinline Timeout SetTimeSlice(TId tid, Timeout ticks)
+{
+    return IKernelService::GetInstance()->SetTimeSlice(tid, ticks);
+}
+
+/*! \brief     Change the time-slice quantum of the calling task at run-time and reload its slice.
+    \param[in] ticks: New quantum (ticks), see SetTimeSlice(TId, Timeout).
+    \return    Previous quantum.
+    \warning   ISR-unsafe (resolves the calling task via GetTid()).
+*/
+static __stk_forceinline Timeout SetTimeSlice(Timeout ticks)
+{
+    return SetTimeSlice(GetTid(), ticks);
+}
+
 /*! \brief     Delay calling process by busy-waiting until the deadline expires.
     \note      Unlike Sleep this function delays code execution by spinning in a loop until deadline expiry.
     \note      Use with care in HRT mode to avoid missed deadline (see stk::KERNEL_HRT, ITask::OnDeadlineMissed).

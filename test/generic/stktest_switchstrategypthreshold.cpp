@@ -1098,5 +1098,490 @@ TEST(SwitchStrategyPreemptionThreshold, RemoveSleepingTask)
     CHECK_EQUAL(1, g_PTRemoveSleepingContext.size_final);
 }
 
+// ============================================================================ //
+// ============== SwitchStrategyPreemptionThreshold: TIMESLICE mode =========== //
+// ============================================================================ //
+
+//! Time-slicing variant: sticky GetNext(), the level is rotated by OnTaskTimeSlice()/OnTaskYield() only.
+typedef SwitchStrategyPT32_TS PTS_TS;
+
+//! Task mock with a priority/threshold weight and a time-slice quantum (ITask::GetTimeSlice).
+template <Weight TWeight, Timeout TQuantum>
+class TaskMockWTS : public TaskMockW<TWeight, ACCESS_USER>
+{
+public:
+    Timeout GetTimeSlice() const override { return TQuantum; }
+};
+
+// GetNext() is sticky: the selected task keeps being returned until a rotation is requested.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceGetNextSticky)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    for (int32_t i = 0; i < 5; i++)
+    {
+        CHECK_EQUAL_TEXT(&task1, strategy->GetNext()->GetUserTask(), "sticky: task1 keeps the CPU without a rotation request");
+    }
+}
+
+// Adding a task must not take the CPU from the running one (unlike the non-sticky variant).
+TEST(SwitchStrategyPreemptionThreshold, TimesliceAddTaskDoesNotMoveCursor)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    CHECK_EQUAL_TEXT(&task1, strategy->GetNext()->GetUserTask(), "new tasks must queue behind the running task");
+
+    // rotation visits the new tasks in the order they were added
+    CHECK_TRUE(strategy->OnTaskTimeSlice(k1));
+    CHECK_EQUAL(&task2, strategy->GetNext()->GetUserTask());
+}
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceRotatesOnTimeSlice)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    // slice of task1 expired -> task2, sticky afterwards
+    CHECK_TRUE(strategy->OnTaskTimeSlice(k1));
+    IKernelTask *k2 = strategy->GetNext();
+    CHECK_EQUAL_TEXT(&task2, k2->GetUserTask(), "expecting task2 after task1's slice");
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "task2 keeps the CPU");
+
+    // -> task3
+    CHECK_TRUE(strategy->OnTaskTimeSlice(k2));
+    IKernelTask *k3 = strategy->GetNext();
+    CHECK_EQUAL_TEXT(&task3, k3->GetUserTask(), "expecting task3 after task2's slice");
+
+    // -> task1 (wrap-around)
+    CHECK_TRUE(strategy->OnTaskTimeSlice(k3));
+    CHECK_EQUAL_TEXT(&task1, strategy->GetNext()->GetUserTask(), "expecting wrap-around to task1");
+
+    // time-slicing does not change the task set
+    CHECK_EQUAL(3, strategy->GetSize());
+}
+
+// Rotation stays inside the highest ready level.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceNeverSelectsLowerPriority)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> low;
+    TaskMockW<PTS::MakeWeight(2, 2), ACCESS_USER> high1, high2;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&low);
+    kernel.AddTask(&high1);
+    kernel.AddTask(&high2);
+
+    IKernelTask *k = strategy->GetNext();
+    CHECK_EQUAL(&high1, k->GetUserTask());
+
+    for (int32_t i = 0; i < 4; i++)
+    {
+        CHECK_TRUE(strategy->OnTaskTimeSlice(k));
+        k = strategy->GetNext();
+        CHECK_EQUAL_TEXT(&high2, k->GetUserTask(), "expecting high2");
+
+        CHECK_TRUE(strategy->OnTaskTimeSlice(k));
+        k = strategy->GetNext();
+        CHECK_EQUAL_TEXT(&high1, k->GetUserTask(), "expecting high1, low must not run");
+    }
+}
+
+// A single task at its level simply continues when its slice expires.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceSingleTask)
+{
+    Kernel<KERNEL_DYNAMIC, 1, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    for (int32_t i = 0; i < 3; i++)
+    {
+        CHECK_FALSE_TEXT(strategy->OnTaskTimeSlice(k1), "no same-priority peer: nothing to rotate to");
+        CHECK_EQUAL_TEXT(&task1, strategy->GetNext()->GetUserTask(), "alone at level: expecting task1 again");
+    }
+
+    CHECK_EQUAL(1, strategy->GetSize());
+}
+
+// A lone task's expired slice must not leave a rotation request behind: a peer added later must not
+// take the CPU before the running task's next slice expires.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceLoneTaskNoStaleRotation)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> a, b;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&a);
+
+    IKernelTask *ka = strategy->GetNext();
+    CHECK_EQUAL(&a, ka->GetUserTask());
+
+    // slice expired while alone, GetNext() is not called afterwards (e.g. a higher level was served)
+    CHECK_FALSE(strategy->OnTaskTimeSlice(ka));
+
+    kernel.AddTask(&b);
+
+    CHECK_EQUAL_TEXT(&a, strategy->GetNext()->GetUserTask(), "a keeps the CPU: no stale rotation request");
+
+    // the next real expiry rotates to b
+    CHECK_TRUE(strategy->OnTaskTimeSlice(ka));
+    CHECK_EQUAL(&b, strategy->GetNext()->GetUserTask());
+}
+
+// A held task is never time-sliced, peers wait until it leaves the runnable set.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceHeldTaskNotRotated)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 3), ACCESS_USER> a;  // holds its threshold when selected
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> peer;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&a);
+    kernel.AddTask(&peer);
+
+    IKernelTask *ka = strategy->GetNext();
+    CHECK_EQUAL(&a, ka->GetUserTask());
+
+    for (int32_t i = 0; i < 3; i++)
+    {
+        CHECK_FALSE_TEXT(strategy->OnTaskTimeSlice(ka), "held task must not be time-sliced");
+        CHECK_EQUAL_TEXT(&a, strategy->GetNext()->GetUserTask(), "a keeps the CPU");
+    }
+
+    kernel.RemoveTask(&a);
+    CHECK_EQUAL_TEXT(&peer, strategy->GetNext()->GetUserTask(), "peer runs after the holder is removed");
+}
+
+// Unlike OnTaskYield(), a time slice does not release the hold: after rotation by yield the
+// hold is gone, the task is held again only when re-selected.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceYieldReleasesHold)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 3), ACCESS_USER> a;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> peer;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&a);
+    kernel.AddTask(&peer);
+
+    IKernelTask *ka = strategy->GetNext();
+    CHECK_EQUAL(&a, ka->GetUserTask());
+    CHECK_FALSE(strategy->OnTaskTimeSlice(ka)); // held: no rotation
+
+    // yield releases the hold and rotates to the peer
+    CHECK_TRUE(strategy->OnTaskYield(ka));
+    IKernelTask *kpeer = strategy->GetNext();
+    CHECK_EQUAL_TEXT(&peer, kpeer->GetUserTask(), "peer runs after a yielded");
+    CHECK_EQUAL_TEXT(&peer, strategy->GetNext()->GetUserTask(), "sticky: peer keeps the CPU");
+
+    // peer's slice expired -> a, which is held again when re-selected
+    CHECK_TRUE(strategy->OnTaskTimeSlice(kpeer));
+    CHECK_EQUAL(&a, strategy->GetNext()->GetUserTask());
+    CHECK_FALSE_TEXT(strategy->OnTaskTimeSlice(ka), "a holds its threshold again");
+    CHECK_EQUAL(&a, strategy->GetNext()->GetUserTask());
+}
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceYieldRotates)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    // yield hands the CPU to the successor, sticky afterwards
+    CHECK_TRUE(strategy->OnTaskYield(k1));
+    IKernelTask *k2 = strategy->GetNext();
+    CHECK_EQUAL(&task2, k2->GetUserTask());
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "sticky after yield");
+
+    CHECK_TRUE(strategy->OnTaskYield(k2));
+    CHECK_EQUAL(&task3, strategy->GetNext()->GetUserTask());
+
+    CHECK_EQUAL(3, strategy->GetSize());
+}
+
+// Removing the running task (cursor is on it): its successor runs next.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceRemoveRunningTask)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    CHECK_EQUAL(&task1, strategy->GetNext()->GetUserTask());
+
+    kernel.RemoveTask(&task1);
+
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "successor of the removed task runs next");
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "sticky");
+    CHECK_EQUAL(2, strategy->GetSize());
+}
+
+// Removing another task leaves the cursor (and the running task) untouched.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceRemoveOtherTask)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    kernel.RemoveTask(&task2);
+
+    CHECK_EQUAL_TEXT(&task1, strategy->GetNext()->GetUserTask(), "running task keeps the CPU");
+
+    CHECK_TRUE(strategy->OnTaskTimeSlice(k1));
+    CHECK_EQUAL_TEXT(&task3, strategy->GetNext()->GetUserTask(), "task2 is gone: rotation goes to task3");
+}
+
+// A pending rotation request must not survive the level becoming empty.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceRotationRequestClearedWhenLevelEmpties)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    CHECK_TRUE(strategy->OnTaskYield(k1)); // rotation requested, not consumed yet
+
+    kernel.RemoveTask(&task1);
+    CHECK_EQUAL(0, strategy->GetNext());
+
+    // new tasks at the same level: the first one added must run first (no stale rotation request)
+    kernel.AddTask(&task2);
+    kernel.AddTask(&task3);
+
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "stale rotation request must have been dropped");
+    CHECK_EQUAL_TEXT(&task2, strategy->GetNext()->GetUserTask(), "sticky");
+}
+
+// Strategy without TIMESLICE: OnTaskTimeSlice() is not supported and the 1-tick round-robin is unchanged.
+TEST(SwitchStrategyPreemptionThreshold, TimesliceUnsupportedWithoutTimesliceStrategy)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyPT32, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1, task2;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task1, k1->GetUserTask());
+
+    CHECK_FALSE(strategy->OnTaskTimeSlice(k1));
+
+    CHECK_EQUAL(&task2, strategy->GetNext()->GetUserTask());
+    CHECK_EQUAL(&task1, strategy->GetNext()->GetUserTask());
+}
+
+// A sleeping task is not in its runnable list: rotation is not performed for it.
+static struct PTTimesliceSleepingContext
+{
+    PTTimesliceSleepingContext()
+    {
+        Clear();
+    }
+
+    void Clear()
+    {
+        counter  = 0;
+        called   = false;
+        result   = true;
+        platform = NULL;
+        strategy = NULL;
+    }
+
+    uint32_t             counter;
+    bool                 called;
+    bool                 result;
+    PlatformTestMock    *platform;
+    ITaskSwitchStrategy *strategy;
+
+    void Process()
+    {
+        if (counter == 1)
+        {
+            // the only task is sleeping (entry tick done): it is in the strategy's sleep list
+            result = strategy->OnTaskTimeSlice(strategy->GetFirst());
+            called = true;
+        }
+
+        platform->ProcessTick();
+
+        ++counter;
+    }
+}
+g_PTTimesliceSleepingContext;
+
+static void PTTimesliceSleepingRelaxCpu()
+{
+    g_PTTimesliceSleepingContext.Process();
+}
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceSleepingTaskNotRotated)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TIMESLICE, 1, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockW<PTS::MakeWeight(1, 1), ACCESS_USER> task1;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    g_RelaxCpuHandler = PTTimesliceSleepingRelaxCpu;
+    g_PTTimesliceSleepingContext.Clear();
+    g_PTTimesliceSleepingContext.platform = platform;
+    g_PTTimesliceSleepingContext.strategy = kernel.GetSwitchStrategy();
+
+    Sleep(2);
+
+    g_RelaxCpuHandler = NULL;
+
+    CHECK_TEXT(g_PTTimesliceSleepingContext.called, "expecting relax-cpu handler to be called while task sleeps");
+    CHECK_FALSE_TEXT(g_PTTimesliceSleepingContext.result, "sleeping task is not in runnable list: not rotated");
+}
+
+// ---------------------------------------------------------------------------- //
+// KERNEL_TIMESLICE integration (tick-driven, per-task quanta)
+// ---------------------------------------------------------------------------- //
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceKernelRotatesByQuantum)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockWTS<PTS::MakeWeight(1, 1), 2> task1; // quantum 2 ticks
+    TaskMockWTS<PTS::MakeWeight(1, 1), 3> task2; // quantum 3 ticks
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    // task1: 2 ticks
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT((Word)task1.GetStack(), active->SP, "task1: 1 tick left");
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT((Word)task2.GetStack(), active->SP, "task1's slice expired");
+
+    // task2: 3 ticks
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT((Word)task2.GetStack(), active->SP, "task2: 1 tick left");
+    platform->ProcessTick();
+    CHECK_EQUAL_TEXT((Word)task1.GetStack(), active->SP, "task2's slice expired");
+
+    // task1 starts with a fresh slice
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+    platform->ProcessTick();
+    CHECK_EQUAL((Word)task2.GetStack(), active->SP);
+}
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceKernelHeldTaskNeverRotated)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockWTS<PTS::MakeWeight(1, 3), 2> a;    // holds its threshold, quantum is ignored while held
+    TaskMockWTS<PTS::MakeWeight(1, 1), 2> peer;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&a);
+    kernel.AddTask(&peer);
+    kernel.Start();
+
+    CHECK_EQUAL((Word)a.GetStack(), active->SP);
+
+    for (int32_t i = 0; i < 6; i++)
+    {
+        platform->ProcessTick();
+        CHECK_EQUAL_TEXT((Word)a.GetStack(), active->SP, "held task must not be time-sliced");
+    }
+}
+
+TEST(SwitchStrategyPreemptionThreshold, TimesliceKernelNoQuantumNoRotation)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TIMESLICE, 2, SwitchStrategyPT32_TS, PlatformTestMock> kernel;
+    TaskMockWTS<PTS::MakeWeight(1, 1), NO_TIME_SLICE> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL((Word)task1.GetStack(), active->SP);
+
+    for (int32_t i = 0; i < 6; i++)
+    {
+        platform->ProcessTick();
+        CHECK_EQUAL_TEXT((Word)task1.GetStack(), active->SP, "no quantum: task runs until it blocks, yields or is preempted");
+    }
+}
+
 } // namespace test
 } // namespace stk

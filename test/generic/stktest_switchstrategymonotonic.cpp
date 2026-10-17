@@ -270,5 +270,22 @@ TEST(SwitchStrategyMonotonic, YieldNotSupported)
     CHECK_FALSE(strategy->OnTaskYield(k1));
 }
 
+
+TEST(SwitchStrategyMonotonic, TimeSliceNotSupported)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, SwitchStrategyRM, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task, 2, 2, 0);
+
+    IKernelTask *k1 = strategy->GetNext();
+    CHECK_EQUAL(&task, k1->GetUserTask());
+
+    // not handled for any of the tasks (not supported by this strategy)
+    CHECK_FALSE(strategy->OnTaskTimeSlice(k1));
+}
+
 } // namespace stk
 } // namespace test

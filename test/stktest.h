@@ -410,6 +410,14 @@ public:
         return weight;
     }
 
+    Timeout SetTimeSlice(TId tid, Timeout ticks) override
+    {
+        (void)tid;
+        (void)ticks;
+
+        return NO_TIME_SLICE;
+    }
+
     bool     m_inc_ticks;
     bool     m_switch_to_next;
     int64_t  m_ticks;
