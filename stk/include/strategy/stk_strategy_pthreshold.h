@@ -11,8 +11,9 @@
 #define STK_STRATEGY_PTHRESHOLD_H_
 
 /*! \file  stk_strategy_pthreshold.h
-    \brief Fixed-priority preemptive strategy with ThreadX-style Preemption-Threshold
-           (stk::SwitchStrategyPreemptionThreshold / stk::SwitchStrategyPT32).
+    \brief Fixed-priority preemptive strategy with ThreadX-style Preemption-Threshold and optional
+           per-task time-slicing (stk::SwitchStrategyPreemptionThreshold / stk::SwitchStrategyPT32 /
+           stk::SwitchStrategyPT32_TS).
 */
 
 #include "stk_common.h"
@@ -52,13 +53,19 @@ namespace stk {
       above its threshold (this mirrors ThreadX's behaviour where a preempted
       threshold-thread is resumed before ready tasks inside its protected band).
     - A held task is never time-sliced (ThreadX disables time-slicing for threads that use
-      preemption-threshold): tasks of its own priority wait until it sleeps.
-    - Otherwise the highest ready priority level is served in round-robin, one tick each.
+      preemption-threshold): tasks of its own priority wait until it sleeps or yields.
+    - Otherwise the highest ready priority level is served in round-robin: one tick each without
+      TIMESLICE, or, with TIMESLICE, the running task keeps the CPU until its quantum
+      (ITask::GetTimeSlice()) expires, it yields or it leaves the runnable set. Time-slicing only
+      rotates tasks of the same priority, a lower priority level is never served instead.
 
     \note  Uses WEIGHT_API (weight = encoded priority/threshold), SLEEP_EVENT_API,
-           PRIORITY_INHERITANCE_API and NOSLEEP_YIELD_API.
+           PRIORITY_INHERITANCE_API and NOSLEEP_YIELD_API, plus TIMESLICE_API if \a TIMESLICE
+           is \c true.
     \note  Requires kernel support: IKernelTask::GetBaseWeight() and IKernelService::SetWeight()
-           (run-time threshold change, see ChangeThreshold()) and the OnTaskYield() hook.
+           (run-time threshold change, see ChangeThreshold()) and the OnTaskYield() hook. With
+           \a TIMESLICE the kernel must be built with stk::KERNEL_TIMESLICE, it charges the
+           running task and calls OnTaskTimeSlice() when the quantum expires.
     \note  PRIORITY_INHERITANCE_API = 1: an inherited weight contributes only its priority
            (the waiter's threshold is ignored). The effective threshold of the owner is
            max(configured threshold, current priority), the configured threshold being read
@@ -67,7 +74,10 @@ namespace stk {
     \note  Differences from ThreadX: STK priority numbering (higher = more important), at most
            32 priority levels; without TIMESLICE the slice is fixed at 1 tick, with TIMESLICE
            (stk::KERNEL_TIMESLICE) the per-task quantum comes from ITask::GetTimeSlice().
-    \see   SwitchStrategyPT32, SwitchStrategyFixedPriority
+    \note  With \a TIMESLICE, the quantum of a task can be changed at run-time with
+           IKernelService::SetTimeSlice(). A task whose threshold is above its priority is held
+           while it runs and is not time-sliced, use \c MakeWeight(p, p) for tasks which must be.
+    \see   SwitchStrategyPT32, SwitchStrategyPT32_TS, SwitchStrategyFixedPriority
 */
 template <uint8_t MAX_PRIORITIES, bool TIMESLICE = false>
 class SwitchStrategyPreemptionThreshold final : public ITaskSwitchStrategy
@@ -134,7 +144,10 @@ public:
 
         AddActive(task);
 
-        // sticky mode: the cursor stays on the running task, a new task must not take over the CPU
+        // non-sticky mode: if the cursor is on the tail, move it to the new task so that the next
+        // GetNext() returns the head instead of the new task (the new task waits for its turn),
+        // sticky mode (TIMESLICE): the cursor stays on the running task and the new task is
+        // appended behind it, the CPU is not taken over until the rotation is requested
         if (is_tail && !TIMESLICE)
         {
             m_prev[prio] = task;
@@ -166,6 +179,10 @@ public:
                       \c hi <= threshold(H), H keeps/resumes the CPU.
                    3) Otherwise round-robin inside level \c hi; if the chosen task has
                       threshold > priority it becomes held.
+        \note      In round-robin mode (TIMESLICE = \c false) the cursor of the level advances on
+                   every call. In sticky mode (TIMESLICE = \c true) the cursor advances only if a
+                   rotation was requested for the level (OnTaskYield(), OnTaskTimeSlice() or the
+                   removal of the task the cursor was on), otherwise the same task is returned.
     */
     IKernelTask *GetNext() override
     {
@@ -254,6 +271,8 @@ public:
     }
 
     /*! \brief     Task went to sleep: leaves the runnable set and releases its hold.
+        \note      In sticky mode (TIMESLICE) if the task was the one the level cursor was on, the
+                   next peer is selected by the following GetNext().
     */
     void OnTaskSleep(IKernelTask *task) override
     {
@@ -266,6 +285,8 @@ public:
     }
 
     /*! \brief     Task became runnable again; re-enters its priority level (not held).
+        \note      It is appended behind the other tasks of its level, in sticky mode (TIMESLICE)
+                   it does not take the CPU from the running peer before that task's rotation.
     */
     void OnTaskWake(IKernelTask *task) override
     {
@@ -326,6 +347,9 @@ public:
         \note      The yielder's preemption-threshold hold is released so peers are not blocked by it.
                    Ready tasks above its priority but within its former threshold are no longer
                    blocked either and may run.
+        \note      In sticky mode (TIMESLICE) a rotation of the level is requested explicitly, the
+                   kernel also restarts the time slice of the yielding task (tx_thread_relinquish
+                   semantics).
     */
     bool OnTaskYield(IKernelTask *task) override
     {
@@ -358,8 +382,10 @@ public:
         \param[in] task: The running task.
         \return    \c true if the level was rotated; \c false if the task has no same-priority peer,
                    is held by its preemption-threshold (held tasks are never time-sliced, as in
-                   ThreadX) or is not in a runnable list.
-        \note      Unlike OnTaskYield() the hold of the task is not released.
+                   ThreadX), is not in a runnable list, or the strategy is not a TIMESLICE one.
+        \note      A held task is never rotated, so unlike OnTaskYield() its hold is never released
+                   here. When \c false is returned the task simply keeps running, the kernel has
+                   already reloaded its slice.
     */
     bool OnTaskTimeSlice(IKernelTask *task) override
     {
@@ -395,7 +421,8 @@ public:
         \note      If the task is the one currently running, a raised threshold protects it
                    immediately; a threshold equal to the priority releases the protection.
                    For a task that is not running the new threshold applies from its next
-                   selection. The task's time slice is not affected.
+                   selection. The task's time slice is not affected, but with TIMESLICE a task
+                   which is held (threshold above its priority) is not time-sliced while it holds.
     */
     static uint8_t ChangeThreshold(IKernelService &service, TId tid, uint8_t priority, uint8_t threshold)
     {
@@ -535,7 +562,7 @@ private:
     uint32_t                  m_held_bitmap;           //!< Bit i set when m_held[i] is a task holding its preemption-threshold.
     uint32_t                  m_advance_bitmap;        //!< Bit i set: next GetNext() at level i advances the cursor (TIMESLICE only).
     IKernelTask              *m_running;               //!< Task returned by the last GetNext() (nullptr if none or it left the runnable set).
-    IKernelTask              *m_prev[MAX_PRIORITIES];  //!< Per-level round-robin cursor.
+    IKernelTask              *m_prev[MAX_PRIORITIES];  //!< Per-level round-robin cursor: last task returned by GetNext() (sticky mode: the selected task, kept until a rotation is requested).
     IKernelTask              *m_held[MAX_PRIORITIES];  //!< Per-level task currently holding its threshold (at most one per level, as in ThreadX).
 };
 
