@@ -48,7 +48,7 @@ namespace sync {
     \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
     \see  Mutex, ISyncObject, IWaitObject, IKernelService::Wait
 */
-class FastMutex final : private SyncObjectBase, public IMutex, public ITraceable
+class FastMutex final : public SyncObjectBase, public IMutex, public ITraceable
 {
 public:
     /*! \brief     Constructor.

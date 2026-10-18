@@ -24,5 +24,6 @@ namespace memory {
 
 #include "stk_memory_allocator.h"
 #include "stk_memory_blockpool.h"
+#include "stk_memory_bytepool.h"
 
 #endif /* STK_MEMORY_H_ */

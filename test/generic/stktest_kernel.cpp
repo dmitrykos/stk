@@ -1868,6 +1868,511 @@ TEST(Kernel, TaskSuspend)
     CHECK_EQUAL(active->SP, (Word)task2.GetStack());
 }
 
+// ============================================================================ //
+// ======================== IKernel::GetTaskState ============================= //
+// ============================================================================ //
+
+static TaskStateInfo GetTaskState(IKernel *kernel, ITask *user_task)
+{
+    TaskStateInfo info = {
+        .state     = TASK_STATE_REMOVED,
+        .wait_obj  = nullptr,
+        .remaining = WAIT_INFINITE
+    };
+
+    kernel->GetTaskState(user_task, info);
+
+    return info;
+}
+
+static void CheckTaskState(const TaskStateInfo &info, ETaskState state)
+{
+    CHECK_EQUAL(state, info.state);
+
+    // wait object is reported for TASK_STATE_WAITING only
+    if (state != TASK_STATE_WAITING)
+    {
+        CHECK_TRUE(info.wait_obj == nullptr);
+    }
+}
+
+TEST(Kernel, GetTaskStateNotAddedIsRemoved)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    // task2 was never added: not bound to a kernel slot, the query itself succeeds
+    TaskStateInfo query = { TASK_STATE_READY, nullptr, 0 };
+    CHECK_TRUE(kernel.GetTaskState(&task2, query));
+
+    const TaskStateInfo info = GetTaskState(&kernel, &task2);
+
+    CheckTaskState(query, TASK_STATE_REMOVED);
+    CHECK_EQUAL(WAIT_INFINITE, query.remaining);
+    CheckTaskState(info, TASK_STATE_REMOVED);
+    CHECK_EQUAL(WAIT_INFINITE, info.remaining);
+}
+
+TEST(Kernel, GetTaskStateNullTask)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    ISyncObject *const marker = reinterpret_cast<ISyncObject *>(static_cast<uintptr_t>(0x1000));
+
+    kernel.Initialize();
+
+    // invalid argument: reported by the result, info is not touched
+    TaskStateInfo info = { TASK_STATE_EXITING, marker, 1234 };
+    CHECK_FALSE(kernel.GetTaskState(nullptr, info));
+
+    CHECK_EQUAL(TASK_STATE_EXITING, info.state);
+    CHECK_TRUE(info.wait_obj == marker);
+    CHECK_EQUAL(1234, info.remaining);
+}
+
+TEST(Kernel, GetTaskStateTelemetryDisabled)
+{
+    // KERNEL_TELEMETRY is not set: the introspection is compiled out and reports failure
+    Kernel<KERNEL_STATIC, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    ISyncObject *const marker = reinterpret_cast<ISyncObject *>(static_cast<uintptr_t>(0x1000));
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    TaskStateInfo info = { TASK_STATE_EXITING, marker, 1234 };
+    CHECK_FALSE(kernel.GetTaskState(&task, info));
+
+    CHECK_EQUAL(TASK_STATE_EXITING, info.state);
+    CHECK_TRUE(info.wait_obj == marker);
+    CHECK_EQUAL(1234, info.remaining);
+
+    // the helper then reports the defaults, which is the same as for a task which is not bound
+    CheckTaskState(GetTaskState(&kernel, &task), TASK_STATE_REMOVED);
+}
+
+TEST(Kernel, GetTaskStateReady)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+
+    // bound to a slot, not started yet
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+
+    kernel.Start();
+
+    // running (task1) and waiting for the CPU (task2) are both runnable
+    const TaskStateInfo info1 = GetTaskState(&kernel, &task1);
+    const TaskStateInfo info2 = GetTaskState(&kernel, &task2);
+
+    CheckTaskState(info1, TASK_STATE_READY);
+    CheckTaskState(info2, TASK_STATE_READY);
+    CHECK_EQUAL(WAIT_INFINITE, info1.remaining);
+    CHECK_EQUAL(WAIT_INFINITE, info2.remaining);
+
+    // stays ready across context switches
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_READY);
+}
+
+TEST(Kernel, GetTaskStateSleeping)
+{
+    KernelMock<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is the active task: it goes to sleep for 5 ticks
+    kernel.ScheduleSleepOnActiveTask(5);
+
+    const TaskStateInfo info = GetTaskState(&kernel, &task1);
+
+    CheckTaskState(info, TASK_STATE_SLEEPING);
+    CHECK_EQUAL(5, info.remaining);
+
+    // other task is not affected
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_READY);
+
+    // the sleep expires after a few ticks, never earlier than the requested time
+    uint32_t ticks = 0;
+    Timeout prev_remaining = info.remaining;
+
+    while ((GetTaskState(&kernel, &task1).state == TASK_STATE_SLEEPING) && (ticks < 10))
+    {
+        const Timeout remaining = GetTaskState(&kernel, &task1).remaining;
+        CHECK_TRUE(remaining <= prev_remaining); // counts down
+        prev_remaining = remaining;
+
+        platform->ProcessTick();
+        ++ticks;
+    }
+
+    CHECK_TRUE(ticks >= 4);
+    CHECK_TRUE(ticks <= 7);
+
+    const TaskStateInfo awake = GetTaskState(&kernel, &task1);
+    CheckTaskState(awake, TASK_STATE_READY);
+    CHECK_EQUAL(WAIT_INFINITE, awake.remaining);
+}
+
+TEST(Kernel, GetTaskStateSuspended)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    bool suspended = false;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    kernel.SuspendTask(&task2, suspended);
+    CHECK_TRUE(suspended);
+
+    // a suspended task sleeps infinitely inside the kernel, but is reported as suspended, not as sleeping
+    const TaskStateInfo info = GetTaskState(&kernel, &task2);
+    CheckTaskState(info, TASK_STATE_SUSPENDED);
+    CHECK_EQUAL(WAIT_INFINITE, info.remaining);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+
+    // stays suspended across ticks
+    platform->ProcessTick();
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_SUSPENDED);
+
+    // leaves the suspended state immediately, becomes runnable on the next tick
+    kernel.ResumeTask(&task2);
+    CHECK_TRUE(GetTaskState(&kernel, &task2).state != TASK_STATE_SUSPENDED);
+
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_READY);
+}
+
+static struct GetTaskStateSuspendSelfContext
+{
+    GetTaskStateSuspendSelfContext()
+    {
+        Clear();
+    }
+
+    void Clear()
+    {
+        platform        = nullptr;
+        kernel          = nullptr;
+        task1           = nullptr;
+        count           = 0;
+        sampled         = false;
+        sampled_state   = TASK_STATE_REMOVED;
+        sampled_wait    = nullptr;
+    }
+
+    IPlatform   *platform;
+    IKernel     *kernel;
+    ITask       *task1;
+    uint32_t     count;
+    bool         sampled;
+    ETaskState   sampled_state;
+    ISyncObject *sampled_wait;
+
+    void Process()
+    {
+        platform->ProcessTick();
+
+        if (count == 1)
+        {
+            // task1 is suspended and spinning inside SuspendTask()
+            const TaskStateInfo info = GetTaskState(kernel, task1);
+
+            sampled       = true;
+            sampled_state = info.state;
+            sampled_wait  = info.wait_obj;
+        }
+
+        if (count > 2)
+        {
+            kernel->ResumeTask(task1);
+        }
+
+        ++count;
+    }
+}
+g_GetTaskStateSuspendSelfContext;
+
+static void GetTaskStateSuspendSelfRelaxCpu()
+{
+    g_GetTaskStateSuspendSelfContext.Process();
+}
+
+TEST(Kernel, GetTaskStateSuspendedSelf)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    bool suspended = false;
+
+    g_GetTaskStateSuspendSelfContext.Clear();
+    g_GetTaskStateSuspendSelfContext.platform = platform;
+    g_GetTaskStateSuspendSelfContext.kernel   = &kernel;
+    g_GetTaskStateSuspendSelfContext.task1    = &task1;
+
+    decltype(g_RelaxCpuHandler) prev_handler = g_RelaxCpuHandler;
+    g_RelaxCpuHandler = GetTaskStateSuspendSelfRelaxCpu;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is calling SuspendTask to suspend self, returns when the handler resumes it
+    kernel.SuspendTask(&task1, suspended);
+    CHECK_TRUE(suspended);
+
+    g_RelaxCpuHandler = prev_handler;
+
+    CHECK_TRUE(g_GetTaskStateSuspendSelfContext.sampled);
+    CHECK_EQUAL(TASK_STATE_SUSPENDED, g_GetTaskStateSuspendSelfContext.sampled_state);
+    CHECK_TRUE(g_GetTaskStateSuspendSelfContext.sampled_wait == nullptr);
+
+    // resumed
+    CHECK_TRUE(GetTaskState(&kernel, &task1).state != TASK_STATE_SUSPENDED);
+}
+
+static struct GetTaskStateWaitContext
+{
+    GetTaskStateWaitContext()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        platform        = nullptr;
+        kernel          = nullptr;
+        task            = nullptr;
+        sobj            = nullptr;
+        wake            = false;
+        counter         = 0;
+        sampled         = false;
+        suspend_result  = true;
+        waiting.state   = TASK_STATE_REMOVED;
+        waiting.wait_obj = nullptr;
+        waiting.remaining = 0;
+        after_suspend   = waiting;
+        after_wake      = waiting;
+    }
+
+    IPlatform    *platform;
+    IKernel      *kernel;
+    ITask        *task;
+    ISyncObject  *sobj;
+    bool          wake;           // end the wait with Wake() on the 3rd tick, otherwise let it expire
+    uint32_t      counter;
+    bool          sampled;
+    bool          suspend_result; // result of SuspendTask() attempted on the waiting task
+    TaskStateInfo waiting;        // state while the task is blocked
+    TaskStateInfo after_suspend;  // state right after SuspendTask() was attempted on the blocked task
+    TaskStateInfo after_wake;     // state right after Wake(), before the next tick
+
+    void Process()
+    {
+        platform->ProcessTick();
+        ++counter;
+
+        if (counter == 2)
+        {
+            waiting = GetTaskState(kernel, task);
+            sampled = true;
+
+            // SuspendTask() does not touch a task which is already blocked
+            kernel->SuspendTask(task, suspend_result);
+            after_suspend = GetTaskState(kernel, task);
+        }
+        else
+        if ((counter == 3) && wake)
+        {
+            IKernelService::GetInstance()->Wake(sobj, false);
+            after_wake = GetTaskState(kernel, task);
+        }
+    }
+}
+g_GetTaskStateWaitContext;
+
+static void GetTaskStateWaitRelaxCpu()
+{
+    g_GetTaskStateWaitContext.Process();
+}
+
+static void Test_GetTaskStateWaiting(Timeout wait_ticks, bool wake, EWaitResult expected)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC | KERNEL_TELEMETRY, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+    SyncObjectMock sobj;
+
+    g_GetTaskStateWaitContext.Reset();
+    g_GetTaskStateWaitContext.platform = platform;
+    g_GetTaskStateWaitContext.kernel   = &kernel;
+    g_GetTaskStateWaitContext.task     = &task;
+    g_GetTaskStateWaitContext.sobj     = &sobj;
+    g_GetTaskStateWaitContext.wake     = wake;
+
+    decltype(g_RelaxCpuHandler) prev_handler = g_RelaxCpuHandler;
+    g_RelaxCpuHandler = GetTaskStateWaitRelaxCpu;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    CheckTaskState(GetTaskState(&kernel, &task), TASK_STATE_READY);
+
+    MutexMock::ScopedLock guard(mutex);
+
+    const EWaitResult wresult = IKernelService::GetInstance()->Wait(&sobj, &mutex, wait_ticks);
+
+    g_RelaxCpuHandler = prev_handler;
+
+    CHECK_EQUAL(expected, wresult);
+    CHECK_TRUE(g_GetTaskStateWaitContext.sampled);
+
+    // blocked on the sync object: reported as waiting (not as sleeping, although it sleeps inside the kernel)
+    const TaskStateInfo &waiting = g_GetTaskStateWaitContext.waiting;
+    CHECK_EQUAL(TASK_STATE_WAITING, waiting.state);
+    CHECK_TRUE(waiting.wait_obj == &sobj);
+
+    if (wait_ticks == WAIT_INFINITE)
+    {
+        CHECK_EQUAL(WAIT_INFINITE, waiting.remaining);
+    }
+    else
+    {
+        CHECK_TRUE(waiting.remaining > 0);
+        CHECK_TRUE(waiting.remaining <= wait_ticks);
+    }
+
+    // SuspendTask() ignores the blocked task: it keeps waiting
+    CHECK_FALSE(g_GetTaskStateWaitContext.suspend_result);
+    CHECK_EQUAL(TASK_STATE_WAITING, g_GetTaskStateWaitContext.after_suspend.state);
+    CHECK_TRUE(g_GetTaskStateWaitContext.after_suspend.wait_obj == &sobj);
+
+    if (wake)
+    {
+        // Wake() detaches the task from the sync object immediately
+        CHECK_TRUE(g_GetTaskStateWaitContext.after_wake.state != TASK_STATE_WAITING);
+        CHECK_TRUE(g_GetTaskStateWaitContext.after_wake.wait_obj == nullptr);
+    }
+
+    // the wait is over
+    const TaskStateInfo done = GetTaskState(&kernel, &task);
+    CheckTaskState(done, TASK_STATE_READY);
+    CHECK_EQUAL(WAIT_INFINITE, done.remaining);
+}
+
+TEST(Kernel, GetTaskStateWaitingTimeout)
+{
+    Test_GetTaskStateWaiting(4, false, WAIT_RESULT_TIMEOUT);
+}
+
+TEST(Kernel, GetTaskStateWaitingSignaled)
+{
+    Test_GetTaskStateWaiting(10, true, WAIT_RESULT_SIGNAL);
+}
+
+TEST(Kernel, GetTaskStateWaitingInfinite)
+{
+    Test_GetTaskStateWaiting(WAIT_INFINITE, true, WAIT_RESULT_SIGNAL);
+}
+
+TEST(Kernel, GetTaskStateExitingAndRemoved)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task2 is not the current task: it is removed by the next tick
+    kernel.ScheduleTaskRemoval(&task2);
+
+    const TaskStateInfo info = GetTaskState(&kernel, &task2);
+    CheckTaskState(info, TASK_STATE_EXITING);
+    CHECK_EQUAL(WAIT_INFINITE, info.remaining);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+
+    platform->ProcessTick();
+
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_REMOVED);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+}
+
+TEST(Kernel, GetTaskStateExitingCurrentTask)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // task1 is the current task: removal is only scheduled
+    kernel.ScheduleTaskRemoval(&task1);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_EXITING);
+
+    // the kernel can not remove the task it was running, the slot is released one tick later
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_EXITING);
+
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_REMOVED);
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_READY);
+}
+
+TEST(Kernel, GetTaskStateExitingHasPriorityOverSuspended)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    bool suspended = false;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    kernel.SuspendTask(&task2, suspended);
+    CHECK_TRUE(suspended);
+
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_SUSPENDED);
+
+    // a suspended task which is being removed is reported as exiting
+    kernel.ScheduleTaskRemoval(&task2);
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_EXITING);
+
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_REMOVED);
+}
+
 TEST(Kernel, Hrt)
 {
     Kernel<KERNEL_STATIC | KERNEL_HRT, 2, SwitchStrategyRR, PlatformTestMock> kernel;

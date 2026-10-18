@@ -1,6 +1,6 @@
 # STK Memory Module (`stk::memory`)
 
-**STK Memory Module** provides deterministic, fragmentation-free memory allocation primitives for embedded systems. It is designed for scenarios where dynamic heap allocation is undesirable or prohibited — offering fixed-size block pools with O(1) alloc/free, full ISR safety, and task-blocking semantics backed by the STK kernel.
+**STK Memory Module** provides memory allocation primitives for embedded systems. It is designed for scenarios where dynamic heap allocation is undesirable or prohibited — offering fixed-size block pools with deterministic O(1) alloc/free (`BlockMemoryPool`) and variable-size byte pools with block coalescing (`BytePool`), both with ISR-safe non-blocking paths and task-blocking semantics backed by the STK kernel.
 
 ## Features
 
@@ -11,6 +11,7 @@
 - **ISR Safety**: `TryAlloc()` and `Free()` are ISR-safe. Blocking paths are task-context only.
 - **Typed API**: Template wrappers (`AllocT<T>()`, `TryAllocT<T>()`, etc.) eliminate manual casts and assert type–size compatibility at allocation time.
 - **Debug Diagnostics**: Double-free detection (O(n) free-list walk), bounds checking, and alignment validation in debug builds; all checks compile away in release.
+- **Variable-Size Allocation**: `BytePool` serves requests of arbitrary size from a single area (first-fit, with block splitting and coalescing) when fixed-size blocks do not fit the workload.
 
 ---
 
@@ -113,6 +114,76 @@ Returns `true` on success. Returns `false` (and triggers an assertion in debug b
 | `GetFreeCount()` | Yes | Number of available blocks (`capacity - used`). Advisory snapshot. |
 | `IsFull()` | Yes | Returns `true` if no blocks are available. |
 | `IsEmpty()` | Yes | Returns `true` if no blocks are currently allocated. |
+
+---
+
+### 2. Byte Memory Pool (`memory::BytePool`)
+
+A variable-size allocator for workloads where allocation sizes vary — message payloads, strings, protocol frames. It trades the constant-time guarantee and fragmentation immunity of `BlockMemoryPool` for flexibility: allocation time depends on the number of blocks scanned, and the pool can fragment.
+
+The pool keeps an implicit block list inside the storage area. Every block, free or used, is preceded by an 8-byte header (`size` + state marker), and blocks follow each other back to back — no separate metadata is needed. Returned pointers are aligned to 8 bytes.
+
+**Memory layout (contiguous storage):**
+
+```
+[ hdr | payload ][ hdr | payload (free) ][ hdr | payload ] ...
+^                                                          ^
+m_first                                                    m_end
+```
+
+**Allocation policy:** first-fit. While scanning, adjacent free blocks are merged, and a found block is split when the remainder can form a block of its own. `Free()` merges the freed block with the free blocks that follow it; merging with a preceding free block is done lazily by the next scan.
+
+**Storage modes:**
+
+| Mode | Constructor | Storage ownership |
+|---|---|---|
+| External (static/stack) | `BytePool(buf, bufsz [, name])` | Caller — never freed by pool |
+| Heap-allocated | `BytePool(bufsz [, name])` | Pool — freed in destructor |
+
+> **Note**: As with `BlockMemoryPool`, call `IsStorageValid()` after construction with heap storage. It also returns `false` if the supplied external buffer is too small to hold even one block.
+
+---
+
+#### Allocation Methods
+
+| Method | Blocking | ISR-safe | Description |
+|---|---|---|---|
+| `Alloc(size)` | Yes — indefinite | No | Blocks until `size` bytes are available. Returns `nullptr` only on cancellation or an invalid request. |
+| `AllocT<T>()` | Yes — indefinite | No | Typed `Alloc()` for `sizeof(T)` bytes. |
+| `TimedAlloc(size, timeout)` | Yes — until timeout | Only with `NO_WAIT` | Blocks up to `timeout` ticks. Returns `nullptr` on timeout. |
+| `TimedAllocT<T>(timeout)` | Yes — until timeout | Only with `NO_WAIT` | Typed `TimedAlloc()`. |
+| `TimedAllocEx(&block, size, timeout)` | Yes — until timeout | Only with `NO_WAIT` | Returns the full `EWaitResult` so timeout and cancellation can be told apart. |
+| `TryAlloc(size)` | No | Yes | Returns a block or `nullptr` immediately. |
+| `TryAllocT<T>()` | No | Yes | Typed `TryAlloc()`. |
+
+> A request of zero bytes, or larger than `GetMaxRequest()`, can never succeed and fails immediately instead of blocking. The timeout is a total budget: repeated wake-ups do not extend it.
+
+---
+
+#### Free
+
+```cpp
+bool Free(void *ptr);
+```
+
+Marks the block free, merges it with following free blocks, and wakes **all** tasks blocked in `Alloc()` / `TimedAlloc()` so each can re-check its own request (requests differ in size, so waking only one could leave a satisfiable request asleep). ISR-safe, but not constant time.
+
+Returns `false` (and triggers an assertion in debug builds) if `ptr` is `nullptr`, outside the pool, misaligned, or not in use. Double-free is caught through the block's state marker; debug builds additionally verify that the pointer is the start of a real block.
+
+> **Best practice**: Null the pointer after `Free()`. Double-free detection is reliable only until the memory is handed out again.
+
+---
+
+#### Utility / Query Methods
+
+| Method | ISR-safe | Description |
+|---|---|---|
+| `static AlignSize(size)` | Yes | Rounds `size` up to a multiple of 8 bytes. |
+| `static RequiredSize(payload)` | Yes | Pool space consumed by one allocation: aligned payload plus the 8-byte header. Use to size external buffers. |
+| `IsStorageValid()` | Yes | Returns `true` if the pool is ready for use. |
+| `GetSize()` | Yes | Managed (aligned) area size in bytes, headers included. |
+| `GetMaxRequest()` | Yes | Largest payload that can ever be allocated (one block spanning the whole pool). |
+| `GetInfo(available, largest, fragments)` | Yes (O(n)) | Consistent snapshot: total allocatable payload, largest allocatable request right now, and the number of free fragments. |
 
 ---
 
@@ -238,6 +309,48 @@ else
 }
 ```
 
+### Variable-size messages with `BytePool`
+
+```cpp
+#include <memory/stk_memory.h>
+#include <sync/stk_sync_msgqueue.h>
+
+alignas(8) static uint8_t g_Heap[4096];
+
+stk::memory::BytePool g_BytePool(g_Heap, sizeof(g_Heap));
+
+stk::sync::MessageQueueT<8, sizeof(void *)> g_TxQueue;
+
+void Task_Producer()
+{
+    // Wait up to 100 ms for 64 contiguous bytes
+    char *msg = static_cast<char *>(g_BytePool.TimedAlloc(64U, stk::GetTicksFromMsec(100)));
+    if (msg != nullptr)
+    {
+        FormatMessage(msg, 64U);
+        g_TxQueue.Put(&msg);
+    }
+}
+
+void Task_Sender()
+{
+    void *msg = nullptr;
+    if (g_TxQueue.Get(&msg))
+    {
+        Send(static_cast<const char *>(msg));
+        g_BytePool.Free(msg);                // wakes all blocked allocators
+        msg = nullptr;
+    }
+}
+
+void Task_Monitor()
+{
+    size_t available, largest, fragments;
+    g_BytePool.GetInfo(available, largest, fragments);
+    // largest < available means the free space is fragmented
+}
+```
+
 ---
 
 ## Storage Sizing Reference
@@ -255,6 +368,16 @@ alignas(sizeof(void *)) static uint8_t
 
 > The buffer must be aligned to at least `sizeof(void*)`. The `alignas` specifier shown above guarantees this on all STK targets.
 
+For `BytePool`, every live allocation also consumes an 8-byte header, so add `RequiredSize()` for each block that must be alive at the same time:
+
+```cpp
+// Up to 4 blocks of 128 bytes and one block of 512 bytes alive simultaneously
+alignas(8) static uint8_t g_Heap[stk::memory::BytePool::RequiredSize(128U) * 4U +
+                                 stk::memory::BytePool::RequiredSize(512U)];
+```
+
+> Variable-size allocation can fragment, so leave headroom beyond the sum of the peak sizes, or monitor `GetInfo()`.
+
 ---
 
 ## ISR Safety Summary
@@ -268,6 +391,8 @@ alignas(sizeof(void *)) static uint8_t
 | `TimedAlloc(timeout > 0)` | **No** — task context only |
 | Constructors / Destructor | **No** — init/task context only |
 
+The same table applies to `BytePool` (`size` is the first argument of the alloc calls). Its `TryAlloc()`, `Free()` and `GetInfo()` are ISR-safe but take time proportional to the number of blocks, so avoid them in time-critical ISRs on pools with many blocks.
+
 ---
 
 ## Notes and Caveats
@@ -275,4 +400,5 @@ alignas(sizeof(void *)) static uint8_t
 - **Lifetime**: Destroying a pool while tasks are blocked inside `Alloc()` or `TimedAlloc()` is a logical error. An assertion is triggered in debug builds by the internal `ConditionVariable` destructor.
 - **Double-free**: Debug builds perform an O(n) free-list walk to detect double-free. Release builds do not — null pointers after `Free()` to avoid silent corruption.
 - **Blocking paths require `KERNEL_SYNC`**: `Alloc()` and `TimedAlloc()` (with a non-zero timeout) depend on the `ConditionVariable` primitive and require the kernel to be compiled with `KERNEL_SYNC`. `TryAlloc()` and `Free()` are always available regardless of kernel mode.
-- **Non-copyable**: `BlockMemoryPool` is non-copyable and non-movable.
+- **Non-copyable**: `BlockMemoryPool` and `BytePool` are non-copyable and non-movable.
+- **`BytePool` starvation**: freed memory is not reserved for the longest-waiting task, so a large request can be starved by a stream of small ones.

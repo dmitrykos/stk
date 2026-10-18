@@ -321,7 +321,7 @@ private:
         \details   Ensures the intrusive free-list pointer stored in the first word of
                    every free block is naturally aligned on all supported STK targets.
     */
-    static const uint32_t BLOCK_ALIGN = static_cast<uint32_t>(sizeof(MemoryBlock));
+    static const size_t BLOCK_ALIGN = static_cast<size_t>(sizeof(MemoryBlock));
 
     /*! \brief     Initialise the intrusive free-list across \c m_storage.
         \details   Links blocks in reverse order so after the loop \c m_free_list
