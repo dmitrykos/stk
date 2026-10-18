@@ -62,6 +62,9 @@ template <> __stk_forceinline Timeout GetInitialSleepTicks<false>() { return 1; 
                                             IKernelService::SetTimeSlice) expires. Requires a strategy with
                                             TIMESLICE_API == 1 (e.g. SwitchStrategyPT32_TS), incompatible
                                             with KERNEL_HRT (TIMESLICE_HRT_CONFLICT).
+                       - KERNEL_TELEMETRY - enables introspection functions for diagnostics / telemetry
+                                            (IKernel::GetTaskState). Without it these functions are compiled
+                                            out and report failure. Combines with any other mode.
                        KERNEL_STATIC and KERNEL_DYNAMIC are mutually exclusive.
     \tparam TSize:     Maximum number of concurrent tasks. Must be > 0.
     \tparam TStrategy: Task-switching strategy type (e.g. SwitchStrategyRoundRobin). Must inherit ITaskSwitchStrategy.
@@ -175,9 +178,14 @@ protected:
         }
 
         /*! \brief  Get bound user task.
-            \return Pointer to the ITask, or \c NULL if the slot is free (IsBusy() == false).
+            \return Pointer to the ITask.
         */
         ITask *GetUserTask() override { return m_user; }
+
+        /*! \brief  Get bound user task (const).
+            \return Pointer to the immutable ITask.
+        */
+        const ITask *GetUserTask() const { return m_user; }
 
         /*! \brief  Get stack descriptor for this task slot.
             \return Stack info (SP register value and access mode flags).
@@ -1143,11 +1151,11 @@ protected:
             {
                 if (all)
                 {
-                    ISyncObject::WakeAll(GetWaitList(sobj));
+                    ISyncObject::WakeAll(GetMutableWaitList(sobj));
                 }
                 else
                 {
-                    ISyncObject::WakeOne(GetWaitList(sobj));
+                    ISyncObject::WakeOne(GetMutableWaitList(sobj));
                 }
             }
             else
@@ -1598,6 +1606,92 @@ public:
         }
     }
 
+    /*! \brief      Get a snapshot of the kernel-side state of a task.
+        \param[in]  user_task: Pointer to the user task to query. Must not be \c nullptr.
+        \param[out] info: Receives the snapshot. Written only if the function returns \c true.
+        \return     \c true on success, \c false if \a user_task is \c nullptr or the kernel is built without
+                    KERNEL_TELEMETRY (\a info is left unchanged). See IKernel::GetTaskState().
+        \note       The order of the checks matters: SuspendTask() and OnTaskWait() both put the task to an
+                    infinite sleep (ScheduleSleep), so IsSleeping() is also true for suspended and blocked tasks.
+        \note       KERNEL_TELEMETRY mode only.
+    */
+    bool GetTaskState(ITask *user_task, TaskStateInfo &info) const override
+    {
+        bool result;
+
+        if (IsTelemetryMode())
+        {
+            if (user_task != nullptr)
+            {
+                info.state     = TASK_STATE_REMOVED;
+                info.wait_obj  = nullptr;
+                info.remaining = WAIT_INFINITE;
+
+                // critical section: consistent view against OnTick
+                const hw::CriticalSection::ScopedLock cs_;
+
+                const KernelTask *const task = FindTaskByUserTask(user_task);
+                if (task != nullptr)
+                {
+                    bool resolved = false;
+
+                    if ((task->m_state & KernelTask::STATE_REMOVE_PENDING) != 0U)
+                    {
+                        info.state = TASK_STATE_EXITING;
+                        resolved   = true;
+                    }
+                    else if ((task->m_state & KernelTask::STATE_SUSPENDED) != 0U)
+                    {
+                        info.state = TASK_STATE_SUSPENDED;
+                        resolved   = true;
+                    }
+                    else
+                    {
+                        if __stk_constexpr_cpp17 (IsSyncMode())
+                        {
+                            const typename KernelTask::WaitObject &wait_obj = task->m_wait_obj[0];
+
+                            if (wait_obj.IsWaiting())
+                            {
+                                info.state     = TASK_STATE_WAITING;
+                                info.wait_obj  = wait_obj.m_sync_obj;
+                                info.remaining = wait_obj.m_time_wait;
+                                resolved       = true;
+                            }
+                        }
+                    }
+
+                    if (!resolved)
+                    {
+                        const Timeout time_sleep = task->m_time_sleep;
+
+                        if (time_sleep < 0)
+                        {
+                            info.state     = TASK_STATE_SLEEPING;
+                            info.remaining = -time_sleep; // -(-WAIT_INFINITE) == WAIT_INFINITE for an infinite sleep
+                        }
+                        else
+                        {
+                            info.state = TASK_STATE_READY;
+                        }
+                    }
+                }
+
+                result = true;
+            }
+            else
+            {
+                result = false;
+            }
+        }
+        else
+        {
+            result = false;
+        }
+
+        return result;
+    }
+
     /*! \brief     Enumerate kernel tasks.
         \param[in] tasks: Reference to the ArrayView of IKernelTask pointers.
         \return    Number of tasks in the array.
@@ -1908,17 +2002,15 @@ protected:
         STK_ASSERT(srt.add_task_req == nullptr);
     }
 
-    /*! \brief     Find kernel task by the bound ITask instance.
-        \param[in] user_task: User task.
-        \return    Kernel task.
-    */
-    __stk_attr_noinline KernelTask *FindTaskByUserTask(const ITask *user_task)
+    template <typename TaskPtr, typename Storage>
+    static inline TaskPtr FindTaskByUserTaskImpl(const ITask *user_task, Storage &task_storage)
     {
-        KernelTask *found_task = nullptr;
-      
+        TaskPtr found_task = nullptr;
+
         for (size_t i = 0U; i < TASKS_MAX; ++i)
         {
-            KernelTask *const task = &m_task_storage[i];
+            TaskPtr const task = &task_storage[i];
+
             if (task->GetUserTask() == user_task)
             {
                 found_task = task;
@@ -1927,6 +2019,24 @@ protected:
         }
 
         return found_task;
+    }
+
+    /*! \brief     Find kernel task by the bound ITask instance (Non-const version).
+        \param[in] user_task: User task.
+        \return    Kernel task (mutable).
+    */
+    __stk_attr_noinline KernelTask *FindTaskByUserTask(const ITask *user_task)
+    {
+        return FindTaskByUserTaskImpl<KernelTask *>(user_task, m_task_storage);
+    }
+
+    /*! \brief     Find kernel task by the bound ITask instance (Const version).
+        \param[in] user_task: User task.
+        \return    Kernel task (const).
+    */
+    __stk_attr_noinline const KernelTask *FindTaskByUserTask(const ITask *user_task) const
+    {
+        return FindTaskByUserTaskImpl<const KernelTask *>(user_task, m_task_storage);
     }
 
     /*! \brief     Find kernel task by the bound Stack instance.
@@ -3043,12 +3153,13 @@ protected:
 #endif
 
     // Kernel modes:
-    static constexpr bool IsStaticMode()   { return ((TMode & KERNEL_STATIC) != 0U); }
-    static constexpr bool IsDynamicMode()  { return ((TMode & KERNEL_DYNAMIC) != 0U); }
-    static constexpr bool IsHrtMode()      { return ((TMode & KERNEL_HRT) != 0U); }
-    static constexpr bool IsSyncMode()     { return ((TMode & KERNEL_SYNC) != 0U); }
-    static constexpr bool IsTicklessMode() { return ((TMode & KERNEL_TICKLESS) != 0U); }
-    static constexpr bool IsTimesliceMode(){ return ((TMode & KERNEL_TIMESLICE) != 0U); }
+    static constexpr bool IsStaticMode()    { return ((TMode & KERNEL_STATIC) != 0U); }
+    static constexpr bool IsDynamicMode()   { return ((TMode & KERNEL_DYNAMIC) != 0U); }
+    static constexpr bool IsHrtMode()       { return ((TMode & KERNEL_HRT) != 0U); }
+    static constexpr bool IsSyncMode()      { return ((TMode & KERNEL_SYNC) != 0U); }
+    static constexpr bool IsTicklessMode()  { return ((TMode & KERNEL_TICKLESS) != 0U); }
+    static constexpr bool IsTimesliceMode() { return ((TMode & KERNEL_TIMESLICE) != 0U); }
+    static constexpr bool IsTelemetryMode() { return ((TMode & KERNEL_TELEMETRY) != 0U); }
 
     // If hit here: Kernel<N> expects at least 1 task, e.g. N > 0
     STK_STATIC_ASSERT_N(TASKS_MAX, TASKS_MAX != 0U);

@@ -671,6 +671,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/memory/stk_memory_blockpool.h</locationURI>
 		</link>
 		<link>
+			<name>deps/stk/include/memory/stk_memory_bytepool.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/stk/include/memory/stk_memory_bytepool.h</locationURI>
+		</link>
+		<link>
 			<name>deps/stk/include/strategy/README.md</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/stk/include/strategy/README.md</locationURI>

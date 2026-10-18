@@ -277,8 +277,22 @@ protected:
 
     /*! \brief Destructor.
         \note  Protected by design. Prevents unsafe polymorphic delete.
+        \note  Detaches the object from the kernel's tick list. The kernel links an object into that list
+               when the first task waits on it and unlinks it lazily, from a Tick() call that returns false,
+               so an object whose last waiter was just woken stays linked until the next tick. Destroying it
+               in that window would leave a dangling entry which the tick handler walks.
+        \note  Enters a critical section: the kernel walks the tick list from the tick ISR.
     */
-    ~SyncObjectBase() = default;
+    ~SyncObjectBase()
+    {
+        const hw::CriticalSection::ScopedLock cs_;
+
+        ISyncObject::ListHeadType *const head = GetHead();
+        if (head != nullptr)
+        {
+            head->Unlink(this);
+        }
+    }
 
     void WakeOne() override
     {
@@ -290,7 +304,7 @@ protected:
         IKernelService::GetInstance()->Wake(this, true);
     }
 
-    IWaitObject::ListHeadType &GetWaitList() override
+    IWaitObject::ListHeadType &GetMutableWaitList() override
     {
         return m_wait_list;
     }
@@ -301,7 +315,7 @@ protected:
 //! Implementation of ISyncObject::Tick, see \a ISyncObject. Placed here as it depends on hw namespace.
 inline bool ISyncObject::Tick(Timeout elapsed_ticks)
 {
-    IWaitObject::ListHeadType &wlist = GetWaitList();
+    IWaitObject::ListHeadType &wlist = GetMutableWaitList();
 
     // note: ScopedCriticalSection usage
     //

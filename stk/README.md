@@ -55,7 +55,8 @@ stk/
 │   │   └── x86/win32/            ← Windows simulation port header
 │   ├── memory/
 │   │   ├── stk_memory.h           ← Umbrella: includes all memory headers
-│   │   └── stk_memory_blockpool.h ← Fixed-size block pool allocator
+│   │   ├── stk_memory_blockpool.h ← Fixed-size block pool allocator
+│   │   └── stk_memory_bytepool.h  ← Variable-size byte pool allocator
 │   ├── strategy/
 │   │   ├── stk_strategy_rrobin.h    ← Round-Robin
 │   │   ├── stk_strategy_swrrobin.h  ← Smooth Weighted Round-Robin
@@ -518,7 +519,7 @@ Requires `KERNEL_SYNC` in the kernel mode bitmask for most primitives. `ScopedCr
 | Class                         | Header                  | Description                                                                                                                        |
 |-------------------------------|-------------------------|------------------------------------------------------------------------------------------------------------------------------------|
 | `sync::ScopedCriticalSection` | `stk_sync_cs.h`         | RAII interrupt-disable critical section. Always available, ISR-safe                                                                |
-| `sync::ConditionVariable`     | `stk_sync_cv.h`         | Monitor-style wait/notify. Foundation for Pipe, MessageQueue, EventFlags, BlockMemoryPool                                          |
+| `sync::ConditionVariable`     | `stk_sync_cv.h`         | Monitor-style wait/notify. Foundation for Pipe, MessageQueue, EventFlags, BlockMemoryPool, BytePool                                |
 | `sync::Mutex`                 | `stk_sync_mutex.h`      | Recursive mutex. `Lock`, `TryLock`, `TimedLock`, `Unlock`. FIFO direct handover on unlock                                          |
 | `sync::FastMutex`             | `stk_sync_fastmutex.h`  | Non-recursive (binary) mutex, smaller and faster than `Mutex`. Self-lock fails/asserts. FIFO handover                              |
 | `sync::SpinLock`              | `stk_sync_spinlock.h`   | Recursive spinlock for ultra-short sections. ISR-unsafe                                                                            |
@@ -560,7 +561,14 @@ Include the umbrella header:
 #include <memory/stk_memory.h>
 ```
 
-**`memory::BlockMemoryPool`** provides O(1) alloc/free via an intrusive singly-linked free-list with zero heap fragmentation. Two storage modes are available: caller-supplied static buffer (zero heap, preferred for embedded) or heap-owned buffer (check `IsStorageValid()` after construction when exceptions are disabled).
+Two allocators are available. Both support a caller-supplied static buffer (zero heap, preferred for embedded) or a heap-owned buffer (check `IsStorageValid()` after construction when exceptions are disabled), and both block on a `ConditionVariable` rather than spinning.
+
+| Class                    | Block size            | Alloc / Free cost                | Fragmentation                 | Use when                                                 |
+|--------------------------|-----------------------|----------------------------------|-------------------------------|----------------------------------------------------------|
+| `memory::BlockMemoryPool`| Fixed, set at creation| O(1), constant time              | None                          | The same size is allocated repeatedly (packets, records) |
+| `memory::BytePool`       | Any size per request  | O(n) in the number of blocks     | Possible (first-fit, merging) | Sizes vary (messages, strings, protocol frames)          |
+
+**`memory::BlockMemoryPool`** provides O(1) alloc/free via an intrusive singly-linked free-list with zero heap fragmentation.
 
 **Key operations:**
 
@@ -581,7 +589,36 @@ alignas(sizeof(void*)) static uint8_t
 stk::memory::BlockMemoryPool pool(N, sizeof(MyType), g_Buf, sizeof(g_Buf));
 ```
 
-For constructor signatures, typed API (`AllocT<T>`, `TryAllocT<T>`), utility/query methods, ISR safety table, and usage examples (ISR receiver, typed blocking alloc, timed alloc), see [`include/memory/README.md`](include/memory/README.md).
+**`memory::BytePool`** serves requests of arbitrary size from one contiguous area. Every block is preceded by an 8-byte header (size + state marker), so no separate metadata is needed and returned pointers are 8-byte aligned. Allocation is first-fit with block splitting; `Free()` merges the freed block with the free blocks that follow it, and scans merge the rest lazily. A request that is zero or larger than `GetMaxRequest()` can never succeed and fails immediately instead of blocking. Every `Free()` wakes all waiters, because their requests differ in size and each must re-check its own; a timed wait uses an absolute deadline, so repeated wake-ups never extend it.
+
+**Key operations** (the allocation size is the first argument):
+
+| Method                                   | Blocking            | ISR-safe                     |
+|------------------------------------------|---------------------|------------------------------|
+| `TryAlloc(size)` / `TryAllocT<T>()`      | No                  | Yes (time grows with blocks) |
+| `Free(ptr)`                              | No                  | Yes (time grows with blocks) |
+| `TimedAlloc(size, NO_WAIT)`              | No                  | Yes                          |
+| `Alloc(size)` / `AllocT<T>()`            | Yes — indefinite    | No                           |
+| `TimedAlloc(size, timeout > 0)`          | Yes — up to timeout | No                           |
+| `TimedAllocEx(&block, size, timeout)`    | Yes — up to timeout | Only with `NO_WAIT`          |
+| `GetInfo(available, largest, fragments)` | No                  | Yes (O(n))                   |
+
+`TimedAllocEx()` returns the full `EWaitResult`, so a timeout can be told apart from a cancellation. The same `KERNEL_SYNC` rule applies as for `BlockMemoryPool`.
+
+```cpp
+// External static storage (zero heap)
+alignas(8) static uint8_t g_Heap[4096];
+stk::memory::BytePool pool(g_Heap, sizeof(g_Heap));
+
+char *msg = static_cast<char *>(pool.TimedAlloc(64U, stk::GetTicksFromMs(100)));
+if (msg != nullptr)
+{
+    FormatMessage(msg, 64U);
+    pool.Free(msg);
+}
+```
+
+For constructor signatures, typed API (`AllocT<T>`, `TryAllocT<T>`), utility/query methods (`AlignBlockSize` / `AlignSize`, `RequiredSize`, `GetInfo`), ISR safety table, and usage examples (ISR receiver, typed blocking alloc, timed alloc, variable-size messages), see [`include/memory/README.md`](include/memory/README.md).
 
 ---
 
@@ -671,7 +708,7 @@ User application code
 
 Optional modules (included independently by user code):
     sync/stk_sync.h      → 12 synchronization primitives
-    memory/stk_memory.h  → BlockMemoryPool
+    memory/stk_memory.h  → BlockMemoryPool, BytePool
     time/stk_time.h      → PeriodicTrigger, TimerHost
 ```
 

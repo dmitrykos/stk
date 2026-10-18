@@ -28,6 +28,7 @@ option(TEST_MSGQUEUE   "build test: sync::MessageQueue (platform-dependent)"    
 option(TEST_BARRIER    "build test: sync::BARRIER (platform-dependent)"           OFF)
 option(TEST_TIMERHOST  "build test: time::TimerHost (platform-dependent)"         OFF)
 option(TEST_BLOCKPOOL  "build test: memory::BlockPool (platform-dependent)"       OFF)
+option(TEST_BYTEPOOL   "build test: memory::BytePool (platform-dependent)"        OFF)
 
 if (TEST_GENERIC)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/generic)
@@ -103,4 +104,8 @@ endif()
 
 if (TEST_BLOCKPOOL)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/blockpool)
+endif()
+
+if (TEST_BYTEPOOL)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bytepool)
 endif()

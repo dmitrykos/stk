@@ -49,7 +49,8 @@ enum EKernelMode : uint8_t
     KERNEL_HRT       = (1 << 2), //!< Hard Real-Time (HRT) behavior (tasks are scheduled periodically and have an execution deadline, whole system is failed when task's deadline is failed).
     KERNEL_SYNC      = (1 << 3), //!< Synchronization support (see \a Event).
     KERNEL_TICKLESS  = (1 << 4), //!< Tickless mode. To use this mode STK_TICKLESS_IDLE must be defined to 1 in stk_config.h.
-    KERNEL_TIMESLICE = (1 << 5)  //!< Time-slicing: running task is rotated behind its same-priority peers when its quantum (see ITask::GetTimeSlice) expires. Requires a strategy with TIMESLICE_API = 1, incompatible with KERNEL_HRT.
+    KERNEL_TIMESLICE = (1 << 5), //!< Time-slicing: running task is rotated behind its same-priority peers when its quantum (see ITask::GetTimeSlice) expires. Requires a strategy with TIMESLICE_API = 1, incompatible with KERNEL_HRT.
+    KERNEL_TELEMETRY = (1 << 6)  //!< Enable introspection functions for diagnostics / telemetry (see IKernel::GetTaskState).
 };
 
 /*! \enum  EKernelPanicId
@@ -71,6 +72,19 @@ enum EKernelPanicId : uint8_t
     KERNEL_PANIC_NS_ACCESS           = 11U, //!< Non-secure access to protected resource.
     KERNEL_PANIC_BAD_MEMORY_REGION   = 12U, //!< Bad memory region (ARM TrustZone: provided memory region overlaps with another one).
     KERNEL_PANIC_SYNC_DEADLOCK       = 13U  //!< Deadlock caused by a synchronization primitive: a task tried to acquire a non-recursive primitive (e.g. sync::FastMutex) that it already owns and would block forever. Not used for spin-lock timeouts, see KERNEL_PANIC_SPINLOCK_DEADLOCK.
+};
+
+/*! \enum  ETaskState
+    \brief Kernel-side state of a task, see IKernel::GetTaskState().
+*/
+enum ETaskState : uint8_t
+{
+    TASK_STATE_REMOVED = 0, //!< The task is not bound to a kernel slot (never added, or already removed).
+    TASK_STATE_READY,       //!< Runnable: running, or waiting for the CPU.
+    TASK_STATE_SLEEPING,    //!< Sleeping via Sleep()/SleepUntil(), with a finite or an infinite timeout.
+    TASK_STATE_WAITING,     //!< Blocked on a synchronization object (IKernelService::Wait). KERNEL_SYNC mode only.
+    TASK_STATE_SUSPENDED,   //!< Suspended by IKernel::SuspendTask().
+    TASK_STATE_EXITING      //!< Run() has returned, the slot is released on the next tick (KERNEL_DYNAMIC mode only).
 };
 
 /*! \enum  EStackType
@@ -315,6 +329,18 @@ private:
 
     T     *m_ptr;  //!< Pointer to the underlying memory block.
     size_t m_size; //!< Total number of elements in the view.
+};
+
+/*! \struct TaskStateInfo
+    \brief  Snapshot of the kernel-side state of a task, filled in by IKernel::GetTaskState().
+*/
+struct TaskStateInfo
+{
+    ETaskState   state;     //!< Task state.
+    ISyncObject *wait_obj;  //!< Object the task is blocked on for TASK_STATE_WAITING, \c nullptr otherwise.
+                            //!< Identity only: the pointer is not guaranteed to stay valid after the call.
+    Timeout      remaining; //!< Ticks left until the sleep/wait expires for TASK_STATE_SLEEPING and
+                            //!< TASK_STATE_WAITING, \c WAIT_INFINITE if unbounded or not applicable.
 };
 
 /*! \class   MpuRegion
@@ -684,8 +710,26 @@ public:
 
     /*! \brief     Get list of tasks blocked on this object.
         \note      Read-only access for diagnostics / telemetry.
+        \note      The result is a snapshot: call inside the critical section (see \a hw::CriticalSection,
+                   \a sync::ScopedCrticalSection) if the list may change concurrently.
     */
     virtual const IWaitObject::ListHeadType &GetWaitList() const = 0;
+
+    /*! \brief     Get id of the task which is first in the wait list (FIFO order), i.e. the one
+                   that WakeOne() would wake next.
+        \return    TId of the first waiter, or \a TID_NONE if no tasks are currently waiting.
+        \note      Read-only introspection for diagnostics / telemetry.
+        \note      The result is a snapshot: call inside the critical section (see \a hw::CriticalSection,
+                   \a sync::ScopedCrticalSection) if the list may change concurrently.
+        \see       GetWaitList
+    */
+    TId GetFirstWaiterTid() const
+    {
+        const IWaitObject *const obj = util::DListCast::ListEntryToParent<const IWaitObject>(
+                GetWaitList().GetFirst());
+
+        return ((obj != nullptr) ? obj->GetTid() : TID_NONE);
+    }
 
 protected:
     /*! \brief Destructor.
@@ -711,7 +755,7 @@ protected:
 
     /*! \brief     Get list of tasks blocked on this object.
     */
-    virtual IWaitObject::ListHeadType &GetWaitList() = 0;
+    virtual IWaitObject::ListHeadType &GetMutableWaitList() = 0;
 };
 
 /*! \class IMutex
@@ -1575,6 +1619,23 @@ public:
     */
     virtual void CancelTaskWait(ITask *user_task) = 0;
 
+    /*! \brief      Get a snapshot of the kernel-side state of a task.
+        \param[in]  user_task: Pointer to the user task to query. Must not be \c nullptr.
+        \param[out] info: Receives the snapshot (see TaskStateInfo). Written only if the function returns \c true,
+                         left unchanged otherwise.
+        \return     \c true if the query succeeded and \a info is valid (TaskStateInfo::state is TASK_STATE_REMOVED
+                    if the task is not bound to a kernel slot), \c false if \a user_task is \c nullptr or the kernel
+                    is built without KERNEL_TELEMETRY.
+        \note       The check order resolves overlaps: a task suspended by SuspendTask() or blocked in
+                    IKernelService::Wait() is also asleep internally, but is reported as TASK_STATE_SUSPENDED
+                    or TASK_STATE_WAITING respectively, never as TASK_STATE_SLEEPING.
+        \note       The result is a snapshot, the task can change state immediately after the call.
+        \note       KERNEL_TELEMETRY mode only.
+        \warning    ISR-safe. Execution time is proportional to the number of task slots.
+        \see        SuspendTask, CancelTaskWait, ETaskState, TaskStateInfo, KERNEL_TELEMETRY
+    */
+    virtual bool GetTaskState(ITask *user_task, TaskStateInfo &info) const = 0;
+
     /*! \brief     Enumerate kernel tasks.
         \param[in] tasks: Reference to the ArrayView of IKernelTask pointers.
         \return    Number of tasks in the array.
@@ -1843,11 +1904,11 @@ protected:
     */
     ~IKernelService() = default;
 
-    /*! \brief IWaitObject::GetWaitList() access helper.
+    /*! \brief Access helper to the mutable IWaitObject::GetWaitList().
     */
-    static __stk_forceinline IWaitObject::ListHeadType &GetWaitList(ISyncObject *sobj)
+    static __stk_forceinline IWaitObject::ListHeadType &GetMutableWaitList(ISyncObject *sobj)
     {
-        return sobj->GetWaitList();
+        return sobj->GetMutableWaitList();
     }
 };
 

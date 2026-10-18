@@ -218,6 +218,29 @@ public:
         return Wait(flags, options, NO_WAIT);
     }
 
+    /*! \brief     Get list of tasks blocked on this object.
+        \note      Read-only access for diagnostics / telemetry.
+        \note      The result is a snapshot: call inside the critical section (see \a hw::CriticalSection,
+                   \a sync::ScopedCrticalSection) if the list may change concurrently.
+    */
+    const IWaitObject::ListHeadType &GetWaitList() const
+    {
+        return m_cv.GetWaitList();
+    }
+
+    /*! \brief     Get id of the task which is first in the wait list (FIFO order), i.e. the one
+                   that WakeOne() would wake next.
+        \return    TId of the first waiter, or \a TID_NONE if no tasks are currently waiting.
+        \note      Read-only introspection for diagnostics / telemetry.
+        \note      The result is a snapshot: call inside the critical section (see \a hw::CriticalSection,
+                   \a sync::ScopedCrticalSection) if the list may change concurrently.
+        \see       GetWaitList
+    */
+    TId GetFirstWaiterTid() const
+    {
+        return m_cv.GetFirstWaiterTid();
+    }
+
 private:
     STK_NONCOPYABLE_CLASS(EventFlags);
 

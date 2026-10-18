@@ -51,7 +51,7 @@ namespace sync {
     \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
     \see  ISyncObject, IWaitObject, IKernelService::Wait
 */
-class Mutex final : private SyncObjectBase, public IMutex, public ITraceable
+class Mutex final : public SyncObjectBase, public IMutex, public ITraceable
 {
 public:
     static const uint16_t RECURSION_MAX = 0xFFFEU; //!< maximum nesting depth

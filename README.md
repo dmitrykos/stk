@@ -1,7 +1,9 @@
-![Logo](docs/img/stk_logo_200px.png)
-# SuperTinyKernel™ RTOS
+<p align="center">
+  <img src="docs/img/stk_logo.svg" width="200">
+</p>
+<h1 align="center">SuperTinyKernel™ RTOS</h1>
 
-**Lightweight High-Performance Deterministic C++ RTOS for Embedded Systems**
+<p align="center"><strong>Lightweight High-Performance Deterministic C++ RTOS for Embedded Systems</strong></p>
 
 ---
 
@@ -61,7 +63,7 @@ STK is an open-source project developed at https://github.com/SuperTinyKernel-RT
 | **Memory Protection Unit (MPU) support**             | Privileged `ACCESS_PRIVILEGED` and non-privileged tasks `ACCESS_USER`, memory access partition - static and dynamic up to 6 per-task memory regions reprogrammed on every context switch                                                       |
 | **Low-power aware**                                  | MCU enters sleep when no task is runnable (sleeping)                                                                                                                                                                                           |
 | **Synchronization API**                              | Rich set of primitives in `stk::sync` namespace                                                                                                                                                                                                |
-| **Memory API**                                       | Deterministic, fragmentation-free allocator in `stk::memory` namespace                                                                                                                                                                         |
+| **Memory API**                                       | Heap-free allocators in `stk::memory` namespace: deterministic fixed-size `BlockMemoryPool` and variable-size `BytePool`                                                                                                                       |
 | **Thread-Local Storage (TLS)**                       | Per-task TLS via a dedicated CPU register via inline zero-overhead helpers                                                                                                                                                                     |
 | **Per-task MPU stack guard (`STK_MPU_STACK_GUARD`)** | Hardware-enforced stack overflow protection, plus 2, 4 or 6 dynamic per-task regions (auto stack guard + task-instance/user-defined) reprogrammed on every context switch                                                                      |
 | **Tiny footprint**                                   | Minimal code unrelated to scheduling                                                                                                                                                                                                           |
@@ -762,7 +764,12 @@ STK provides a feature-rich synchronization API which is located in [stk/sync](h
 
 ## Memory API (`stk/stk_memory.h`)
 
-STK provides a deterministic, fragmentation-free memory allocation module located in [stk/memory](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/stk/include/memory) under the `stk::memory` namespace. It is designed for embedded systems where dynamic heap allocation is undesirable or prohibited by coding standards (e.g. MISRA C++ Rule 18-4-1).
+STK provides a memory allocation module located in [stk/memory](https://github.com/SuperTinyKernel-RTOS/stk/tree/main/stk/include/memory) under the `stk::memory` namespace. It is designed for embedded systems where dynamic heap allocation is undesirable or prohibited by coding standards (e.g. MISRA C++ Rule 18-4-1). Two allocators are available, both working over a caller-supplied static buffer (zero heap) or an optional heap-owned buffer, and both blocking tasks on a condition variable instead of spinning:
+
+| Class                     | Block size             | Alloc / Free                 | Fragmentation | Use when                                                 |
+|---------------------------|------------------------|------------------------------|---------------|----------------------------------------------------------|
+| `memory::BlockMemoryPool` | Fixed, set at creation | O(1), constant time          | None          | The same size is allocated repeatedly                    |
+| `memory::BytePool`        | Any size per request   | O(n) in the number of blocks | Possible      | Sizes vary (messages, strings, protocol frames)          |
 
 ### `memory::BlockMemoryPool`
 
@@ -777,6 +784,34 @@ Internally the pool maintains an intrusive singly-linked free-list inside the st
 - **Typed wrappers**: `AllocT<T>()` / `TryAllocT<T>()` eliminate manual casts and assert type–size compatibility at allocation time.
 - **Debug diagnostics**: double-free detection (O(n) free-list walk), bounds checking, and alignment validation in debug builds; all checks compile away in release.
 - **Non-copyable, non-movable**: safe for use as a global or static object.
+
+### `memory::BytePool`
+
+A variable-size allocator for scenarios where allocation sizes vary, such as: message payloads, strings, or protocol frames. It trades the constant-time guarantee and fragmentation immunity of `BlockMemoryPool` for flexibility.
+
+Internally every block, free or used, is preceded by an 8-byte header (size + state marker) and blocks follow each other back to back inside the storage area. No separate metadata is required and returned pointers are 8-byte aligned.
+
+**Key properties:**
+
+- **First-fit with splitting**: a free block larger than the request is split when the remainder can hold a block of its own.
+- **Coalescing**: `Free()` merges the freed block with the free blocks that follow it, and allocation scans merge the rest, so adjacent free blocks always act as one.
+- **Task-blocking semantics**: `Alloc()` / `TimedAlloc()` suspend the caller until enough contiguous memory is freed; every `Free()` wakes all waiters (requests differ in size) and each re-checks its own. A timed wait uses an absolute deadline, so wake-ups never extend it, and `TimedAllocEx()` tells a timeout from a cancellation.
+- **Fail-fast requests**: a request of zero bytes, or larger than `GetMaxRequest()`, can never succeed and fails immediately instead of blocking forever.
+- **Diagnostics**: `GetInfo()` reports available bytes, the largest free fragment and the fragment count; `Free()` validates range, alignment and the block state (double-free), with an extra block-start check in debug builds.
+- **ISR usage**: `TryAlloc()` and `Free()` are ISR-safe, but their run time grows with the number of blocks, so keep them out of time-critical ISRs on large pools.
+- **Non-copyable, non-movable**: safe for use as a global or static object.
+
+```cpp
+alignas(8) static uint8_t g_Heap[4096];
+stk::memory::BytePool pool(g_Heap, sizeof(g_Heap));
+
+char *msg = static_cast<char *>(pool.TimedAlloc(64U, stk::GetTicksFromMs(100)));
+if (msg != nullptr)
+{
+    FormatMessage(msg, 64U);
+    pool.Free(msg);
+}
+```
 
 ---
 
