@@ -166,8 +166,10 @@ extern "C" void osal_spin_unlock(osal_spinlock_t *ctx, bool in_isr)
 extern "C" osal_semaphore_t osal_semaphore_create(osal_semaphore_def_t *semdef)
 {
   if (semdef != nullptr) {
-      /* Always constructed at count 0 (not-yet-signaled), matching every other OSAL backend here. */
-      STK_UNUSED(StkConstructIn<stk::sync::Semaphore>(*semdef, 0U));
+      /* Binary semaphore, as in every other OSAL backend here: constructed at count 0
+       * (not-yet-signaled) with max_count 1, so a second post before a wait cannot leave a stale
+       * extra token. */
+      STK_UNUSED(StkConstructIn<stk::sync::Semaphore>(*semdef, 0U, 1U));
   }
 
   return semdef;
