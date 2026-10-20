@@ -2167,7 +2167,8 @@ static struct GetTaskStateWaitContext
         wake            = false;
         counter         = 0;
         sampled         = false;
-        suspend_result  = true;
+        suspend_result  = SUSPEND_FAIL;
+        lift_result     = RESUME_FAIL;
         waiting.state   = TASK_STATE_REMOVED;
         waiting.wait_obj = nullptr;
         waiting.remaining = 0;
@@ -2182,7 +2183,8 @@ static struct GetTaskStateWaitContext
     bool          wake;           // end the wait with Wake() on the 3rd tick, otherwise let it expire
     uint32_t      counter;
     bool          sampled;
-    bool          suspend_result; // result of SuspendTask() attempted on the waiting task
+    ESuspendResult suspend_result; // result of SuspendTask() attempted on the waiting task
+    EResumeResult  lift_result;    // result of ResumeTask() which withdraws the deferred suspension
     TaskStateInfo waiting;        // state while the task is blocked
     TaskStateInfo after_suspend;  // state right after SuspendTask() was attempted on the blocked task
     TaskStateInfo after_wake;     // state right after Wake(), before the next tick
@@ -2197,9 +2199,12 @@ static struct GetTaskStateWaitContext
             waiting = GetTaskState(kernel, task);
             sampled = true;
 
-            // SuspendTask() does not touch a task which is already blocked
-            kernel->SuspendTask(task, suspend_result);
-            after_suspend = GetTaskState(kernel, task);
+            // SuspendTask() does not touch a task which is already blocked: the suspension is deferred
+            suspend_result = kernel->SuspendTask(task);
+            after_suspend  = GetTaskState(kernel, task);
+
+            // withdraw it, otherwise the task would be parked when the wait ends and never finish
+            lift_result = kernel->ResumeTask(task);
         }
         else
         if ((counter == 3) && wake)
@@ -2265,8 +2270,10 @@ static void Test_GetTaskStateWaiting(Timeout wait_ticks, bool wake, EWaitResult 
         CHECK_TRUE(waiting.remaining <= wait_ticks);
     }
 
-    // SuspendTask() ignores the blocked task: it keeps waiting
-    CHECK_FALSE(g_GetTaskStateWaitContext.suspend_result);
+    // SuspendTask() defers the suspension of the blocked task: it keeps waiting, and the deferred
+    // suspension can be withdrawn
+    CHECK_EQUAL(SUSPEND_DEFERRED, g_GetTaskStateWaitContext.suspend_result);
+    CHECK_EQUAL(RESUME_LIFTED, g_GetTaskStateWaitContext.lift_result);
     CHECK_EQUAL(TASK_STATE_WAITING, g_GetTaskStateWaitContext.after_suspend.state);
     CHECK_TRUE(g_GetTaskStateWaitContext.after_suspend.wait_obj == &sobj);
 
@@ -2371,6 +2378,374 @@ TEST(Kernel, GetTaskStateExitingHasPriorityOverSuspended)
 
     platform->ProcessTick();
     CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_REMOVED);
+}
+
+// ============================================================================ //
+// ============== IKernel::SuspendTask / ResumeTask (results, deferred) ======= //
+// ============================================================================ //
+
+TEST(Kernel, SuspendResumeResultCodes)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, unknown;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // not suspended: nothing to resume
+    CHECK_EQUAL(RESUME_NOT_SUSPENDED, kernel.ResumeTask(&task2));
+
+    // the legacy overload reports an immediate suspension only
+    bool suspended = false;
+    kernel.SuspendTask(&task2, suspended);
+    CHECK_TRUE(suspended);
+
+    // nesting is not supported
+    CHECK_EQUAL(SUSPEND_ALREADY, kernel.SuspendTask(&task2));
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_SUSPENDED);
+
+    CHECK_EQUAL(RESUME_DONE, kernel.ResumeTask(&task2));
+    CHECK_EQUAL(RESUME_NOT_SUSPENDED, kernel.ResumeTask(&task2));
+
+    // the resumed task is still asleep until the next tick: suspending it now is deferred, then withdrawn
+    CHECK_EQUAL(SUSPEND_DEFERRED, kernel.SuspendTask(&task2));
+    CHECK_EQUAL(RESUME_LIFTED, kernel.ResumeTask(&task2));
+
+    // task is not bound to the kernel
+    CHECK_EQUAL(SUSPEND_FAIL, kernel.SuspendTask(&unknown));
+    CHECK_EQUAL(RESUME_FAIL, kernel.ResumeTask(&unknown));
+}
+
+TEST(Kernel, SuspendResumeExitingTaskFails)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_PRIVILEGED> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    kernel.ScheduleTaskRemoval(&task2);
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_EXITING);
+
+    // a task which is being removed can be neither suspended nor resumed
+    CHECK_EQUAL(SUSPEND_FAIL, kernel.SuspendTask(&task2));
+    CHECK_EQUAL(RESUME_FAIL, kernel.ResumeTask(&task2));
+
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_REMOVED);
+
+    // and neither after the slot is released
+    CHECK_EQUAL(SUSPEND_FAIL, kernel.SuspendTask(&task2));
+    CHECK_EQUAL(RESUME_FAIL, kernel.ResumeTask(&task2));
+}
+
+TEST(Kernel, SuspendDeferredWhileSleeping)
+{
+    KernelMock<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+
+    // task1 (active) goes to sleep for 4 ticks
+    kernel.ScheduleSleepOnActiveTask(4);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_SLEEPING);
+
+    // the suspension is deferred (the call does not block, a sleeping task is not spun on)
+    CHECK_EQUAL(SUSPEND_DEFERRED, kernel.SuspendTask(&task1));
+    CHECK_EQUAL(SUSPEND_ALREADY, kernel.SuspendTask(&task1));
+
+    // the sleep itself is left untouched: still reported as sleeping with the same time left
+    const TaskStateInfo info = GetTaskState(&kernel, &task1);
+    CheckTaskState(info, TASK_STATE_SLEEPING);
+    CHECK_EQUAL(4, info.remaining);
+
+    // when the sleep expires the task is parked (suspended) instead of being woken
+    uint32_t ticks = 0;
+    while ((GetTaskState(&kernel, &task1).state == TASK_STATE_SLEEPING) && (ticks < 10))
+    {
+        platform->ProcessTick();
+        ++ticks;
+    }
+
+    CHECK_TRUE(ticks >= 3);
+    CHECK_TRUE(ticks <= 7);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_SUSPENDED);
+
+    // it is never scheduled while suspended, task2 owns the CPU
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        platform->ProcessTick();
+        CHECK_EQUAL(active->SP, (Word)task2.GetStack());
+        CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_SUSPENDED);
+    }
+
+    // resumed: becomes runnable and gets the CPU again
+    CHECK_EQUAL(RESUME_DONE, kernel.ResumeTask(&task1));
+    platform->ProcessTick();
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+
+    bool ran = false;
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        ran = ran || (active->SP == (Word)task1.GetStack());
+        platform->ProcessTick();
+    }
+    CHECK_TRUE(ran);
+}
+
+TEST(Kernel, SuspendDeferredLiftedBeforeSleepEnds)
+{
+    KernelMock<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    kernel.ScheduleSleepOnActiveTask(4);
+
+    CHECK_EQUAL(SUSPEND_DEFERRED, kernel.SuspendTask(&task1));
+
+    // the request has not taken effect yet: it is simply withdrawn
+    CHECK_EQUAL(RESUME_LIFTED, kernel.ResumeTask(&task1));
+    CHECK_EQUAL(RESUME_NOT_SUSPENDED, kernel.ResumeTask(&task1));
+
+    // the sleep still counts down and ends as a normal wake-up
+    uint32_t ticks = 0;
+    while ((GetTaskState(&kernel, &task1).state == TASK_STATE_SLEEPING) && (ticks < 10))
+    {
+        platform->ProcessTick();
+        ++ticks;
+    }
+
+    CHECK_TRUE(ticks >= 3);
+    CHECK_TRUE(ticks <= 7);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+
+    // and the task is scheduled again
+    bool ran = false;
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        ran = ran || (active->SP == (Word)task1.GetStack());
+        platform->ProcessTick();
+    }
+    CHECK_TRUE(ran);
+    CheckTaskState(GetTaskState(&kernel, &task1), TASK_STATE_READY);
+}
+
+TEST(Kernel, CancelTaskWaitDoesNotWakeSuspendedTask)
+{
+    Kernel<KERNEL_STATIC | KERNEL_TELEMETRY, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    Stack *&active = platform->m_stack_active;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    CHECK_EQUAL(SUSPEND_DONE, kernel.SuspendTask(&task2));
+    platform->ProcessTick();
+
+    // cancelling must not silently break the suspension (SleepCancel() maps to the same call)
+    kernel.CancelTaskWait(&task2);
+
+    for (uint32_t i = 0; i < 3; ++i)
+    {
+        platform->ProcessTick();
+        CHECK_EQUAL(active->SP, (Word)task1.GetStack());
+        CheckTaskState(GetTaskState(&kernel, &task2), TASK_STATE_SUSPENDED);
+    }
+
+    CHECK_EQUAL(RESUME_DONE, kernel.ResumeTask(&task2));
+}
+
+static struct SuspendDeferredWaitContext
+{
+    SuspendDeferredWaitContext()
+    {
+        Reset();
+    }
+
+    void Reset()
+    {
+        platform       = nullptr;
+        kernel         = nullptr;
+        task           = nullptr;
+        sobj           = nullptr;
+        wake           = false;
+        cancel         = false;
+        counter        = 0;
+        suspend_result = SUSPEND_FAIL;
+        resume_result  = RESUME_FAIL;
+        waiting.state     = TASK_STATE_REMOVED;
+        waiting.wait_obj  = nullptr;
+        waiting.remaining = 0;
+        parked         = waiting;
+        parked_seen    = false;
+        parked_at      = 0;
+        still_parked   = false;
+    }
+
+    IPlatform     *platform;
+    IKernel       *kernel;
+    ITask         *task;
+    ISyncObject   *sobj;
+    bool           wake;           // end the wait with Wake() on the 3rd tick
+    bool           cancel;         // end the wait with CancelTaskWait() on the 3rd tick
+    uint32_t       counter;
+    ESuspendResult suspend_result; // result of SuspendTask() on the blocked task
+    EResumeResult  resume_result;  // result of ResumeTask() on the parked task
+    TaskStateInfo  waiting;        // state right after SuspendTask(), the task is still blocked
+    TaskStateInfo  parked;         // state sampled when the wait is over
+    bool           parked_seen;    // the task became TASK_STATE_SUSPENDED after its wait ended
+    uint32_t       parked_at;      // tick at which that was observed
+    bool           still_parked;   // it stayed suspended for a few more ticks
+
+    void Process()
+    {
+        platform->ProcessTick();
+        ++counter;
+
+        if (counter == 2)
+        {
+            suspend_result = kernel->SuspendTask(task);
+            waiting        = GetTaskState(kernel, task);
+        }
+        else
+        if ((counter == 3) && wake)
+        {
+            IKernelService::GetInstance()->Wake(sobj, false);
+        }
+        else
+        if ((counter == 3) && cancel)
+        {
+            kernel->CancelTaskWait(task);
+        }
+        else
+        {
+            // noop
+        }
+
+        if (counter > 2)
+        {
+            const TaskStateInfo info = GetTaskState(kernel, task);
+
+            if (!parked_seen)
+            {
+                if (info.state == TASK_STATE_SUSPENDED)
+                {
+                    parked_seen = true;
+                    parked      = info;
+                    parked_at   = counter;
+                }
+            }
+            else
+            if (counter == (parked_at + 3))
+            {
+                // nobody has resumed the task for 3 ticks: it must still be parked
+                still_parked  = (info.state == TASK_STATE_SUSPENDED);
+                resume_result = kernel->ResumeTask(task);
+            }
+            else
+            {
+                // noop
+            }
+        }
+    }
+}
+g_SuspendDeferredWaitContext;
+
+static void SuspendDeferredWaitRelaxCpu()
+{
+    g_SuspendDeferredWaitContext.Process();
+}
+
+static void Test_SuspendDeferredWaiting(Timeout wait_ticks, bool wake, bool cancel, EWaitResult expected)
+{
+    Kernel<KERNEL_STATIC | KERNEL_SYNC | KERNEL_TELEMETRY, 1, SwitchStrategyRR, PlatformTestMock> kernel;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    TaskMock<ACCESS_USER> task;
+
+    MutexMock mutex;
+    SyncObjectMock sobj;
+
+    g_SuspendDeferredWaitContext.Reset();
+    g_SuspendDeferredWaitContext.platform = platform;
+    g_SuspendDeferredWaitContext.kernel   = &kernel;
+    g_SuspendDeferredWaitContext.task     = &task;
+    g_SuspendDeferredWaitContext.sobj     = &sobj;
+    g_SuspendDeferredWaitContext.wake     = wake;
+    g_SuspendDeferredWaitContext.cancel   = cancel;
+
+    decltype(g_RelaxCpuHandler) prev_handler = g_RelaxCpuHandler;
+    g_RelaxCpuHandler = SuspendDeferredWaitRelaxCpu;
+
+    kernel.Initialize();
+    kernel.AddTask(&task);
+    kernel.Start();
+
+    MutexMock::ScopedLock guard(mutex);
+
+    // returns only after the wait is over, the task is parked and then resumed by the handler
+    const EWaitResult wresult = IKernelService::GetInstance()->Wait(&sobj, &mutex, wait_ticks);
+
+    g_RelaxCpuHandler = prev_handler;
+
+    const SuspendDeferredWaitContext &ctx = g_SuspendDeferredWaitContext;
+
+    // the suspension was deferred and left the wait untouched
+    CHECK_EQUAL(SUSPEND_DEFERRED, ctx.suspend_result);
+    CHECK_EQUAL(TASK_STATE_WAITING, ctx.waiting.state);
+    CHECK_TRUE(ctx.waiting.wait_obj == &sobj);
+
+    // the wait ended (timeout, signal or cancel), the task did not run on but was parked
+    CHECK_TRUE(ctx.parked_seen);
+    CHECK_TRUE(ctx.parked_at > 2);
+    CHECK_TRUE(ctx.parked.wait_obj == nullptr);
+    CHECK_TRUE(ctx.still_parked);
+    CHECK_EQUAL(RESUME_DONE, ctx.resume_result);
+
+    // the result of the wait is preserved across the suspension
+    CHECK_EQUAL(expected, wresult);
+
+    CheckTaskState(GetTaskState(&kernel, &task), TASK_STATE_READY);
+}
+
+TEST(Kernel, SuspendDeferredWaitingTimeout)
+{
+    Test_SuspendDeferredWaiting(4, false, false, WAIT_RESULT_TIMEOUT);
+}
+
+TEST(Kernel, SuspendDeferredWaitingSignaled)
+{
+    Test_SuspendDeferredWaiting(10, true, false, WAIT_RESULT_SIGNAL);
+}
+
+TEST(Kernel, SuspendDeferredWaitingInfiniteSignaled)
+{
+    Test_SuspendDeferredWaiting(WAIT_INFINITE, true, false, WAIT_RESULT_SIGNAL);
+}
+
+TEST(Kernel, SuspendDeferredWaitingCanceled)
+{
+    Test_SuspendDeferredWaiting(WAIT_INFINITE, false, true, WAIT_RESULT_CANCELED);
 }
 
 TEST(Kernel, Hrt)

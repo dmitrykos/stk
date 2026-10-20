@@ -141,6 +141,28 @@ enum EWaitResult : int8_t
     WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task via IKernel::CancelTaskWait(), independent of signal/timeout.
 };
 
+/*! \enum  ESuspendResult
+    \brief Result of IKernel::SuspendTask().
+*/
+enum ESuspendResult : int8_t
+{
+    SUSPEND_FAIL     = -1, //!< Task is not bound to the kernel, or is exiting.
+    SUSPEND_DONE     = 0,  //!< Task was runnable and is suspended now.
+    SUSPEND_DEFERRED = 1,  //!< Task is sleeping/waiting: it will be suspended when the sleep/wait ends (wait result is preserved).
+    SUSPEND_ALREADY  = 2   //!< Task is already suspended or already has a deferred suspension pending.
+};
+
+/*! \enum  EResumeResult
+    \brief Result of IKernel::ResumeTask().
+*/
+enum EResumeResult : int8_t
+{
+    RESUME_FAIL          = -1, //!< Task is not bound to the kernel, or is exiting.
+    RESUME_NOT_SUSPENDED = 0,  //!< Task was not suspended by SuspendTask() (no-op).
+    RESUME_DONE          = 1,  //!< Suspended task has been resumed.
+    RESUME_LIFTED        = 2   //!< Deferred suspension was cancelled before it took effect.
+};
+
 /*! \enum  EHwException
     \brief Hardware exception id (see \c IPlatform::IEventOverrider::OnException).
 */
@@ -1585,19 +1607,35 @@ public:
 
     /*! \brief      Suspend task.
         \param[in]  user_task: Pointer to the user task to suspend.
-        \param[out] suspended: Set to true if task is suspended.
+        \return     See ESuspendResult. A task that is sleeping or blocked on a synchronization object
+                    gets a deferred suspension (SUSPEND_DEFERRED): its sleep/wait finishes normally
+                    (the wait result is preserved) and the task is then parked until ResumeTask().
+        \note       ISR-safe. From an ISR the interrupted task is switched out by the next tick, no
+                    forced context switch is requested (SVC is illegal in handler mode).
+        \note       When a task suspends itself (task context) the call returns after it has been resumed.
         \note       hw::CriticalSection must not be active otherwise a deadlock will
                     happen if task is suspending self.
     */
-    virtual void SuspendTask(ITask *user_task, bool &suspended) = 0;
+    virtual ESuspendResult SuspendTask(ITask *user_task) = 0;
 
-    /*! \brief     Resume task.
-        \param[in] user_task: Pointer to the user task to resume.
-        \warning   Must not be called on a task currently blocked in IKernelService::Wait() on a
-                   synchronization object - asserts in that case. Use CancelTaskWait() instead to
-                   interrupt that kind of wait.
+    /*! \brief      Suspend task (legacy form).
+        \param[in]  user_task: Pointer to the user task to suspend.
+        \param[out] suspended: Set to true if the task is suspended immediately (SUSPEND_DONE).
+        \see        SuspendTask(ITask *)
     */
-    virtual void ResumeTask(ITask *user_task) = 0;
+    void SuspendTask(ITask *user_task, bool &suspended)
+    {
+        suspended = (SuspendTask(user_task) == SUSPEND_DONE);
+    }
+
+    /*! \brief     Resume task suspended by SuspendTask(), or lift its deferred suspension.
+        \param[in] user_task: Pointer to the user task to resume.
+        \return    See EResumeResult.
+        \note      ISR-safe.
+        \note      A task blocked in IKernelService::Wait() is not woken by this call (its wait is not
+                   a suspension). Use CancelTaskWait() to interrupt that kind of wait.
+    */
+    virtual EResumeResult ResumeTask(ITask *user_task) = 0;
 
     /*! \brief     Cancel a task's in-progress wait on a synchronization object, waking it early.
         \param[in] user_task: Pointer to the user task whose wait should be cancelled.

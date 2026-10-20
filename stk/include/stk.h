@@ -142,12 +142,13 @@ protected:
         */
         enum EStateFlags : uint32_t
         {
-            STATE_NONE           = 0U,        //!< No pending state flags.
-            STATE_REMOVE_PENDING = (1U << 0), //!< Task returned from its Run function; slot will be freed on the next tick (KERNEL_DYNAMIC only).
-            STATE_SLEEP_PENDING  = (1U << 1), //!< Task called Sleep/SleepUntil/Yield; strategy's OnTaskSleep() will be invoked on the next tick (sleep-aware strategies only).
-            STATE_WAKE_PENDING   = (1U << 2), //!< Task wake is pending (see Wake).
-            STATE_SUSPENDED      = (1U << 3), //!< Task is suspended by SuspendTask.
-            STATE_YIELD_PENDING  = (1U << 4), //!< Task called Yield() and the strategy handled it via OnTaskYield() (task stays runnable); cleared by the context switch request or by the next tick, whichever comes first.
+            STATE_NONE            = 0U,        //!< No pending state flags.
+            STATE_REMOVE_PENDING  = (1U << 0), //!< Task returned from its Run function; slot will be freed on the next tick (KERNEL_DYNAMIC only).
+            STATE_SLEEP_PENDING   = (1U << 1), //!< Task called Sleep/SleepUntil/Yield; strategy's OnTaskSleep() will be invoked on the next tick (sleep-aware strategies only).
+            STATE_WAKE_PENDING    = (1U << 2), //!< Task wake is pending (see Wake).
+            STATE_SUSPENDED       = (1U << 3), //!< Task is suspended by SuspendTask.
+            STATE_YIELD_PENDING   = (1U << 4), //!< Task called Yield() and the strategy handled it via OnTaskYield() (task stays runnable); cleared by the context switch request or by the next tick, whichever comes first.
+            STATE_SUSPEND_PENDING = (1U << 5), //!< SuspendTask() was requested while the task was sleeping/waiting; converted into STATE_SUSPENDED when the sleep/wait ends (deferred suspension).
         };
 
     public:
@@ -228,6 +229,20 @@ protected:
             {
                 m_state |= STATE_WAKE_PENDING;
             }
+        }
+
+        /*! \brief  Turn a deferred suspension (STATE_SUSPEND_PENDING) into an effective one.
+            \note   Called by UpdateTaskState() at the moment the sleep/wait of the task ends. The task
+                    stays asleep infinitely until ResumeTask(). The strategy has already removed the task
+                    from its runnable set on OnTaskSleep(), therefore no OnTaskWake() is delivered.
+            \note   Must be called with hw::CriticalSection held or from the tick handler.
+        */
+        void CommitSuspend()
+        {
+            m_state = ((m_state & ~STATE_SUSPEND_PENDING) | STATE_SUSPENDED);
+            m_time_sleep = -WAIT_INFINITE;
+
+            __stk_full_memfence();
         }
 
         /*! \brief     Update the run-time scheduling weight (weighted strategies only).
@@ -1485,54 +1500,84 @@ public:
         }
     }
 
+    using IKernel::SuspendTask; // keep the legacy SuspendTask(ITask *, bool &) overload visible
+
     /*! \brief      Suspend task.
         \param[in]  user_task: Pointer to the user task to suspend.
-        \param[out] suspended: Set to true if task is suspended.
+        \return     SUSPEND_DONE if the task was runnable and is suspended now; SUSPEND_DEFERRED if the
+                    task is sleeping or blocked on a sync object (the suspension is applied when the
+                    sleep/wait ends, the wait result is preserved); SUSPEND_ALREADY if the task is already
+                    suspended or has a deferred suspension; SUSPEND_FAIL if the task is unknown or exiting.
+        \note       ISR-safe. From an ISR the interrupted task is switched out by the next tick:
+                    a forced context switch (SVC) is not legal in handler mode and is not requested.
         \note       hw::CriticalSection must not be active otherwise a deadlock will
                     happen if task is suspending self.
     */
-    void SuspendTask(ITask *user_task, bool &suspended) override
+    ESuspendResult SuspendTask(ITask *user_task) override
     {
         STK_ASSERT(user_task != nullptr);
 
-        bool self = false;
+        ESuspendResult result = SUSPEND_FAIL;
         KernelTask *self_task = nullptr;
+
+        const bool in_isr = hw::IsInsideISR();
 
         // critical section: avoid race with OnTick
         {
             const hw::CriticalSection::ScopedLock cs_;
 
             KernelTask *const task = FindTaskByUserTask(user_task);
-            STK_ASSERT(task != nullptr);
 
-            // nesting not supported, must not be suspended by SuspendTask
-            STK_ASSERT((task->m_state & KernelTask::STATE_SUSPENDED) == 0U);
-
-            // only suspend if the task is currently awake: if it is already sleeping
-            // (e.g. blocked on a mutex or timed Sleep), do not overwrite m_time_sleep,
-            // that would corrupt the original sleep state and, for sync-object waits,
-            // would interfere with WaitObject::Tick()
-            suspended = !task->IsSleeping();
-            if (suspended == true)
+            if ((task != nullptr) && !task->IsPendingRemoval())
             {
-                task->ScheduleSleep(WAIT_INFINITE);
-
-                // check if suspending self
-                self = (task == m_task_now);
-
-                // trace blocked via Suspend
-                if (self)
+                if ((task->m_state & (KernelTask::STATE_SUSPENDED | KernelTask::STATE_SUSPEND_PENDING)) != 0U)
                 {
-                    // keep the pointer: m_task_now may change as soon as the critical section is released
-                    self_task = task;
-
-                #if STK_SEGGER_SYSVIEW
-                    SEGGER_SYSVIEW_OnTaskStopReady(task->GetUserStackPtr()->tid, TRACE_EVENT_SUSPEND);
-                #endif
+                    // nesting not supported
+                    result = SUSPEND_ALREADY;
                 }
+                else if (task->IsSleeping())
+                {
+                    // sleeping or blocked on a sync object: do not overwrite m_time_sleep (that would
+                    // corrupt the original sleep state and interfere with WaitObject::Tick()), only
+                    // record the request: UpdateTaskState() turns it into a real suspension when the
+                    // sleep/wait ends, with the wait result preserved
+                    task->m_state |= KernelTask::STATE_SUSPEND_PENDING;
+                    result = SUSPEND_DEFERRED;
+                }
+                else
+                {
+                    task->ScheduleSleep(WAIT_INFINITE);
 
-                // set state
-                task->m_state |= KernelTask::STATE_SUSPENDED;
+                    // set state
+                    task->m_state |= KernelTask::STATE_SUSPENDED;
+                    result = SUSPEND_DONE;
+
+                    if (task == m_task_now)
+                    {
+                        // trace blocked via Suspend
+                    #if STK_SEGGER_SYSVIEW
+                        SEGGER_SYSVIEW_OnTaskStopReady(task->GetUserStackPtr()->tid, TRACE_EVENT_SUSPEND);
+                    #endif
+
+                        // suspending self (task context): keep the pointer as m_task_now may change as soon
+                        // as the critical section is released; from an ISR m_task_now is the interrupted
+                        // task, it is switched out by the next tick and nobody must spin here
+                        if (!in_isr)
+                        {
+                            self_task = task;
+                        }
+                    }
+                    else if (IsStarted() && ((task->m_state & KernelTask::STATE_SLEEP_PENDING) != 0U))
+                    {
+                        // not the scheduled task: report the sleep to the strategy right away, otherwise a
+                        // forced context switch could still pick it from GetNext() (see ScheduleRemoval)
+                        ProcessTaskPendingSleep(task);
+                    }
+                    else
+                    {
+                        // noop
+                    }
+                }
             }
         }
 
@@ -1541,36 +1586,59 @@ public:
         {
             self_task->BusyWaitWhileSleeping(this);
         }
+
+        return result;
     }
 
     /*! \brief     Resume task.
         \param[in] user_task: Pointer to the user task to resume.
-        \warning   Must not be called on a task blocked in OnTaskWait() on a sync object - asserts.
-                   Use CancelTaskWait() instead.
+        \return    RESUME_DONE if a suspended task was resumed; RESUME_LIFTED if a deferred suspension was
+                   cancelled before it took effect; RESUME_NOT_SUSPENDED if the task was not suspended;
+                   RESUME_FAIL if the task is unknown or exiting.
+        \note      ISR-safe.
+        \note      A task blocked in OnTaskWait() on a sync object is not woken by this call unless it is
+                   suspended: use CancelTaskWait() to interrupt such a wait.
     */
-    void ResumeTask(ITask *user_task) override
+    EResumeResult ResumeTask(ITask *user_task) override
     {
         STK_ASSERT(user_task != nullptr);
+
+        EResumeResult result = RESUME_FAIL;
 
         // critical section: avoid race with OnTick
 
         const hw::CriticalSection::ScopedLock cs_;
 
         KernelTask *const task = FindTaskByUserTask(user_task);
-        STK_ASSERT(task != nullptr);
 
-        // must be suspended by SuspendTask, otherwise noop
-        if ((task->m_state & KernelTask::STATE_SUSPENDED) != 0U)
+        if ((task != nullptr) && !task->IsPendingRemoval())
         {
-            // clear state
-            task->m_state &= ~KernelTask::STATE_SUSPENDED;
-
-            // wake up
-            if (task->IsSleeping())
+            if ((task->m_state & KernelTask::STATE_SUSPENDED) != 0U)
             {
-                task->Wake();
+                // clear state
+                task->m_state &= ~KernelTask::STATE_SUSPENDED;
+
+                // wake up
+                if (task->IsSleeping())
+                {
+                    task->Wake();
+                }
+
+                result = RESUME_DONE;
+            }
+            else if ((task->m_state & KernelTask::STATE_SUSPEND_PENDING) != 0U)
+            {
+                // suspension was not applied yet: simply withdraw it
+                task->m_state &= ~KernelTask::STATE_SUSPEND_PENDING;
+                result = RESUME_LIFTED;
+            }
+            else
+            {
+                result = RESUME_NOT_SUSPENDED;
             }
         }
+
+        return result;
     }
 
     /*! \brief     Cancel task's in-progress wait on a synchronization object.
@@ -1581,6 +1649,10 @@ public:
         STK_ASSERT(user_task != nullptr);
 
         KernelTask *const task = FindTaskByUserTask(user_task);
+
+        // a suspended task must stay suspended: waking it would silently break SuspendTask()
+        // (a deferred suspension, STATE_SUSPEND_PENDING, does not block the cancellation: the wait
+        // ends with WAIT_RESULT_CANCELED and the task is parked afterwards by UpdateTaskState())
         if (task != nullptr)
         {
             // critical section: avoid race with OnTick
@@ -1599,7 +1671,8 @@ public:
                 canceled_wait = task->m_wait_obj[0].CancelIfWaiting();
             }
 
-            if (!canceled_wait && task->IsSleeping())
+            if (!canceled_wait && task->IsSleeping() &&
+                ((task->m_state & KernelTask::STATE_SUSPENDED) == 0U))
             {
                 task->Wake();
             }
@@ -2767,16 +2840,28 @@ protected:
 
                 if (!just_entered_sleep && !task->IsSleepInfinite())
                 {
-                    // advance sleep time by number of elapsed ticks (always 1 if non-Tickless)
-                    task->m_time_sleep += elapsed_ticks;
-
-                    // deliver sleep event to the strategy
-                    if __stk_constexpr_cpp17 (TStrategy::SLEEP_EVENT_API)
+                    if (((task->m_state & KernelTask::STATE_SUSPEND_PENDING) != 0U) &&
+                        ((task->m_time_sleep + elapsed_ticks) >= 0))
                     {
-                        // notify strategy that the task woke up
-                        if (!task->IsSleeping())
+                        // sleep/wait is over (timeout, signal, cancel or Wake) but a deferred suspension is
+                        // pending: park the task instead of waking it. The strategy has already removed the
+                        // task on OnTaskSleep(), therefore OnTaskWake() is not delivered. The check precedes
+                        // the advance so the task is never observed awake (m_time_sleep >= 0) in between.
+                        task->CommitSuspend();
+                    }
+                    else
+                    {
+                        // advance sleep time by number of elapsed ticks (always 1 if non-Tickless)
+                        task->m_time_sleep += elapsed_ticks;
+
+                        // deliver sleep event to the strategy
+                        if __stk_constexpr_cpp17 (TStrategy::SLEEP_EVENT_API)
                         {
-                            m_strategy.OnTaskWake(task);
+                            // notify strategy that the task woke up
+                            if (!task->IsSleeping())
+                            {
+                                m_strategy.OnTaskWake(task);
+                            }
                         }
                     }
                 }

@@ -215,31 +215,20 @@ using namespace stk;
     #define STK_SPINLOCK_MIN_CYCLES_PER_ITER (4U)
 #endif
 
-/*! \def     STK_CORTEX_M_FORCE_SWITCH
-    \brief   Enables SVC_FORCE_SWITCH (when enabled task can cause a forced context switch
-             when entering Sleep or Wait).
-    \see     HW_SpinLockLock, IPlatform::ForceContextSwitch
-*/
-#ifndef STK_CORTEX_M_FORCE_SWITCH
-    #define STK_CORTEX_M_FORCE_SWITCH (1)
-#endif
-
 /*! \enum    ESvcCommandId
     \brief   Supervisor Call (SVC) command identifiers for kernel service requests.
     \details Enumerates system call vectors serviced by the SVC exception handler to execute
              privileged kernel operations from unprivileged thread mode.
-    \see     STK_MPU, STK_CORTEX_M_FORCE_SWITCH
+    \see     STK_MPU
 */
 enum ESvcCommandId : uint8_t
 {
     SVC_START_SCHEDULING = 0U, //!< Initialize core scheduler and perform initial task dispatch.
     SVC_ENTER_CRITICAL,        //!< Enter a thread-level critical section.
-    SVC_EXIT_CRITICAL          //!< Exit a thread-level critical section.
+    SVC_EXIT_CRITICAL,         //!< Exit a thread-level critical section.
+    SVC_FORCE_SWITCH           //!< Trigger an immediate asynchronous task context switch.
 #if STK_MPU
   , SVC_BOOST_PRIV             //!< Elevate current task execution privilege mode temporarily.
-#endif
-#if STK_CORTEX_M_FORCE_SWITCH
-  , SVC_FORCE_SWITCH           //!< Trigger an immediate asynchronous task context switch.
 #endif
 };
 
@@ -575,7 +564,6 @@ static __stk_forceinline void HW_StartScheduler()
 
 /*! \brief     Force an immediate context switch.
 */
-#if STK_CORTEX_M_FORCE_SWITCH
 static __stk_forceinline void HW_ForceContextSwitch(TId id)
 {
     __asm volatile(
@@ -587,7 +575,6 @@ static __stk_forceinline void HW_ForceContextSwitch(TId id)
         : "r0", "memory"        /* r0 is clobbered with id, protect against compiler reordering */
     );
 }
-#endif
 
 /*! \brief     Enter critical section (unprivileged callers only).
     \details   Issues \c SVC_ENTER_CRITICAL, transferring control to the SVC handler.
@@ -3083,7 +3070,6 @@ extern "C" __stk_attr_used void StkSVCHandlerMain(Word *svc_args)
         }
         break; }
 
-#if STK_CORTEX_M_FORCE_SWITCH
     case SVC_FORCE_SWITCH: {
         Context &ctx = GetContext();
 
@@ -3091,7 +3077,6 @@ extern "C" __stk_attr_used void StkSVCHandlerMain(Word *svc_args)
 
         ctx.OnForceContextSwitch(exc_frame->R0);
         break; }
-#endif
 
 #if STK_MPU
     case SVC_BOOST_PRIV: {
