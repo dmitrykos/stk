@@ -412,6 +412,12 @@ void stk_kernel_start(stk_kernel_t *k)
 
 stk_kernel_state_t stk_kernel_get_state(const stk_kernel_t *k)
 {
+    // C state enum must stay in sync with its C++ counterpart (value is cast directly)
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_KERNEL_STATE_INACTIVE)  == static_cast<int>(stk::IKernel::KSTATE_INACTIVE),  "stk_kernel_state_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_KERNEL_STATE_READY)     == static_cast<int>(stk::IKernel::KSTATE_READY),     "stk_kernel_state_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_KERNEL_STATE_RUNNING)   == static_cast<int>(stk::IKernel::KSTATE_RUNNING),   "stk_kernel_state_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_KERNEL_STATE_SUSPENDED) == static_cast<int>(stk::IKernel::KSTATE_SUSPENDED), "stk_kernel_state_t mismatch");
+
     STK_ASSERT(k != nullptr);
 
     return static_cast<stk_kernel_state_t>(CastCToKernelInterfaceConst(k)->GetState());
@@ -457,21 +463,32 @@ void stk_kernel_schedule_task_removal(stk_kernel_t *k, stk_task_t *tsk)
     CastCToKernelInterface(k)->ScheduleTaskRemoval(&tsk->handle);
 }
 
-void stk_kernel_suspend_task(stk_kernel_t *k, stk_task_t *tsk, bool *suspended)
+stk_suspend_result_t stk_kernel_suspend_task(stk_kernel_t *k, stk_task_t *tsk)
 {
+    // C result enums must stay in sync with their C++ counterparts (values are cast directly)
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_SUSPEND_FAIL)     == static_cast<int>(stk::SUSPEND_FAIL),     "stk_suspend_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_SUSPEND_DONE)     == static_cast<int>(stk::SUSPEND_DONE),     "stk_suspend_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_SUSPEND_DEFERRED) == static_cast<int>(stk::SUSPEND_DEFERRED), "stk_suspend_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_SUSPEND_ALREADY)  == static_cast<int>(stk::SUSPEND_ALREADY),  "stk_suspend_result_t mismatch");
+    
     STK_ASSERT(k != nullptr);
     STK_ASSERT(tsk != nullptr);
-    STK_ASSERT(suspended != nullptr);
 
-    CastCToKernelInterface(k)->SuspendTask(&tsk->handle, *suspended);
+    return static_cast<stk_suspend_result_t>(CastCToKernelInterface(k)->SuspendTask(&tsk->handle));
 }
 
-void stk_kernel_resume_task(stk_kernel_t *k, stk_task_t *tsk)
+stk_resume_result_t stk_kernel_resume_task(stk_kernel_t *k, stk_task_t *tsk)
 {
+    // C result enums must stay in sync with their C++ counterparts (values are cast directly)
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_RESUME_FAIL)          == static_cast<int>(stk::RESUME_FAIL),          "stk_resume_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_RESUME_NOT_SUSPENDED) == static_cast<int>(stk::RESUME_NOT_SUSPENDED), "stk_resume_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_RESUME_DONE)          == static_cast<int>(stk::RESUME_DONE),          "stk_resume_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_RESUME_LIFTED)        == static_cast<int>(stk::RESUME_LIFTED),        "stk_resume_result_t mismatch");
+    
     STK_ASSERT(k != nullptr);
     STK_ASSERT(tsk != nullptr);
 
-    CastCToKernelInterface(k)->ResumeTask(&tsk->handle);
+    return static_cast<stk_resume_result_t>(CastCToKernelInterface(k)->ResumeTask(&tsk->handle));
 }
 
 size_t stk_kernel_enumerate_tasks(stk_kernel_t *k, stk_task_t **tasks, size_t max_count)

@@ -157,6 +157,26 @@ typedef enum stk_wait_result_t {
     STK_WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task, independent of signal/timeout.
 } stk_wait_result_t;
 
+/*! \brief     Result of stk_kernel_suspend_task().
+    \note      It is a direct match for stk::ESuspendResult.
+*/
+typedef enum stk_suspend_result_t {
+    STK_SUSPEND_FAIL     = -1, //!< Task is not bound to the kernel, or is exiting.
+    STK_SUSPEND_DONE     = 0,  //!< Task was runnable and is suspended now.
+    STK_SUSPEND_DEFERRED = 1,  //!< Task is sleeping/waiting: it will be suspended when the sleep/wait ends (wait result is preserved).
+    STK_SUSPEND_ALREADY  = 2   //!< Task is already suspended or already has a deferred suspension pending.
+} stk_suspend_result_t;
+
+/*! \brief     Result of stk_kernel_resume_task().
+    \note      It is a direct match for stk::EResumeResult.
+*/
+typedef enum stk_resume_result_t {
+    STK_RESUME_FAIL          = -1, //!< Task is not bound to the kernel, or is exiting.
+    STK_RESUME_NOT_SUSPENDED = 0,  //!< Task was not suspended by stk_kernel_suspend_task() (no-op).
+    STK_RESUME_DONE          = 1,  //!< Suspended task has been resumed.
+    STK_RESUME_LIFTED        = 2   //!< Deferred suspension was cancelled before it took effect.
+} stk_resume_result_t;
+
 /*! \brief     Infinite timeout constant.
 */
 #define STK_WAIT_INFINITE (STK_STATIC_CAST(stk_timeout_t, INT32_MAX))
@@ -429,20 +449,30 @@ bool stk_kernel_is_started(const stk_kernel_t *k);
 void stk_kernel_schedule_task_removal(stk_kernel_t *k, stk_task_t *task);
 
 /*! \brief     Suspend a task (prevent it from being scheduled).
-    \param[in]  k: Kernel handle.
-    \param[in]  task: Task to suspend.
-    \param[out] suspended: Set to true if the task was successfully suspended (was awake),
-                false if the task was already sleeping (e.g. blocked on a mutex or timed Sleep).
-    \note      Do not hold a critical section when suspending the calling task - this will deadlock.
-    \note      If the task suspends itself, the call blocks until the kernel switches it out.
-*/
-void stk_kernel_suspend_task(stk_kernel_t *k, stk_task_t *task, bool *suspended);
-
-/*! \brief     Resume a previously suspended task.
     \param[in] k: Kernel handle.
-    \param[in] task: Task to resume. Must have been suspended with stk_kernel_suspend_task().
+    \param[in] task: Task to suspend.
+    \return    See \a stk_suspend_result_t. A task that is sleeping or blocked on a synchronization
+               object gets a deferred suspension (STK_SUSPEND_DEFERRED): its sleep/wait finishes
+               normally (the wait result is preserved) and the task is then parked until
+               stk_kernel_resume_task().
+    \note      ISR-safe. From an ISR the interrupted task is switched out by the next tick, no
+               forced context switch is requested.
+    \note      When a task suspends itself (task context) the call returns after it has been resumed.
+    \note      Do not hold a critical section when suspending the calling task - this will deadlock.
+    \see       stk_kernel_resume_task, stk_suspend_result_t
 */
-void stk_kernel_resume_task(stk_kernel_t *k, stk_task_t *task);
+stk_suspend_result_t stk_kernel_suspend_task(stk_kernel_t *k, stk_task_t *task);
+
+/*! \brief     Resume a task suspended by stk_kernel_suspend_task(), or lift its deferred suspension.
+    \param[in] k: Kernel handle.
+    \param[in] task: Task to resume.
+    \return    See \a stk_resume_result_t.
+    \note      ISR-safe.
+    \note      A task blocked on a synchronization object (kernel wait) is not woken by this call,
+               its wait is not a suspension.
+    \see       stk_kernel_suspend_task, stk_resume_result_t
+*/
+stk_resume_result_t stk_kernel_resume_task(stk_kernel_t *k, stk_task_t *task);
 
 /*! \brief     Suspend scheduling (tickless idle entry point).
     \param[in] k: Kernel handle.
