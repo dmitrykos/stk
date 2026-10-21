@@ -1071,8 +1071,19 @@ osThreadId_t osThreadNew(osThreadFunc_t func, void *argument, const osThreadAttr
             if (th != nullptr)
             {
                 th->m_stk_priority = CmsisPrioToStk(cmsis_prio);
-                g_StkKernel.AddTask(th);
-                result = static_cast<osThreadId_t>(th);
+
+                // KERNEL_DYNAMIC: a failure (e.g. out of kernel task slots: increase CMSIS_STK_MAX_THREADS)
+                // is returned and not asserted, CMSIS requires NULL to be returned in this case
+                if (g_StkKernel.AddTask(th) == stk::ADD_OK)
+                {
+                    result = static_cast<osThreadId_t>(th);
+                }
+                else
+                {
+                    // the kernel is not changed and never referenced the thread: release the control block
+                    // and the stack (if owned) right away
+                    ObjDestroy(th);
+                }
             }
         }
     }

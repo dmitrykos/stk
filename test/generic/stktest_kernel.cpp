@@ -48,6 +48,24 @@ public:
         return KernelMock::OnForceContextSwitch(id, idle, active);
     }
 
+    // Expose protected Kernel::TryAllocateNewTask() to drive its 'validate' = false path directly: Kernel::AddTask()
+    // always validates, and the legacy Kernel::AllocateNewTask() (used by the HRT overload) skips the validation
+    // only if assertions are inactive (NDEBUG without _STK_ASSERT_REDIRECT), which is never the case in this suite.
+    // Returns the result, 'bound' receives the user task bound to the allocated slot (nullptr if none).
+    EAddResult CallTryAllocateNewTask(ITask *user_task, bool validate, ITask **bound = nullptr)
+    {
+        EAddResult result = ADD_FAIL_INVALID;
+
+        typename BaseType::KernelTask *const task = BaseType::TryAllocateNewTask(user_task, result, validate);
+
+        if (bound != nullptr)
+        {
+            *bound = (task != nullptr) ? task->GetUserTask() : nullptr;
+        }
+
+        return result;
+    }
+
     // Put the currently running task into a pending-sleep state directly (bypasses
     // KernelTask::BusyWaitWhileSleeping()'s spin-loop, which is not applicable in this
     // single-threaded test harness)
@@ -219,36 +237,16 @@ TEST(Kernel, AddTaskFailSameTask)
     }
 }
 
-static struct AddTaskWhenStartedRelaxCpuContext
+// ---------------------------------------------------------------------------- //
+// AddTask() after Start() (KERNEL_DYNAMIC): the task is added immediately under a //
+// critical section, without a yield, a busy-wait or a tick. Failures are returned.  //
+// ---------------------------------------------------------------------------- //
+
+static uint32_t g_AddTaskWhenStartedRelaxCpuCount = 0;
+
+static void AddTaskWhenStartedRelaxCpuCounter()
 {
-    AddTaskWhenStartedRelaxCpuContext()
-    {
-        counter  = 0;
-        platform = NULL;
-        strategy = NULL;
-    }
-
-    uint32_t                   counter;
-    PlatformTestMock          *platform;
-    const ITaskSwitchStrategy *strategy;
-
-    void Process()
-    {
-        platform->ProcessTick();
-
-        if (counter >= 1)
-        {
-            CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added within 1 tick");
-        }
-
-        ++counter;
-    }
-}
-g_AddTaskWhenStartedRelaxCpuContext;
-
-static void AddTaskWhenStartedRelaxCpu()
-{
-    g_AddTaskWhenStartedRelaxCpuContext.Process();
+    ++g_AddTaskWhenStartedRelaxCpuCount;
 }
 
 TEST(Kernel, AddTaskWhenStarted)
@@ -263,90 +261,24 @@ TEST(Kernel, AddTaskWhenStarted)
 
     CHECK_EQUAL_TEXT(1, strategy->GetSize(), "expecting task1 be added at this stage");
 
-    g_AddTaskWhenStartedRelaxCpuContext.platform = (PlatformTestMock *)kernel.GetPlatform();
-    g_AddTaskWhenStartedRelaxCpuContext.strategy = strategy;
-    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpu;
+    g_AddTaskWhenStartedRelaxCpuCount = 0;
+    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpuCounter;
 
     kernel.AddTask(&task2);
 
-    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added");
+    g_RelaxCpuHandler = NULL;
 
-    // AddTask is calling Yield/SwitchToNext which takes 2 ticks
-    CHECK_EQUAL_TEXT(2, g_AddTaskWhenStartedRelaxCpuContext.counter, "should complete within 2 ticks");
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added immediately");
+    CHECK_EQUAL_TEXT(0, g_AddTaskWhenStartedRelaxCpuCount, "AddTask must not yield or busy-wait");
 }
-
-// ---------------------------------------------------------------------------- //
-// AddTask() after Start() with a NOSLEEP_YIELD_API strategy (SwitchStrategyRR_NSY): //
-// Kernel::RequestAddTask() ends with a busy-wait for the request to be consumed.    //
-// ---------------------------------------------------------------------------- //
 
 typedef KernelMock<KERNEL_DYNAMIC, 2, SwitchStrategyRR_NSY, PlatformTestMock> KernelDynNsyMock;
-
-static struct AddTaskWhenStartedNsyRelaxCpuContext
-{
-    AddTaskWhenStartedNsyRelaxCpuContext()
-    {
-        Clear();
-    }
-
-    void Clear()
-    {
-        counter  = 0;
-        tid      = TID_NONE;
-        kernel   = NULL;
-        platform = NULL;
-        strategy = NULL;
-        release_yield_without_tick = false;
-    }
-
-    uint32_t                   counter;
-    TId                        tid;      //!< id of the task which is calling AddTask()
-    KernelDynNsyMock          *kernel;
-    PlatformTestMock          *platform;
-    const ITaskSwitchStrategy *strategy;
-
-    //! if true: the 1st call (busy-wait of the pending yield) releases the yield by the ISR
-    //! ForceContextSwitch path WITHOUT a tick, thus the AddTask request stays unconsumed
-    bool release_yield_without_tick;
-
-    void Process()
-    {
-        if (release_yield_without_tick && (counter == 0))
-        {
-            // busy-wait of Yield(): the ISR consumes only STATE_YIELD_PENDING, the request is not processed
-            // because it is processed on a tick only
-            Stack *idle = NULL, *active = NULL;
-
-            CHECK_FALSE(kernel->CallForceContextSwitch(tid, idle, active)); // the only task keeps running
-            CHECK_EQUAL_TEXT(1, strategy->GetSize(), "task2 must not be added yet, request is still pending");
-        }
-        else
-        {
-            if (release_yield_without_tick)
-            {
-                // busy-wait of RequestAddTask(): request is still pending before this tick
-                CHECK_EQUAL_TEXT(1, strategy->GetSize(), "task2 must not be added before the tick");
-            }
-
-            platform->ProcessTick();
-        }
-
-        ++counter;
-    }
-}
-g_AddTaskWhenStartedNsyRelaxCpuContext;
-
-static void AddTaskWhenStartedNsyRelaxCpu()
-{
-    g_AddTaskWhenStartedNsyRelaxCpuContext.Process();
-}
 
 TEST(Kernel, AddTaskWhenStartedNsy)
 {
     KernelDynNsyMock kernel;
     TaskMock<ACCESS_USER> task1, task2;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
-    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
 
     kernel.Initialize();
     kernel.AddTask(&task1);
@@ -354,21 +286,80 @@ TEST(Kernel, AddTaskWhenStartedNsy)
 
     CHECK_EQUAL_TEXT(1, strategy->GetSize(), "expecting task1 be added at this stage");
 
-    g_AddTaskWhenStartedNsyRelaxCpuContext.Clear();
-    g_AddTaskWhenStartedNsyRelaxCpuContext.platform = platform;
-    g_RelaxCpuHandler = AddTaskWhenStartedNsyRelaxCpu;
+    g_AddTaskWhenStartedRelaxCpuCount = 0;
+    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpuCounter;
 
-    // task1 requests task2 to be added: SwitchToNext -> OnTaskYield handled -> busy-wait on the pending yield,
-    // the tick inside it consumes both the yield and the AddTask request
     kernel.AddTask(&task2);
 
-    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added");
-    CHECK_EQUAL_TEXT(1, g_AddTaskWhenStartedNsyRelaxCpuContext.counter, "request consumed by the tick of the yield busy-wait");
+    g_RelaxCpuHandler = NULL;
+
+    // NOSLEEP_YIELD_API strategies must not busy-wait either
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added immediately");
+    CHECK_EQUAL_TEXT(0, g_AddTaskWhenStartedRelaxCpuCount, "AddTask must not busy-wait");
 }
 
-TEST(Kernel, AddTaskWhenStartedNsyWaitsForRequestConsumed)
+// KERNEL_DYNAMIC: failures are returned, never asserted (the caller handles them)
+TEST(Kernel, AddTaskWhenStartedResultOk)
 {
-    KernelDynNsyMock kernel;
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize();
+    CHECK_EQUAL(ADD_OK, kernel.AddTask(&task1));
+    kernel.Start();
+    CHECK_EQUAL(ADD_OK, kernel.AddTask(&task2));
+}
+
+TEST(Kernel, AddTaskWhenStartedResultSameTask)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+    CHECK_EQUAL(ADD_OK, kernel.AddTask(&task2));
+
+    CHECK_EQUAL(ADD_FAIL_DUPLICATE, kernel.AddTask(&task2));
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "failed add must not change the kernel");
+}
+
+TEST(Kernel, AddTaskWhenStartedResultPoolFull)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+    CHECK_EQUAL(ADD_OK, kernel.AddTask(&task2));
+
+    CHECK_EQUAL(ADD_FAIL_POOL_FULL, kernel.AddTask(&task3));
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "failed add must not change the kernel");
+}
+
+TEST(Kernel, AddTaskDynamicResultInvalid)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+
+    // not initialized
+    CHECK_EQUAL(ADD_FAIL_INVALID, kernel.AddTask(&task1));
+
+    kernel.Initialize();
+
+    // nullptr
+    CHECK_EQUAL(ADD_FAIL_INVALID, kernel.AddTask(NULL));
+}
+
+// AddTask() from an ISR (KERNEL_DYNAMIC): immediate add, no yield/wait, failures are returned.
+// g_InsideISR is reset before any check: a failing CHECK throws and must not leave the flag set.
+
+TEST(Kernel, AddTaskFromIsr)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
     TaskMock<ACCESS_USER> task1, task2;
     ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
     PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
@@ -377,25 +368,186 @@ TEST(Kernel, AddTaskWhenStartedNsyWaitsForRequestConsumed)
     kernel.AddTask(&task1);
     kernel.Start();
 
-    CHECK_EQUAL_TEXT(1, strategy->GetSize(), "expecting task1 be added at this stage");
+    g_RelaxCpuHandler = AddTaskWhenStartedRelaxCpuCounter;
+    g_AddTaskWhenStartedRelaxCpuCount = 0;
+    g_InsideISR = true;
 
-    g_AddTaskWhenStartedNsyRelaxCpuContext.Clear();
-    g_AddTaskWhenStartedNsyRelaxCpuContext.kernel   = &kernel;
-    g_AddTaskWhenStartedNsyRelaxCpuContext.platform = platform;
-    g_AddTaskWhenStartedNsyRelaxCpuContext.strategy = strategy;
-    g_AddTaskWhenStartedNsyRelaxCpuContext.tid      = task1.GetTid();
-    g_AddTaskWhenStartedNsyRelaxCpuContext.release_yield_without_tick = true;
-    g_RelaxCpuHandler = AddTaskWhenStartedNsyRelaxCpu;
+    const EAddResult result = kernel.AddTask(&task2);
 
-    // task1 requests task2 to be added. SwitchToNext returns as soon as the pending yield is released (no tick
-    // happened), so the request is still in flight and RequestAddTask() must keep busy-waiting (NOSLEEP_YIELD_API)
-    // until the next tick consumes it
+    g_InsideISR = false;
+    g_RelaxCpuHandler = NULL;
+
+    CHECK_EQUAL(ADD_OK, result);
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added immediately");
+    CHECK_EQUAL_TEXT(0, platform->m_switch_to_next_nr, "ISR must not switch out the interrupted task");
+    CHECK_EQUAL_TEXT(0, g_AddTaskWhenStartedRelaxCpuCount, "ISR must not wait");
+    CHECK_EQUAL_TEXT(0, g_CriticalSectionState, "critical section must be released");
+}
+
+TEST(Kernel, AddTaskFromIsrResultPoolFull)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    g_InsideISR = true;
+
+    const EAddResult ok   = kernel.AddTask(&task2);
+    const EAddResult full = kernel.AddTask(&task3); // must not assert, the ISR has to get the result
+
+    g_InsideISR = false;
+
+    CHECK_EQUAL(ADD_OK, ok);
+    CHECK_EQUAL(ADD_FAIL_POOL_FULL, full);
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "failed add must not change the kernel");
+    CHECK_EQUAL_TEXT(0, g_CriticalSectionState, "critical section must be released on failure too");
+}
+
+TEST(Kernel, AddTaskFromIsrResultSameTask)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    g_InsideISR = true;
+
+    const EAddResult ok   = kernel.AddTask(&task2);
+    const EAddResult dupl = kernel.AddTask(&task2);
+
+    g_InsideISR = false;
+
+    CHECK_EQUAL(ADD_OK, ok);
+    CHECK_EQUAL(ADD_FAIL_DUPLICATE, dupl);
+    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "failed add must not change the kernel");
+    CHECK_EQUAL_TEXT(0, g_CriticalSectionState, "critical section must be released on failure too");
+}
+
+TEST(Kernel, AddTaskFromIsrBeforeStart)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+
+    g_InsideISR = true;
+
+    const EAddResult result = kernel.AddTask(&task1);
+
+    g_InsideISR = false;
+
+    CHECK_EQUAL(ADD_OK, result);
+    CHECK_EQUAL(1, strategy->GetSize());
+    CHECK_EQUAL(0, g_CriticalSectionState);
+}
+
+// TryAllocateNewTask(): 'validate' = false stops at the first free slot (the release fast path of the legacy
+// AllocateNewTask()), covered by driving the function directly.
+
+TEST(Kernel, TryAllocateNewTaskNoValidateStopsAtFirstFreeSlot)
+{
+    KernelMock<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITask *bound = nullptr;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
     kernel.AddTask(&task2);
 
-    CHECK_EQUAL_TEXT(2, strategy->GetSize(), "task2 must be added");
+    // slots 0 and 1 are busy, slot 2 is the first free slot: stop there
+    CHECK_EQUAL(ADD_OK, kernel.CallTryAllocateNewTask(&task3, false, &bound));
+    POINTERS_EQUAL(&task3, bound);
+}
 
-    // call 1: yield busy-wait released by the ISR, call 2: request busy-wait, the tick consumes the request
-    CHECK_EQUAL_TEXT(2, g_AddTaskWhenStartedNsyRelaxCpuContext.counter, "must wait in RequestAddTask() until request is consumed");
+TEST(Kernel, TryAllocateNewTaskNoValidateEmptyKernel)
+{
+    KernelMock<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITask *bound = nullptr;
+
+    kernel.Initialize();
+
+    // the very first slot is free: stop at once
+    CHECK_EQUAL(ADD_OK, kernel.CallTryAllocateNewTask(&task1, false, &bound));
+    POINTERS_EQUAL(&task1, bound);
+}
+
+TEST(Kernel, TryAllocateNewTaskNoValidatePoolFull)
+{
+    KernelMock<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2, task3;
+    ITask *bound = &task1;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+
+    // no free slot: nothing to stop at, the whole pool is scanned
+    CHECK_EQUAL(ADD_FAIL_POOL_FULL, kernel.CallTryAllocateNewTask(&task3, false, &bound));
+    POINTERS_EQUAL(nullptr, bound);
+}
+
+TEST(Kernel, TryAllocateNewTaskNoValidateDuplicateBeforeFreeSlot)
+{
+    KernelMock<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+    ITask *bound = &task1;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+
+    // the busy slots in front of the first free one are still checked: slot 0 holds this very task
+    CHECK_EQUAL(ADD_FAIL_DUPLICATE, kernel.CallTryAllocateNewTask(&task1, false, &bound));
+    POINTERS_EQUAL(nullptr, bound);
+}
+
+TEST(Kernel, TryAllocateNewTaskValidateFindsDuplicateAfterFreeSlot)
+{
+    KernelMock<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+    ITask *bound = &task1;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.RemoveTask(&task1); // slot 0 is free again, task2 stays in slot 1
+
+    // validate = true scans past the first free slot and finds task2; the failed call must not bind a slot
+    CHECK_EQUAL(ADD_FAIL_DUPLICATE, kernel.CallTryAllocateNewTask(&task2, true, &bound));
+    POINTERS_EQUAL(nullptr, bound);
+
+    // and the fast path (validate = false) stops at the free slot 0 and does not see it
+    CHECK_EQUAL(ADD_OK, kernel.CallTryAllocateNewTask(&task2, false, &bound));
+}
+
+TEST(Kernel, AddTaskWhenStartedFailStatic)
+{
+    Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1, task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        kernel.AddTask(&task2);
+        CHECK_TEXT(false, "expecting to fail adding a task after Start() in KERNEL_STATIC");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
 }
 
 static struct YieldPendingTaskExitRelaxCpuContext

@@ -151,9 +151,12 @@ static void ObjFree(T *obj)
 {
     if (obj != nullptr)
     {
+        // read the flag first: the object must not be touched after its destructor has run
+        const bool heap_owned = obj->m_cb_owned;
+
         obj->~T();
 
-        if (obj->m_cb_owned)
+        if (heap_owned)
             vPortFree(obj);
     }
 }
@@ -394,6 +397,13 @@ void taskYIELD_impl(void)
 // notification word protected by a critical section.
 // ===========================================================================
 
+struct FrtosTask;
+
+// Deleted tasks which the kernel has already removed (OnExit() fired) and whose TCB and/or stack are heap-owned,
+// waiting to be freed from task context by ReapDeletedTasks(). Chained via FrtosTask::m_zombie_next. Pushed only
+// from the kernel tick (OnExit(), the tick can not be preempted), detached only inside a critical section.
+static FrtosTask *g_ZombieTasks = nullptr;
+
 struct FrtosTask : public stk::ITask
 {
     enum class State : uint8_t
@@ -409,6 +419,7 @@ struct FrtosTask : public stk::ITask
           m_stack(nullptr), m_stack_size(0U),
           m_stack_owned(false), m_cb_owned(true),
           m_state(State::Ready),
+          m_zombie_next(nullptr),
           m_task_number(++s_task_counter)
     {
         for (size_t i = 0U; i < configNUM_THREAD_LOCAL_STORAGE_POINTERS; ++i)
@@ -433,7 +444,16 @@ struct FrtosTask : public stk::ITask
 
     void OnExit() override
     {
+        // Called by the kernel from the tick when the task is removed: the task will never run again and its
+        // stack is no longer in use. The heap is not ISR-safe, therefore do not free here: queue for
+        // ReapDeletedTasks(). Memory owned by the caller (xTaskCreateStatic) is not touched.
         m_state = State::Deleted;
+
+        if (m_cb_owned || m_stack_owned)
+        {
+            m_zombie_next = g_ZombieTasks;
+            g_ZombieTasks = this;
+        }
     }
 
     const stk::Word  *GetStack()     const override { return m_stack; }
@@ -459,6 +479,7 @@ struct FrtosTask : public stk::ITask
     bool              m_stack_owned;
     bool              m_cb_owned;     // true -> heap-alloc, delete on removal
     volatile State    m_state;
+    FrtosTask        *m_zombie_next;  // link of the deleted tasks list waiting to be freed, see g_ZombieTasks
     uint32_t          m_task_number;  // monotonic serial, assigned at construction
 
     // Monotonic counter incremented once per FrtosTask construction.
@@ -1183,6 +1204,26 @@ BaseType_t xTaskGetSchedulerState(void)
 // Task management
 // ===========================================================================
 
+// Free the deleted tasks which the kernel has finished removing (see FrtosTask::OnExit()). Task context only.
+static void ReapDeletedTasks()
+{
+    FrtosTask *list;
+
+    {
+        stk::sync::ScopedCriticalSection cs_;
+
+        list          = g_ZombieTasks;
+        g_ZombieTasks = nullptr;
+    }
+
+    while (list != nullptr)
+    {
+        FrtosTask *const next = list->m_zombie_next;
+        ObjFree(list);
+        list = next;
+    }
+}
+
 BaseType_t xTaskCreate(TaskFunction_t  pvTaskCode,
                        const char     *pcName,
                        uint32_t        usStackDepth,
@@ -1192,6 +1233,9 @@ BaseType_t xTaskCreate(TaskFunction_t  pvTaskCode,
 {
     if (pvTaskCode == nullptr)
         return pdFAIL;
+
+    // release the memory of the deleted tasks which the kernel has already removed (FreeRTOS does it in the idle task)
+    ReapDeletedTasks();
 
     FrtosTask *t = ObjAlloc<FrtosTask>();
     if (t == nullptr)
@@ -1222,7 +1266,13 @@ BaseType_t xTaskCreate(TaskFunction_t  pvTaskCode,
 
     EnsureKernelInitialized();
 
-    g_StkKernel.AddTask(t);
+    // KERNEL_DYNAMIC: a failure (out of kernel task slots, or the task/stack is already added) is returned,
+    // not asserted: release the TCB and the stack (the kernel never referenced them) and report the failure
+    if (g_StkKernel.AddTask(t) != stk::ADD_OK)
+    {
+        ObjFree(t);
+        return pdFAIL;
+    }
 
     if (pxCreatedTask != nullptr)
         *pxCreatedTask = static_cast<TaskHandle_t>(t);
@@ -1263,13 +1313,22 @@ TaskHandle_t xTaskCreateStatic(TaskFunction_t  pvTaskCode,
 
     EnsureKernelInitialized();
 
-    g_StkKernel.AddTask(t);
+    // KERNEL_DYNAMIC: a failure is returned, not asserted. The TCB and the stack belong to the caller:
+    // only destroy the object and return NULL as FreeRTOS does when the task can not be created
+    if (g_StkKernel.AddTask(t) != stk::ADD_OK)
+    {
+        t->~FrtosTask();
+        return nullptr;
+    }
 
     return static_cast<TaskHandle_t>(t);
 }
 
 void vTaskDelete(TaskHandle_t xTaskToDelete)
 {
+    // release the memory of the other deleted tasks which the kernel has already removed
+    ReapDeletedTasks();
+
     FrtosTask *t = (xTaskToDelete == nullptr) ? static_cast<FrtosTask *>(
         reinterpret_cast<FrtosTask *>(static_cast<uintptr_t>(stk::GetTid()))) :
             static_cast<FrtosTask *>(xTaskToDelete);
@@ -1277,13 +1336,25 @@ void vTaskDelete(TaskHandle_t xTaskToDelete)
     if (t == nullptr)
         return;
 
-    stk::sync::ScopedCriticalSection cs_;
+    const bool is_self = (static_cast<uintptr_t>(stk::GetTid()) == reinterpret_cast<uintptr_t>(t));
 
-    g_StkKernel.ScheduleTaskRemoval(t);
+    {
+        stk::sync::ScopedCriticalSection cs_;
 
-    // Detached tasks are freed when the slot is released.
-    // For this wrapper, all tasks are considered detached (no join semantics).
-    ObjFree(t);
+        // ScheduleTaskRemoval() only marks the task: the kernel removes it on the next tick and calls OnExit(),
+        // which queues the task for ReapDeletedTasks(). Do NOT free it here: the kernel still references the TCB
+        // and the stack, and a task deleting itself is still running on its own stack.
+        g_StkKernel.ScheduleTaskRemoval(t);
+    }
+
+    if (is_self)
+    {
+        // vTaskDelete(NULL) / self-delete does not return: wait for the kernel to remove the task
+        for (;;)
+        {
+            stk::Yield();
+        }
+    }
 }
 
 void vTaskSuspend(TaskHandle_t xTaskToSuspend)

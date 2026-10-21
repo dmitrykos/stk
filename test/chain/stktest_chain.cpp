@@ -104,7 +104,7 @@ int main(int argc, char **argv)
     kernel.Start();
 
     int32_t result = TestContext::SUCCESS_EXIT_CODE;
-    for (int32_t i = 0; i < _STK_CHAIN_TEST_TASKS_MAX; ++i)
+    for (uint32_t i = 0; i < _STK_CHAIN_TEST_TASKS_MAX; ++i)
     {
         Time diff = g_Time[i] - (i * _STK_CHAIN_TEST_DELAY_TIME);
 

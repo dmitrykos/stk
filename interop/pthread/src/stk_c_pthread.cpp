@@ -306,25 +306,45 @@ static void ReleaseThreadResources(ThreadCtrl *ctrl);
 static void WaitForTaskExit(ThreadCtrl *ctrl);
 static void ReaperEntry(void *arg);
 
-static void EnsureReaper()
+// Creates the reaper task on first use. Returns true if the reaper is running afterwards. A failure (the
+// kernel has no free task slot) is not final: the next call retries, so the callers which need the reaper
+// (detached threads) report it instead of leaking the thread. Safe to call concurrently.
+static bool EnsureReaper()
 {
-    if (s_ReaperTask == nullptr)
+    if (LoadAcquire(&s_ReaperTask) == nullptr)
     {
         STK_C_ASSERT(s_BoundKernel != nullptr);
 
-        if (s_ReapSem == nullptr)
-        {
-            s_ReapSem = ConstructIn<sync::Semaphore>(s_ReapSemBuf, 0U);
-        }
+        const CsLock cs_; // serializes concurrent retries: only one reaper task may be created
 
-        s_ReaperTask = stk_task_create_user(ReaperEntry, nullptr, s_ReaperStack,
-                                            STK_C_PTHREAD_REAPER_STACK_WORDS);
-        if (s_ReaperTask != nullptr)
+        if (s_ReaperTask == nullptr)
         {
-            stk_task_set_name(s_ReaperTask, "pthread_reaper");
-            stk_kernel_add_task(s_BoundKernel, s_ReaperTask);
+            if (s_ReapSem == nullptr)
+            {
+                s_ReapSem = ConstructIn<sync::Semaphore>(s_ReapSemBuf, 0U);
+            }
+
+            stk_task_t *const task = stk_task_create_user(ReaperEntry, nullptr, s_ReaperStack,
+                                                          STK_C_PTHREAD_REAPER_STACK_WORDS);
+            if (task != nullptr)
+            {
+                stk_task_set_name(task, "pthread_reaper");
+
+                // stk_kernel_add_task() returns the failure for a dynamic kernel (e.g. out of kernel task slots)
+                if (stk_kernel_add_task(s_BoundKernel, task) == STK_ADD_OK)
+                {
+                    StoreRelease(&s_ReaperTask, task); // published only once the kernel has accepted it
+                }
+                else
+                {
+                    // the kernel never referenced the task: release its handle, a later call retries
+                    stk_task_destroy(task);
+                }
+            }
         }
     }
+
+    return (LoadAcquire(&s_ReaperTask) != nullptr);
 }
 
 static void EnqueueReap(ThreadCtrl *ctrl)
@@ -800,7 +820,11 @@ void stk_pthread_bind_kernel(stk_kernel_t *kernel)
 
     s_BoundKernel = kernel;
 
-    EnsureReaper();
+    // no reaper means detached threads can not be reclaimed: increase the kernel task count. Not final, as
+    // pthread_create(DETACHED) and pthread_detach() retry and report EAGAIN while the reaper is missing
+    const bool reaper_ok = EnsureReaper();
+    STK_C_ASSERT(reaper_ok);
+    STK_UNUSED(reaper_ok);
 }
 
 // -----------------------------------------------------------------------------
@@ -956,7 +980,10 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     }
     else
     {
-        pthread_stk_ctrl_t *const ctrl = AcquireThreadSlot();
+        // a detached thread is reclaimed by the reaper: do not create one which can never be released
+        const bool want_detached = ((attr != nullptr) && (attr->__detachstate == PTHREAD_CREATE_DETACHED));
+
+        pthread_stk_ctrl_t *const ctrl = (want_detached && !EnsureReaper()) ? nullptr : AcquireThreadSlot();
 
         if (ctrl == nullptr)
         {
@@ -991,9 +1018,18 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
                 ctrl->task.Initialize(ctrl, ctrl->stack, stack_words,
                                       privileged ? stk::ACCESS_PRIVILEGED : stk::ACCESS_USER);
 
-                ToKernel(s_BoundKernel)->AddTask(&ctrl->task);
-
-                *thread = ctrl;
+                // KERNEL_DYNAMIC: a failure (out of kernel task slots) is returned, not asserted
+                if (ToKernel(s_BoundKernel)->AddTask(&ctrl->task) == ADD_OK)
+                {
+                    *thread = ctrl;
+                }
+                else
+                {
+                    // the kernel never referenced the task: it is safe to release everything at once
+                    // (the event, the stack and the control block), no thread was created
+                    ReleaseThreadResources(ctrl);
+                    result = EAGAIN;
+                }
             }
         }
     }
@@ -1059,24 +1095,32 @@ int pthread_detach(pthread_t thread)
     }
     else
     {
-        bool ok = false;
+        // the reaper reclaims a detached thread: if it is missing the thread stays joinable
+        if (!EnsureReaper())
         {
-            const CsLock cs_;
-
-            if (!ctrl->joined && !ctrl->detached)
-            {
-                ctrl->detached = true;
-                ok = true;
-            }
-        }
-
-        if (!ok)
-        {
-            result = EINVAL;
+            result = EAGAIN;
         }
         else
         {
-            MaybeReap(ctrl);
+            bool ok = false;
+            {
+                const CsLock cs_;
+
+                if (!ctrl->joined && !ctrl->detached)
+                {
+                    ctrl->detached = true;
+                    ok = true;
+                }
+            }
+
+            if (!ok)
+            {
+                result = EINVAL;
+            }
+            else
+            {
+                MaybeReap(ctrl);
+            }
         }
     }
 

@@ -13,13 +13,13 @@
 using namespace stk;
 using namespace stk::test;
 
-TestContext test::g_TestContext;
-void (* g_RelaxCpuHandler)() = NULL;
-IKernelService *test::g_KernelService = NULL;
-int32_t test::g_CriticalSectionState = false;
-EKernelPanicId test::g_PanicValue = KERNEL_PANIC_NONE;
-bool test::g_InsideISR = false;
-uintptr_t g_Tls = 0;
+TestContext       test::g_TestContext;
+void            (*g_RelaxCpuHandler)()         = NULL;
+IKernelService   *test::g_KernelService        = NULL;
+int32_t           test::g_CriticalSectionState = false;
+EKernelPanicId    test::g_PanicValue           = KERNEL_PANIC_NONE;
+bool              test::g_InsideISR            = false;
+uintptr_t         g_Tls                        = 0;
 
 /*! \fn    STK_ASSERT_HANDLER
     \brief Custom assertion handler which intercepts assertions from STK package.

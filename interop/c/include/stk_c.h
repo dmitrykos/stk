@@ -157,6 +157,16 @@ typedef enum stk_wait_result_t {
     STK_WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task, independent of signal/timeout.
 } stk_wait_result_t;
 
+/*! \brief     Result of stk_kernel_add_task().
+    \note      It is a direct match for stk::EAddResult.
+*/
+typedef enum stk_add_result_t {
+    STK_ADD_FAIL_INVALID   = -3, //!< Invalid call: task is NULL, kernel is not initialized, or adding is not allowed in the current kernel mode/state (HRT kernel, or static kernel after stk_kernel_start()).
+    STK_ADD_FAIL_DUPLICATE = -2, //!< The task (or its stack) is already added to the kernel. Application design failure.
+    STK_ADD_FAIL_POOL_FULL = -1, //!< No free kernel slot left. In a dynamic kernel retry later, once a task has exited.
+    STK_ADD_OK             = 0   //!< Task was added.
+} stk_add_result_t;
+
 /*! \brief     Result of stk_kernel_suspend_task().
     \note      It is a direct match for stk::ESuspendResult.
 */
@@ -375,9 +385,24 @@ void stk_kernel_init(stk_kernel_t *k, uint32_t tick_period_us);
 /*! \brief     Add task to non-HRT kernel (static or dynamic).
     \param[in] k: Kernel handle.
     \param[in] tsk: Task handle created with one of stk_task_create_* functions.
+    \return    See \a stk_add_result_t. The kernel is not changed if the result is not STK_ADD_OK.
     \note      For static kernels this must be done before stk_kernel_start().
+    \note      Dynamic kernel: the task can be added after stk_kernel_start() as well, from a task or from an ISR.
+               The task is added immediately inside a critical section (no yield, no wait) and is scheduled
+               by the next tick. Restrictions for an ISR caller:
+               - the whole operation (stack initialization, MPU setup) runs with interrupts masked, keep the
+                 stack of such a task modest and call from a low-priority ISR;
+               - on Cortex-M the ISR priority must be numerically above (less urgent than) the SVCall priority;
+               - in a tickless kernel a task added from an ISR while all tasks are sleeping is first scheduled
+                 when the already armed timer expires, not on the next tick.
+    \warning   Dynamic kernel: a failure is only returned, never asserted, the caller must handle it
+               (otherwise the task is silently not added). Other kernels: a failure asserts, and in a release
+               build the task is not added.
+    \warning   If the result is not STK_ADD_OK the task handle stays allocated: retry the call later
+               (e.g. after STK_ADD_FAIL_POOL_FULL) or release it with stk_task_destroy().
+    \see       stk_add_result_t
 */
-void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *tsk);
+stk_add_result_t stk_kernel_add_task(stk_kernel_t *k, stk_task_t *tsk);
 
 /*! \brief     Add task with HRT timing parameters (HRT kernels only).
     \param[in] k: Kernel handle.
@@ -385,6 +410,9 @@ void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *tsk);
     \param[in] periodicity_ticks: Period in ticks.
     \param[in] deadline_ticks: Relative deadline in ticks.
     \param[in] start_delay_ticks: Initial offset / phase in ticks (>= 0).
+    \warning   Tasks must be added before the scheduler is started (before stk_kernel_start()). Adding an HRT
+               task after the start is not supported (not even from an ISR): the HRT schedule is built from the
+               complete task set. Asserts if called after the start or on a non-HRT kernel.
     \note      Must be called after stk_kernel_init() and before stk_kernel_start().
 */
 void stk_kernel_add_task_hrt(stk_kernel_t *k,
