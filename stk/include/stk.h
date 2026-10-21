@@ -111,16 +111,6 @@ protected:
     */
     typedef StackMemoryWrapper<STACK_SIZE_MIN> ExitTrapStackMemory;
 
-    /*! \enum  ERequest
-        \brief Bitmask flags for pending inter-task requests that must be processed
-               by the kernel on the next tick (in UpdateTaskRequest()).
-    */
-    enum ERequest : uint8_t
-    {
-        REQ_NONE     = 0,       //!< No pending requests.
-        REQ_ADD_TASK = (1 << 0) //!< An AddTask() request is pending from a running task (KERNEL_DYNAMIC only).
-    };
-
     /*! \class KernelTask
         \brief Internal per-slot kernel descriptor that wraps a user ITask instance.
 
@@ -152,24 +142,12 @@ protected:
         };
 
     public:
-        /*! \class AddTaskRequest
-            \brief Payload for an in-flight AddTask() request issued by a running task.
-            \note  Used in KERNEL_DYNAMIC mode only, when AddTask() is called after Start().
-                   The requesting task stores this struct on its own stack and yields, the
-                   kernel reads it on the next tick in UpdateTaskRequest() then clears the
-                   pointer to signal completion. The struct must remain valid until then.
-        */
-        struct AddTaskRequest
-        {
-            ITask *user_task; //!< User task to add. Must remain valid for the lifetime of its kernel slot.
-        };
-
         /*! \brief Construct a free (unbound) task slot. All fields set to zero/null.
             \note  In KERNEL_SYNC mode the embedded WaitObject back-pointer is wired to this
                    KernelTask at construction so the wait object can wake its owning task.
         */
         explicit KernelTask() : m_user(nullptr), m_stack(), m_state(STATE_NONE), m_time_sleep(NO_WAIT),
-            m_srt(), m_hrt(), m_rt_weight(), m_base_weight(), m_wait_obj(), m_ts()
+            m_hrt(), m_rt_weight(), m_base_weight(), m_wait_obj(), m_ts()
         {
             // bind to wait object
             if __stk_constexpr_cpp17 (IsSyncMode())
@@ -451,31 +429,6 @@ protected:
             \note  MISRA deviation: [STK-DEV-005] Rule 10-3-2.
         */
         STK_VIRT_DTOR ~KernelTask() = default;
-
-        /*! \class SrtInfo
-            \brief Per-task soft real-time (SRT) metadata.
-            \note  Allocated only when TMode does not include KERNEL_HRT. Zero-size in HRT mode
-                   (STK_ALLOCATE_COUNT resolves to 0 on GCC/Clang).
-        */
-        struct SrtInfo
-        {
-            SrtInfo() : add_task_req(nullptr)
-            {}
-
-            /*! \brief Clear all fields, ready for slot re-use.
-            */
-            void Clear()
-            {
-                add_task_req = nullptr;
-            }
-
-            /*! Pointer to a pending AddTaskRequest stored on the requesting task's stack.
-                Non-null while the request is in flight, cleared to null by UpdateTaskRequest()
-                once the new task has been added, signaling completion to the requesting task.
-                \see AddTaskRequest, RequestAddTask, UpdateTaskRequest
-            */
-            AddTaskRequest *add_task_req;
-        };
 
         /*! \class HrtInfo
             \brief Per-task Hard Real-Time (HRT) scheduling metadata.
@@ -794,10 +747,6 @@ protected:
             {
                 m_hrt[0].Clear();
             }
-            else
-            {
-                m_srt[0].Clear();
-            }
 
             if __stk_constexpr_cpp17 (IsTimesliceMode())
             {
@@ -1055,7 +1004,6 @@ protected:
         Stack             m_stack;      //!< Stack descriptor (SP register value + access mode + optional tid).
         volatile uint32_t m_state;      //!< Bitmask of EStateFlags. Written by task thread, read/cleared by kernel tick.
         volatile Timeout  m_time_sleep; //!< Sleep countdown: negative while sleeping (absolute value = ticks remaining), zero when awake.
-        SrtInfo           m_srt        [STK_ALLOCATE_COUNT<TMode, KERNEL_HRT, 0U, 1U>::Value];         //!< SRT metadata. Zero-size (no memory) in KERNEL_HRT mode.
         HrtInfo           m_hrt        [STK_ALLOCATE_COUNT<TMode, KERNEL_HRT, 1U, 0U>::Value];         //!< HRT metadata. Zero-size (no memory) in non-HRT mode.
         Weight            m_rt_weight  [STK_ALLOCATE_COUNT<TStrategy::WEIGHT_API, 1U, 1U, 0U>::Value]; //!< Run-time weight for weighted-round-robin scheduling. Zero-size for unweighted strategies.
         Weight            m_base_weight[STK_ALLOCATE_COUNT<TStrategy::WEIGHT_API, 1U, 1U, 0U>::Value]; //!< Run-time override of ITask::GetWeight() (NO_WEIGHT = not overridden). Zero-size for unweighted strategies.
@@ -1309,8 +1257,8 @@ public:
     */
     static constexpr size_t TASKS_MAX = TSize;
 
-    /*! \brief Construct the kernel with all storage zero-initialized, m_request cleared to REQ_NONE,
-               and m_kstate set to KSTATE_INACTIVE (indicating uninitialized state; advanced to
+    /*! \brief Construct the kernel with all storage zero-initialized and m_kstate set to
+               KSTATE_INACTIVE (indicating uninitialized state; advanced to
                KSTATE_READY by Initialize()).
         \note  In debug builds also verifies that TPlatform derives from IPlatform and TStrategy
                from ITaskSwitchStrategy.
@@ -1318,7 +1266,7 @@ public:
                STK_TICKLESS_IDLE is defined to 1 in stk_config.h.
     */
     explicit Kernel() : m_platform(), m_strategy(), m_task_now(nullptr), m_task_storage(), m_sleep_trap(),
-        m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_request(REQ_NONE), m_kstate(KSTATE_INACTIVE)
+        m_exit_trap(), m_fsm_state(FSM_STATE_NONE), m_kstate(KSTATE_INACTIVE)
     {
     #ifdef _DEBUG
         // TPlatform must inherit IPlatform
@@ -1359,7 +1307,6 @@ public:
         // reinitialize key state variables
         m_task_now  = nullptr;
         m_fsm_state = FSM_STATE_NONE;
-        m_request   = REQ_NONE;
         
         // exit trap is required only for KERNEL_DYNAMIC mode
         Stack *exit_trap;
@@ -1381,41 +1328,59 @@ public:
 
     /*! \brief     Register task for a soft real-time (SRT) scheduling.
         \param[in] user_task: User task to add. Must not already be registered. Must not be \c nullptr.
+        \return    See EAddResult. The kernel is not changed if the result is not ADD_OK.
         \note      Before Start(): allocates a free KernelTask slot and adds it to the strategy immediately.
-        \note      After Start() (KERNEL_DYNAMIC only): serialises the request via RequestAddTask() -
-                   the calling task yields and the kernel processes the request on the next tick.
-        \warning   Asserts if called in KERNEL_HRT mode (use the HRT overload instead),
-                   if called after Start() without KERNEL_DYNAMIC, or if TASKS_MAX is exceeded.
+        \note      After Start() (KERNEL_DYNAMIC only): the task is added immediately, inside a critical
+                   section, and is visible to the scheduler on the next tick. The call does not block, does
+                   not yield and does not defer any work to the tick handler.
+        \note      ISR-safe (task or ISR context), with these restrictions:
+                   - the whole operation runs with interrupts masked (stack initialization, MPU setup and the
+                     ITask getters are executed inside the critical section), keep stacks of tasks added from
+                     an ISR modest and call it from a low-priority ISR;
+                   - the ISR priority must be numerically above STK_CORTEX_M_SVCALL_ISR_PRIORITY (lower urgency)
+                     on Cortex-M, otherwise it is not masked by the BASEPRI critical section of an unprivileged task;
+                   - in KERNEL_TICKLESS mode a task added from an ISR while all tasks are sleeping becomes runnable
+                     only when the already armed timer expires (not one tick later), a task-context call is not
+                     affected;
+                   - kernels are expected to be per-core: the critical section excludes the tick of the local core only.
+        \warning   KERNEL_DYNAMIC: a failure is only returned, never asserted, the caller must handle it.
+                   Other modes: a failure asserts (KERNEL_HRT: always, use the HRT overload instead; KERNEL_STATIC:
+                   after Start(), TASKS_MAX exceeded, task or stack already registered). In a release build such
+                   a failure is not reported and the task is not added.
+        \warning   The task and stack collision check is always performed, also in a release build.
     */
-    __stk_attr_noinline void AddTask(ITask *user_task) override
+    __stk_attr_noinline EAddResult AddTask(ITask *user_task) override
     {
+        EAddResult result = ADD_FAIL_INVALID;
+
         if __stk_constexpr_cpp17 (!IsHrtMode())
         {
-            STK_ASSERT(user_task != nullptr);
-            STK_ASSERT(IsInitialized());
+            if (user_task != nullptr)
+            {
+                // critical section: avoid race with OnTick (and with a scheduler exit/restart when called from an ISR),
+                // the kernel state is checked inside of it
+                const hw::CriticalSection::ScopedLock cs_;
 
-            // when started the operation must be serialized by switching out from processing until
-            // kernel processes this request
-            if (IsStarted())
-            {
-                if __stk_constexpr_cpp17 (IsDynamicMode())
+                // after Start() only KERNEL_DYNAMIC may add tasks
+                if (IsInitialized() && (IsDynamicMode() || !IsStarted()))
                 {
-                    RequestAddTask(user_task);
+                    KernelTask *const task = TryAllocateNewTask(user_task, result, true);
+                    if (task != nullptr)
+                    {
+                        AddKernelTask(task);
+                    }
                 }
-                else
-                {
-                    STK_ASSERT(false);
-                }
-            }
-            else
-            {
-                AllocateAndAddNewTask(user_task);
             }
         }
-        else
+
+        // KERNEL_DYNAMIC: the result is for the caller to handle (a task can be added at runtime and a failure
+        // is a legit condition, e.g. the pool is full), otherwise this is an application design failure
+        if __stk_constexpr_cpp17 (!IsDynamicMode() || IsHrtMode())
         {
-            STK_ASSERT(false);
+            STK_ASSERT(result == ADD_OK);
         }
+
+        return result;
     }
 
     /*! \brief     Register a task for hard real-time (HRT) scheduling.
@@ -1423,8 +1388,11 @@ public:
         \param[in] periodicity_tc: Activation period in ticks. Must be > 0 and < INT32_MAX.
         \param[in] deadline_tc: Maximum allowed active duration in ticks. Must be > 0 and < INT32_MAX.
         \param[in] start_delay_tc: Initial sleep delay in ticks before the first activation. 0 means activate immediately.
-        \note      Must be called before Start(). Dynamic (post-Start) HRT task addition is not supported.
+        \warning   Tasks must be added before the scheduler is started (before Start()). Adding an HRT task
+                   after Start() is not supported, not even from an ISR: the HRT schedule is built from the
+                   complete task set and is not recomputed at runtime.
         \warning   Asserts if called outside KERNEL_HRT mode (use the SRT overload instead) or after Start().
+                   The failure is not reported in a release build and the task is not added.
     */
     __stk_attr_noinline void AddTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc,
         Timeout start_delay_tc) override
@@ -1954,32 +1922,37 @@ protected:
         }
     }
 
-    /*! \brief     Allocate new instance of KernelTask.
-        \param[in] user_task: User task for which kernel task object is allocated.
-        \return    Kernel task.
+    /*! \brief     Allocate new instance of KernelTask and bind the user task to it.
+        \param[in]  user_task: User task for which kernel task object is allocated.
+        \param[out] result: ADD_OK, ADD_FAIL_DUPLICATE or ADD_FAIL_POOL_FULL.
+        \param[in]  validate: If \c false the search stops at the first free slot and the collision
+                    with the already added tasks is not checked (assertions are inactive).
+        \return     Bound kernel task, or \c nullptr (the kernel is not changed) if \a result is not ADD_OK.
+        \note       Must be called inside a critical section when the kernel is started.
     */
-    KernelTask *AllocateNewTask(ITask *user_task)
+    KernelTask *TryAllocateNewTask(ITask *user_task, EAddResult &result, const bool validate)
     {
-        // look for a free kernel task
         KernelTask *new_task = nullptr;
+        bool collision = false;
+
+        // look for a free kernel task
         for (size_t i = 0U; i < TASKS_MAX; ++i)
         {
             KernelTask *const task = &m_task_storage[i];
             if (task->IsBusy())
             {
-                // avoid task collision
-                STK_ASSERT(task->m_user != user_task);
-
-                // avoid stack collision
-                STK_ASSERT(task->m_user->GetStack() != user_task->GetStack());
+                // avoid task collision and stack collision
+                collision = collision || (task->m_user == user_task) ||
+                    (task->m_user->GetStack() == user_task->GetStack());
             }
             else
             if (new_task == nullptr)
             {
                 new_task = task;
-            #if defined(NDEBUG) && !defined(_STK_ASSERT_REDIRECT)
-                break; // break if assertions are inactive and do not try to validate collision with existing tasks
-            #endif
+                if (!validate)
+                {
+                    break;
+                }
             }
             else
             {
@@ -1987,10 +1960,46 @@ protected:
             }
         }
 
+        if (collision)
+        {
+            result   = ADD_FAIL_DUPLICATE;
+            new_task = nullptr;
+        }
+        else
+        if (new_task == nullptr)
+        {
+            result = ADD_FAIL_POOL_FULL;
+        }
+        else
+        {
+            result = ADD_OK;
+            new_task->Bind(&m_platform, user_task);
+        }
+
+        return new_task;
+    }
+
+    /*! \brief     Allocate new instance of KernelTask, asserts on failure.
+        \param[in] user_task: User task for which kernel task object is allocated.
+        \return    Kernel task.
+    */
+    KernelTask *AllocateNewTask(ITask *user_task)
+    {
+        // if assertions are inactive do not try to validate collision with existing tasks
+    #if defined(NDEBUG) && !defined(_STK_ASSERT_REDIRECT)
+        const bool validate = false;
+    #else
+        const bool validate = true;
+    #endif
+
+        EAddResult result;
+        KernelTask *const new_task = TryAllocateNewTask(user_task, result, validate);
+
+        // task or stack collision: application design failure
+        STK_ASSERT(result != ADD_FAIL_DUPLICATE);
+
         // if nullptr - exceeded max supported kernel task count, application design failure
         STK_ASSERT(new_task != nullptr);
-
-        new_task->Bind(&m_platform, user_task);
 
         return new_task;
     }
@@ -2012,17 +2021,6 @@ protected:
         m_strategy.AddTask(task);
     }
 
-    /*! \brief     Allocate new instance of KernelTask and add it into the scheduling process.
-        \param[in] user_task: User task for which kernel task object is allocated.
-    */
-    void AllocateAndAddNewTask(ITask *user_task)
-    {
-        KernelTask *const task = AllocateNewTask(user_task);
-        STK_ASSERT(task != nullptr);
-
-        AddKernelTask(task);
-    }
-
     /*! \brief     Allocate new instance of KernelTask and add it into the HRT scheduling process.
         \note      Related to stk::KERNEL_HRT mode only.
         \param[in] user_task: User task for which kernel task object is allocated.
@@ -2038,41 +2036,6 @@ protected:
         task->HrtInit(periodicity_tc, deadline_tc, start_delay_tc);
 
         AddKernelTask(task);
-    }
-
-    /*! \brief     Request to add new task.
-        \note      Must be called by the task process only!
-        \param[in] user_task: User task to add.
-    */
-    __stk_attr_noinline void RequestAddTask(ITask *const user_task)
-    {
-        KernelTask *const caller = FindTaskBySP(m_platform.GetCallerSP());
-        STK_ASSERT(caller != nullptr);
-
-        typename KernelTask::SrtInfo &srt = caller->m_srt[0];
-
-        typename KernelTask::AddTaskRequest req = { .user_task = user_task };
-        srt.add_task_req = &req;
-
-        // notify kernel
-        ScheduleAddTask();
-
-        // switch out and wait for completion (due to context switch request could be processed here)
-        if (srt.add_task_req != nullptr)
-        {
-            m_service.SwitchToNext();
-        }
-
-        // wait until request is consumed
-        if __stk_constexpr_cpp17 (TStrategy::NOSLEEP_YIELD_API)
-        {
-            while (srt.add_task_req != nullptr)
-            {
-                __stk_relax_cpu();
-            }
-        }
-
-        STK_ASSERT(srt.add_task_req == nullptr);
     }
 
     template <typename TaskPtr, typename Storage>
@@ -2720,19 +2683,13 @@ protected:
         m_strategy.OnTaskWeightChange(task, prev_weight);
     }
 
-    /*! \brief     Update tasks (sleep, requests).
+    /*! \brief     Update tasks (sync objects, sleep).
     */
     Timeout UpdateTasks(const Timeout elapsed_ticks)
     {
-        // sync objects are updated before UpdateTaskRequest which may add a new object (newly added object must become 1 tick older)
         if __stk_constexpr_cpp17 (IsSyncMode())
         {
             UpdateSyncObjects(elapsed_ticks);
-        }
-
-        if (m_request != REQ_NONE)
-        {
-            UpdateTaskRequest();
         }
 
         return UpdateTaskState(elapsed_ticks);
@@ -2930,38 +2887,6 @@ protected:
         }
     }
 
-    /*! \brief     Update pending task requests.
-    */
-    void UpdateTaskRequest()
-    {
-        // process AddTask requests coming from tasks (KERNEL_DYNAMIC mode only, KERNEL_HRT is
-        // excluded as we assume that HRT tasks must be known to the kernel before a Start())
-        if __stk_constexpr_cpp17 (IsDynamicMode() && !IsHrtMode())
-        {
-            // process serialized AddTask request made from another active task, requesting process
-            // is currently waiting due to SwitchToNext()
-            if ((m_request & REQ_ADD_TASK) != 0U)
-            {
-                m_request &= ~REQ_ADD_TASK;
-
-                for (size_t i = 0U; i < TASKS_MAX; ++i)
-                {
-                    KernelTask *const task = &m_task_storage[i];
-
-                    typename KernelTask::SrtInfo &srt = task->m_srt[0];
-
-                    if (srt.add_task_req != nullptr)
-                    {
-                        AllocateAndAddNewTask(srt.add_task_req->user_task);
-
-                        srt.add_task_req = nullptr;
-                        __stk_full_memfence();
-                    }
-                }
-            }
-        }
-    }
-        
     /*! \brief      Fetch next event for the FSM.
         \param[out] next: Next kernel task to which Kernel can switch.
         \return     FSM event.
@@ -3202,20 +3127,6 @@ protected:
     */
     bool IsInitialized() const { return (m_kstate != KSTATE_INACTIVE); }
 
-    /*! \brief     Signal the kernel to process a pending AddTask request on the next tick.
-        \note      Sets the REQ_ADD_TASK bit in m_request under a hw::CriticalSection::ScopedLock,
-                   so the ISR-side tick handler observes the flag safely without a data race.
-    */
-    void ScheduleAddTask()
-    {
-        // critical section: avoid race with OnTick
-        {
-            const hw::CriticalSection::ScopedLock cs_;
-
-            m_request |= REQ_ADD_TASK;
-        }
-    }
-
 #if STK_SEGGER_SYSVIEW
     /*! \brief      Emit SEGGER SystemView task registration info for a kernel task.
         \param[in]  task: Kernel task to register. Must be bound (IsBusy() == true).
@@ -3330,7 +3241,6 @@ protected:
     SleepTrapStack   m_sleep_trap[1];   //!< Sleep trap (always present): executed when all tasks are sleeping.
     ExitTrapStack    m_exit_trap[STK_ALLOCATE_COUNT<TMode, KERNEL_DYNAMIC, 1U, 0U>::Value]; //!< Exit trap: zero-size in KERNEL_STATIC mode; one entry in KERNEL_DYNAMIC mode.
     EFsmState        m_fsm_state;       //!< Current FSM state. Drives context-switch decision on every tick.
-    volatile uint8_t m_request;         //!< Bitmask of pending ERequest flags from running tasks. Written by tasks, read/cleared by UpdateTaskRequest() in tick context.
     volatile EKernelState m_kstate;     //!< Current kernel state.
     SyncObjectList   m_sync_list[STK_ALLOCATE_COUNT<TMode, KERNEL_SYNC, 1U, 0U>::Value]; //!< List of active sync objects. Zero-size (no memory) if KERNEL_SYNC is not set.
 

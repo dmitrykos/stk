@@ -141,6 +141,17 @@ enum EWaitResult : int8_t
     WAIT_RESULT_CANCELED = 2   //!< The wait was cancelled by another task via IKernel::CancelTaskWait(), independent of signal/timeout.
 };
 
+/*! \enum  EAddResult
+    \brief Result of IKernel::AddTask() (Soft Real-Time overload).
+*/
+enum EAddResult : int8_t
+{
+    ADD_FAIL_INVALID   = -3, //!< Invalid call: task is \c nullptr, kernel is not initialized, or adding is not allowed in the current kernel mode/state (KERNEL_HRT, or KERNEL_STATIC after Start()).
+    ADD_FAIL_DUPLICATE = -2, //!< The task (or its stack) is already added to the kernel. Application design failure.
+    ADD_FAIL_POOL_FULL = -1, //!< No free kernel slot left (TASKS_MAX reached). In KERNEL_DYNAMIC mode retry later, once a task has exited.
+    ADD_OK             = 0   //!< Task was added.
+};
+
 /*! \enum  ESuspendResult
     \brief Result of IKernel::SuspendTask().
 */
@@ -1571,16 +1582,48 @@ public:
     /*! \brief     Add user task.
         \note      This function is for Soft Real-Time modes only (i.e. \c KERNEL_HRT must not be set in
                    the kernel mode flags).
+        \note      Before Start(): the task is bound and added to the strategy immediately.
+        \note      After Start() (\c KERNEL_DYNAMIC only): the task is bound and added immediately, inside a
+                   critical section, then scheduled by the next tick. The call does not block, does not yield
+                   and is not deferred to the tick handler, so it is also valid while the caller holds a
+                   critical section.
+        \note      ISR-safe in \c KERNEL_DYNAMIC mode. Restrictions for an ISR caller:
+                   - the whole operation (stack initialization, MPU setup, ITask::GetStack(), GetAccessMode(),
+                     GetMpuRegions(), GetTimeSlice() and GetWeight()) runs with interrupts masked, so keep
+                     the stack of such a task modest and call from a low-priority ISR;
+                   - on Cortex-M the ISR priority must be numerically above (less urgent than) the SVCall
+                     priority (STK_CORTEX_M_SVCALL_ISR_PRIORITY), otherwise it is not masked by the critical
+                     section of an unprivileged task;
+                   - with \c KERNEL_TICKLESS, a task added from an ISR while all other tasks are sleeping is
+                     first scheduled when the already armed timer expires (up to the current idle period),
+                     not on the next tick; a call from a task is not affected;
+                   - the kernel is assumed to be per-core: the critical section excludes the tick of the
+                     local core only.
         \param[in] user_task: Pointer to the user task to add.
+        \return    See EAddResult. The kernel is not changed if the result is not \a ADD_OK.
+        \warning   Error handling depends on the kernel mode:
+                   - \c KERNEL_DYNAMIC: any failure is only returned, never asserted. The caller is
+                     responsible for checking the result (assert, retry or recover), a task which is not
+                     added is silently dropped otherwise (e.g. \a ADD_FAIL_POOL_FULL, \a ADD_FAIL_DUPLICATE);
+                   - other modes: any failure asserts (application design failure), in a release build the
+                     failure is not reported and the task is not added.
+        \warning   The task and stack collision check is always performed, also in a release build.
     */
-    virtual void AddTask(ITask *user_task) = 0;
+    virtual EAddResult AddTask(ITask *user_task) = 0;
 
     /*! \brief     Add user task.
         \note      This function is for Hard Real-time mode only, e.g. stk::KERNEL_HRT is used as parameter.
         \param[in] user_task: Pointer to the user task to add.
         \param[in] periodicity_tc: Periodicity time at which task is scheduled (ticks).
         \param[in] deadline_tc: Deadline time within which a task must complete its work (ticks).
-        \param[in] start_delay_tc: Initial start delay for the task (ticks).
+        \param[in] start_delay_tc: Initial start delay for the task (ticks). 0 means activate immediately.
+        \note      Periodicity and deadline must be > 0 and < INT32_MAX.
+        \warning   Tasks must be added before the scheduler is started (before Start()). Adding an HRT task
+                   after Start() is not supported, not even from an ISR or in \c KERNEL_DYNAMIC mode: the
+                   HRT schedule (periodicity, deadlines, start delays) is built from the complete task set
+                   and is not recomputed at runtime. Asserts if called after Start() or outside
+                   \c KERNEL_HRT mode (use the SRT overload instead). The failure is not reported in a
+                   release build and the task is not added.
     */
     virtual void AddTask(ITask *user_task, Timeout periodicity_tc, Timeout deadline_tc, Timeout start_delay_tc) = 0;
 

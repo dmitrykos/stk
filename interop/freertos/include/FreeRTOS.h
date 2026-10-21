@@ -472,7 +472,7 @@ void vTaskDelete(TaskHandle_t xTaskToDelete);
 /// array of uintptr_t so the compiler enforces natural alignment without
 /// requiring knowledge of FrtosTask internals.
 /// Size is conservative: covers FrtosTask on all supported STK targets.
-#define STATIC_TASK_TCB_SIZE_WORDS  (19U + configNUM_THREAD_LOCAL_STORAGE_POINTERS \
+#define STATIC_TASK_TCB_SIZE_WORDS  (20U + configNUM_THREAD_LOCAL_STORAGE_POINTERS \
                                          + (3U * (configTASK_NOTIFICATION_ARRAY_ENTRIES - 1U)))
 typedef struct
 {

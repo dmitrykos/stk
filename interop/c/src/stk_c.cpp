@@ -431,12 +431,18 @@ bool stk_kernel_is_schedulable(const stk_kernel_t *k)
         const_cast<IKernel *>(CastCToKernelInterfaceConst(k))->GetSwitchStrategy());
 }
 
-void stk_kernel_add_task(stk_kernel_t *k, stk_task_t *tsk)
+stk_add_result_t stk_kernel_add_task(stk_kernel_t *k, stk_task_t *tsk)
 {
+    // C result enum must stay in sync with its C++ counterpart (values are cast directly)
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_ADD_FAIL_INVALID)   == static_cast<int>(stk::ADD_FAIL_INVALID),   "stk_add_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_ADD_FAIL_DUPLICATE) == static_cast<int>(stk::ADD_FAIL_DUPLICATE), "stk_add_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_ADD_FAIL_POOL_FULL) == static_cast<int>(stk::ADD_FAIL_POOL_FULL), "stk_add_result_t mismatch");
+    STK_STATIC_ASSERT_DESC(static_cast<int>(STK_ADD_OK)             == static_cast<int>(stk::ADD_OK),             "stk_add_result_t mismatch");
+
     STK_ASSERT(k != nullptr);
     STK_ASSERT(tsk != nullptr);
 
-    CastCToKernelInterface(k)->AddTask(&tsk->handle);
+    return static_cast<stk_add_result_t>(CastCToKernelInterface(k)->AddTask(&tsk->handle));
 }
 
 void stk_kernel_remove_task(stk_kernel_t *k, stk_task_t *tsk)
