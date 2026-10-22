@@ -871,6 +871,13 @@ bool stk_sleep_until(stk_tick_t ts);
 */
 void stk_yield(void);
 
+/*! \brief     Terminate the calling task: schedule its removal and switch it out. Does not return.
+    \note      Equivalent to returning from the task entry function (the kernel completes the removal on the
+               next tick), but can be called from a nested call. Local objects are not unwound.
+    \warning   Dynamic kernel only. ISR-unsafe.
+*/
+void stk_exit_task(void);
+
 /*! \brief     Cancel the sleep of a task, waking it immediately.
     \param[in] tid: Identifier of the task to wake (obtained from stk_tid() or
                stk_task_get_id()).

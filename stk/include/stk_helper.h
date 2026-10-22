@@ -562,6 +562,20 @@ static __stk_forceinline void Yield()
     IKernelService::GetInstance()->SwitchToNext();
 }
 
+/*! \brief     Terminate the calling task: schedule its removal and switch it out. Does not return.
+    \details   Equivalent to returning from ITask::Run(): the kernel completes the removal on the next tick,
+               calls ITask::OnExit() and releases the kernel slot, after which the same ITask can be added again
+               with IKernel::AddTask(). Unlike returning from Run() it can be called from a nested call.
+    \note      C++ destructors of the task's local objects are NOT run (there is no unwinding).
+    \warning   KERNEL_DYNAMIC mode only, panics with KERNEL_PANIC_BAD_MODE otherwise.
+    \warning   ISR-unsafe. Calling from an ISR context is not permitted and will trigger an assertion.
+    \see       IKernelService::ExitTask, IKernel::ScheduleTaskRemoval, ITask::OnExit
+*/
+static __stk_forceinline void ExitTask()
+{
+    IKernelService::GetInstance()->ExitTask();
+}
+
 /*! \brief     Change the base scheduling weight of a task at run-time.
     \param[in] tid: Id of the task.
     \param[in] weight: New base weight (must not be NO_WEIGHT, must be valid for the active strategy,

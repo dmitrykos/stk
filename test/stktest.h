@@ -303,6 +303,7 @@ public:
     {
         m_inc_ticks      = false;
         m_switch_to_next = false;
+        m_exit_task      = false;
         m_ticks          = 0;
         m_resolution     = 0;
         m_tid            = 0;
@@ -366,6 +367,11 @@ public:
         m_switch_to_next = true;
     }
 
+    void ExitTask() override
+    {
+        m_exit_task = true;
+    }
+
     EWaitResult Wait(ISyncObject *sobj, IMutex *mutex, Timeout timeout) override
     {
         STK_UNUSED(sobj);
@@ -420,6 +426,7 @@ public:
 
     bool     m_inc_ticks;
     bool     m_switch_to_next;
+    bool     m_exit_task;
     int64_t  m_ticks;
     int32_t  m_resolution;
     size_t   m_tid;

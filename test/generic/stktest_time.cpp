@@ -63,6 +63,7 @@ namespace stk
             (void)ticks;
             return NO_TIME_SLICE;
         }
+        void ExitTask() override {}
     }
     s_KernelServiceMock;
 

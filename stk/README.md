@@ -18,6 +18,7 @@ It covers the layout and purpose of every header and source file under `stk/`, t
   - [stk_arch.h — Hardware Abstraction Layer](#stk_archh--hardware-abstraction-layer)
   - [stk_helper.h — User-Facing Task Helpers](#stk_helperh--user-facing-task-helpers)
   - [stk.h — Top-Level Single Include](#stkh--top-level-single-include)
+  - [Adding and removing tasks at runtime (`KERNEL_DYNAMIC`)](#adding-and-removing-tasks-at-runtime-kernel_dynamic)
   - [Time-slicing (`KERNEL_TIMESLICE`)](#time-slicing-kernel_timeslice)
 - [include/arch — Architecture Back-Ends](#includearch--architecture-back-ends)
   - [stk_arch_common.h — Shared Platform Context](#stk_arch_commonh--shared-platform-context)
@@ -151,6 +152,7 @@ Defines every kernel interface, type alias, and enumeration. Key contents:
 | `EKernelMode`    | `KERNEL_STATIC`, `KERNEL_DYNAMIC`, `KERNEL_HRT`, `KERNEL_SYNC`, `KERNEL_TICKLESS`, `KERNEL_TIMESLICE`                                                                                                |
 | `EKernelPanicId` | 13 panic codes (`KERNEL_PANIC_NONE` plus 12 fault reasons: spin-lock deadlock, stack corruption, assert, HRT hard fault, CPU exception, CS-nesting overflow, unknown SVC, bad state, bad mode, bad stack type, non-secure access, bad memory region) |
 | `EStackType`     | `STACK_USER_TASK`, `STACK_SLEEP_TRAP`, `STACK_EXIT_TRAP`                                                                                                                                              |
+| `EAddResult`     | `ADD_OK`, `ADD_FAIL_POOL_FULL`, `ADD_FAIL_DUPLICATE`, `ADD_FAIL_INVALID` — result of `IKernel::AddTask()`, see [Adding and removing tasks at runtime](#adding-and-removing-tasks-at-runtime-kernel_dynamic)|
 | `EConsts`        | `PERIODICITY_MAX` (99 000 µs), `PERIODICITY_DEFAULT` (1 000 µs), `STACK_SIZE_MIN`                                                                                                                     |
 
 **Interfaces defined here:**
@@ -161,8 +163,8 @@ Defines every kernel interface, type alias, and enumeration. Key contents:
 - `ITaskSwitchStrategy` — scheduling strategy interface (`AddTask`, `RemoveTask`, `GetNext`, `GetFirst`, `GetSize`, `OnTaskSleep`, `OnTaskWake`, `OnTaskYield`, `OnTaskTimeSlice`, `OnTaskDeadlineMissed`, `OnTaskWeightChange`).
 - `IPlatform` — platform driver interface (`Initialize`, `Start`, `Stop`, `InitStack`, `SwitchToNext`, `Sleep`, `SleepUntil`, `Wait`, `ProcessTick`, `ProcessHardFault`, `SetEventOverrider`, `GetTid`, `Suspend`, `Resume`, `GetCallerSP`, `SetCpuFrequency(core_id, frequency)` (notifies the scheduler of a core's operating frequency for tick/tickless timing accuracy; pass `0xFF` as `core_id` to set the frequency for all cores at once — call it whenever a core's clock speed changes), etc.).
 - `IPlatform::IEventOverrider` — optional hook interface for extending the platform driver from user-space, registered via `IPlatform::SetEventOverrider(overrider, non_secure = false)` (the `non_secure` slot is TrustZone-only, for a separate Non-Secure-side overrider). Covers `OnSleep`, `OnHardFault`, `OnException` (per-exception fault reporting), and `OnConfigureMpu()` — returns a `const MpuConfig *` of global/background MPU regions applied underneath every task's own regions (see [MPU Configuration API](#mpu-configuration-api)).
-- `IKernel` — kernel control interface (`Initialize`, `AddTask` (two overloads: plain and with HRT periodicity/deadline/start-delay), `RemoveTask`, `ScheduleTaskRemoval`, `SuspendTask`, `ResumeTask`, `EnumerateKernelTasks`, `EnumerateTasks`, `EnumerateTasksT<N>`, `Start`, `GetState`, `GetPlatform`, `GetSwitchStrategy`).
-- `IKernelService` — runtime service interface available to running tasks (`GetTid`, `GetTicks`, `GetTickResolution`, `GetSysTimerCount`, `GetSysTimerFrequency`, `Delay`, `Sleep`, `SleepUntil`, `SleepCancel`, `SwitchToNext`, `Wait`, `Wake`, `Suspend`, `Resume`, `InheritWeight`, `RestoreWeight`, `SetTimeSlice`).
+- `IKernel` — kernel control interface (`Initialize`, `AddTask` (two overloads: plain, returning `EAddResult`, and with HRT periodicity/deadline/start-delay), `RemoveTask`, `ScheduleTaskRemoval`, `SuspendTask`, `ResumeTask`, `EnumerateKernelTasks`, `EnumerateTasks`, `EnumerateTasksT<N>`, `Start`, `GetState`, `GetPlatform`, `GetSwitchStrategy`).
+- `IKernelService` — runtime service interface available to running tasks (`GetTid`, `GetTicks`, `GetTickResolution`, `GetSysTimerCount`, `GetSysTimerFrequency`, `Delay`, `Sleep`, `SleepUntil`, `SleepCancel`, `SwitchToNext`, `ExitTask`, `Wait`, `Wake`, `Suspend`, `Resume`, `InheritWeight`, `RestoreWeight`, `SetTimeSlice`).
 - `ISyncObject`, `IWaitObject`, `IMutex`, `ITraceable` — synchronization building blocks.
 - `StackMemoryDef<N>` — stack memory array type helper.
 
@@ -247,6 +249,7 @@ class MyTask : public stk::Task<256, Mode>
 | `SleepUntil(timestamp)`      | No        | Suspend until absolute tick timestamp                                                      |
 | `SleepCancel(task_id)`       | Yes       | Cancel a task's pending sleep                                                              |
 | `Yield()`                    | No        | Cooperatively yield to the next task                                                       |
+| `ExitTask()`                 | No        | Terminate the calling task (`KERNEL_DYNAMIC` only), does not return                        |
 | `SetTimeSlice(tid, ticks)`   | No        | Change a task's time-slice quantum (`KERNEL_TIMESLICE` only); returns the previous quantum |
 | `SetTimeSlice(ticks)`        | No        | Same for the calling task                                                                  |
 | `Delay(ticks)`               | No        | Busy-wait for N ticks (spins, no sleep)                                                    |
@@ -274,7 +277,7 @@ It pulls in `stk_helper.h` and all the built-in strategy headers, then defines t
 | Flag              | Meaning                                                                                                                                                                                                               |
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `KERNEL_STATIC`   | Task list fixed before `Start()`; tasks cannot exit                                                                                                                                                                   |
-| `KERNEL_DYNAMIC`  | Tasks may be added/removed at runtime; exit is allowed                                                                                                                                                                |
+| `KERNEL_DYNAMIC`  | Tasks may be added (also from an ISR) or removed at runtime; exit is allowed                                                                                                                                                                |
 | `KERNEL_HRT`      | Hard Real-Time mode — tasks have deadlines and periods. Must combine with `KERNEL_STATIC` or `KERNEL_DYNAMIC`. Incompatible with `KERNEL_TICKLESS` and weighted strategies                                            |
 | `KERNEL_SYNC`     | Enables `sync::` primitives (Mutex, Event, Semaphore, etc.)                                                                                                                                                           |
 | `KERNEL_TICKLESS` | Low-power tickless idle. Requires `STK_TICKLESS_IDLE=1` in `stk_config.h`. Incompatible with `KERNEL_HRT`                                                                                                             |
@@ -310,6 +313,33 @@ int main()
     kernel.Start(); // never returns
 }
 ```
+
+---
+
+### Adding and removing tasks at runtime (`KERNEL_DYNAMIC`)
+
+`IKernel::AddTask(ITask *)` returns an `EAddResult`. The task is added **immediately**, inside a critical section: no request is deferred to the tick, the caller does not yield or wait, and the task is scheduled from the next tick. It can be called before `Start()`, from a task, and from an ISR.
+
+| `EAddResult`         | Meaning                                                                                              |
+|----------------------|------------------------------------------------------------------------------------------------------|
+| `ADD_OK`             | The task was added                                                                                   |
+| `ADD_FAIL_POOL_FULL` | No free kernel slot (`TSize` reached). Retry once a task has exited                                  |
+| `ADD_FAIL_DUPLICATE` | The task or its stack is already added, or the task is still being removed. Application design error |
+| `ADD_FAIL_INVALID`   | `nullptr` task, kernel not initialized, `KERNEL_HRT`, or `KERNEL_STATIC` after `Start()`              |
+
+- **Error handling depends on the mode.** `KERNEL_DYNAMIC` only *returns* a failure and never asserts: the caller must check the result, otherwise the task is silently not added. All other modes assert on a failure (a design error), in a release build the task is not added. The kernel is not changed by a failed call, and the task and stack collision check always runs, also in a release build.
+- **ISR callers:** the whole add (stack initialization, MPU setup and the `ITask` getters) runs with interrupts masked, so use a modest stack and a low-priority ISR. On Cortex-M the ISR priority must be numerically above `STK_CORTEX_M_SVCALL_ISR_PRIORITY`. With `KERNEL_TICKLESS`, a task added from an ISR while every task sleeps starts when the already armed timer fires, not on the next tick. Kernels are assumed to be per-core.
+- **HRT:** `AddTask(task, periodicity, deadline, start_delay)` must be called before `Start()`; adding an HRT task at runtime is not supported.
+
+```cpp
+const stk::EAddResult res = kernel.AddTask(&worker);
+if (res == stk::ADD_FAIL_POOL_FULL)
+{
+    // no free slot: retry later
+}
+```
+
+**Leaving and restarting.** A task ends by returning from `Run()`, by calling `stk::ExitTask()` (`IKernelService::ExitTask()`: can be called from a nested call, does not return, local objects are not unwound) or when another context calls `IKernel::ScheduleTaskRemoval()`. The kernel completes the removal on the next tick: `ITask::OnExit()` is called and the slot is freed in one atomic step. Once `OnExit()` has been observed, the kernel no longer references the `ITask`, its stack or its slot, so they can be released or reused, and **the same task object can be added again** with `AddTask()` (a restart). Until then `AddTask()` of that task returns `ADD_FAIL_DUPLICATE`.
 
 ---
 

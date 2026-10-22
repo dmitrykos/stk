@@ -1457,14 +1457,12 @@ osStatus_t osThreadJoin(osThreadId_t thread_id)
 
 __NO_RETURN void osThreadExit(void)
 {
-    StkThread *const th = static_cast<StkThread *>(osThreadGetId());
+    // Schedules the removal of the calling thread and switches it out, OnExit() fires when the kernel is done.
+    stk::ExitTask();
 
-    g_StkKernel.ScheduleTaskRemoval(th);
-
-    // Wait for removal.
     for (;;)
     {
-        stk::Yield();
+        // unreachable: ExitTask() does not return
     }
 }
 
