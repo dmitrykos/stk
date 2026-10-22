@@ -1095,6 +1095,32 @@ protected:
             m_kernel->m_platform.SwitchToNext();
         }
 
+        void ExitTask() override
+        {
+            STK_ASSERT(!hw::IsInsideISR());
+
+            if __stk_constexpr_cpp17 (IsDynamicMode())
+            {
+                KernelTask *const self = m_kernel->FindTaskBySP(m_kernel->m_platform.GetCallerSP());
+                STK_ASSERT(self != nullptr);
+
+                // same path as returning from ITask::Run() (exit trap): marks the task sleeping infinitely and
+                // pending for removal, the kernel removes it on the next tick and calls ITask::OnExit()
+                m_kernel->OnTaskExit(self->GetUserStackPtr());
+
+                // switch out and never come back: the task is not scheduled anymore
+                for (;;)
+                {
+                    self->BusyWaitWhileSleeping(m_kernel);
+                }
+            }
+            else
+            {
+                // kernel operating mode must be KERNEL_DYNAMIC for tasks to be able to exit
+                STK_KERNEL_PANIC(KERNEL_PANIC_BAD_MODE);
+            }
+        }
+
         EWaitResult Wait(ISyncObject *sobj, IMutex *mutex, Timeout ticks) override
         {
             if __stk_constexpr_cpp17 (IsSyncMode())
@@ -1375,7 +1401,7 @@ public:
 
         // KERNEL_DYNAMIC: the result is for the caller to handle (a task can be added at runtime and a failure
         // is a legit condition, e.g. the pool is full), otherwise this is an application design failure
-        if __stk_constexpr_cpp17 (!IsDynamicMode() || IsHrtMode())
+        if __stk_constexpr_cpp17 (IsStaticMode() || IsHrtMode())
         {
             STK_ASSERT(result == ADD_OK);
         }

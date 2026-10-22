@@ -950,6 +950,13 @@ public:
         \note      Called in kernel/tick context - keep it short. ISR-safe primitives
                    only (e.g. stk::sync::Semaphore::Signal(), stk::sync::EventFlags::Set()).
         \note      KERNEL_DYNAMIC only. Never called in KERNEL_STATIC mode.
+        \note      This is the completion notification of a task removal (returning from Run(),
+                   IKernelService::ExitTask() or IKernel::ScheduleTaskRemoval()): after it has been observed by
+                   another task the kernel no longer references the ITask object, its stack and its slot, so they
+                   can be released or reused, and the same ITask can be added again with IKernel::AddTask() (a
+                   restart, e.g. tx_thread_reset()). The removal is an atomic step of the kernel tick: the slot
+                   is freed right after this call, before any other task can run (single-core kernel). Until then
+                   IKernel::AddTask() of the same task fails with \a ADD_FAIL_DUPLICATE.
     */
     virtual void OnExit() {}
 
@@ -1607,6 +1614,9 @@ public:
                      added is silently dropped otherwise (e.g. \a ADD_FAIL_POOL_FULL, \a ADD_FAIL_DUPLICATE);
                    - other modes: any failure asserts (application design failure), in a release build the
                      failure is not reported and the task is not added.
+        \note      A task which has been removed (ITask::OnExit() was called) can be added again, the same ITask
+                   object and stack are reused. Before the removal is completed the call fails with
+                   \a ADD_FAIL_DUPLICATE.
         \warning   The task and stack collision check is always performed, also in a release build.
     */
     virtual EAddResult AddTask(ITask *user_task) = 0;
@@ -1890,6 +1900,18 @@ public:
         \warning   ISR-unsafe.
     */
     virtual void SwitchToNext() = 0;
+
+    /*! \brief     Terminate the calling task: schedule its removal and switch it out. Does not return.
+        \note      Equivalent to returning from ITask::Run(): the kernel completes the removal on the next tick,
+                   calls ITask::OnExit() and releases the kernel slot. Use it to end a task from a nested call,
+                   without unwinding (C++ destructors of the task's local objects are NOT run).
+        \note      The task, its stack and the kernel slot are no longer referenced by the kernel once
+                   ITask::OnExit() has been called, see ITask::OnExit() for re-adding the task.
+        \warning   KERNEL_DYNAMIC mode only: panics with KERNEL_PANIC_BAD_MODE otherwise.
+        \warning   ISR-unsafe. Calling from an ISR context is not permitted and will trigger an assertion.
+        \see       IKernel::ScheduleTaskRemoval, ITask::OnExit
+    */
+    virtual void ExitTask() = 0;
 
     /*! \brief     Put calling process into a waiting state until synchronization object is
                    signaled or timeout occurs.

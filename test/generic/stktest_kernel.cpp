@@ -528,6 +528,141 @@ TEST(Kernel, TryAllocateNewTaskValidateFindsDuplicateAfterFreeSlot)
     CHECK_EQUAL(ADD_OK, kernel.CallTryAllocateNewTask(&task2, false, &bound));
 }
 
+// ---------------------------------------------------------------------------- //
+// IKernelService::ExitTask(): the calling task schedules its removal, is switched  //
+// out and never returns. The test harness has no context switch, so the relax-CPU  //
+// handler (called while the task busy-waits to be switched out) drives the ticks   //
+// and leaves ExitTask() by an exception once the kernel has removed the task.      //
+// ---------------------------------------------------------------------------- //
+
+struct ExitTaskDone {};
+
+struct ExitTaskTaskMock : public TaskMock<ACCESS_USER>
+{
+    ExitTaskTaskMock() : m_exited(false) {}
+
+    bool m_exited;
+
+private:
+    void OnExit() override { m_exited = true; }
+};
+
+static PlatformTestMock          *g_ExitTaskPlatform = NULL;
+static const ITaskSwitchStrategy *g_ExitTaskStrategy = NULL;
+static uint32_t                   g_ExitTaskTicks    = 0;
+
+static void ExitTaskRelaxCpu()
+{
+    g_ExitTaskPlatform->ProcessTick();
+    ++g_ExitTaskTicks;
+
+    // the exiting task has been removed by the tick: leave ExitTask() (it would loop forever otherwise)
+    if (g_ExitTaskStrategy->GetSize() == 1)
+    {
+        throw ExitTaskDone();
+    }
+}
+
+TEST(Kernel, ExitTask)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    ExitTaskTaskMock task1;
+    TaskMock<ACCESS_USER> task2;
+    ITaskSwitchStrategy *strategy = kernel.GetSwitchStrategy();
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start(); // task1 is the running one
+
+    g_ExitTaskPlatform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    g_ExitTaskStrategy = strategy;
+    g_ExitTaskTicks    = 0;
+    g_RelaxCpuHandler  = ExitTaskRelaxCpu;
+
+    bool left_by_exception = false;
+    try
+    {
+        stk::ExitTask();
+    }
+    catch (ExitTaskDone &)
+    {
+        left_by_exception = true;
+    }
+
+    g_RelaxCpuHandler = NULL;
+
+    CHECK_TEXT(left_by_exception, "ExitTask() must not return, the harness leaves it by the exception");
+    CHECK_EQUAL_TEXT(1, strategy->GetSize(), "calling task must be removed from the strategy");
+    CHECK_TEXT(task1.m_exited, "OnExit() must be called when the removal is completed");
+    CHECK_TRUE_TEXT(g_ExitTaskTicks >= 1, "the removal is completed by the tick");
+
+    // formalized restart: a removed task can be added again
+    CHECK_EQUAL(ADD_OK, kernel.AddTask(&task1));
+    CHECK_EQUAL(2, strategy->GetSize());
+}
+
+TEST(Kernel, ExitTaskReAddBeforeRemovalCompletedFails)
+{
+    Kernel<KERNEL_DYNAMIC, 3, SwitchStrategyRR, PlatformTestMock> kernel;
+    ExitTaskTaskMock task1;
+    TaskMock<ACCESS_USER> task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    // the task is only marked: OnExit() has not been called yet, the slot is still referenced
+    kernel.ScheduleTaskRemoval(&task1);
+
+    CHECK_FALSE(task1.m_exited);
+    CHECK_EQUAL(ADD_FAIL_DUPLICATE, kernel.AddTask(&task1));
+}
+
+TEST(Kernel, ExitTaskNotSupported)
+{
+    Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    ExitTaskTaskMock task1;
+    TaskMock<ACCESS_USER> task2;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.AddTask(&task2);
+    kernel.Start();
+
+    g_TestContext.ExpectPanic(true);
+
+    stk::ExitTask();
+    CHECK_EQUAL(KERNEL_PANIC_BAD_MODE, test::g_PanicValue);
+}
+
+TEST(Kernel, ExitTaskFromIsrAsserts)
+{
+    Kernel<KERNEL_DYNAMIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task1;
+
+    kernel.Initialize();
+    kernel.AddTask(&task1);
+    kernel.Start();
+
+    g_InsideISR = true;
+
+    try
+    {
+        g_TestContext.ExpectAssert(true);
+        stk::ExitTask();
+        g_InsideISR = false;
+        CHECK_TEXT(false, "expecting to fail calling ExitTask() from an ISR");
+    }
+    catch (TestAssertPassed &pass)
+    {
+        g_InsideISR = false;
+        CHECK(true);
+        g_TestContext.ExpectAssert(false);
+    }
+}
+
 TEST(Kernel, AddTaskWhenStartedFailStatic)
 {
     Kernel<KERNEL_STATIC, 2, SwitchStrategyRR, PlatformTestMock> kernel;
@@ -3115,6 +3250,104 @@ TEST(Kernel, HrtTaskDeadlineNotMissedRR)
     // 2-nd tick continues scheduling normally
     platform->ProcessTick();
 
+    CHECK_FALSE(platform->m_hard_fault);
+    CHECK_EQUAL(0, task.m_deadline_missed);
+}
+
+/*! \class StrategyDeadlineMissedMock
+    \brief Round-Robin strategy (by delegation) which reports DEADLINE_MISSED_API = 1 and whose
+           OnTaskDeadlineMissed() result is controlled by the test.
+*/
+class StrategyDeadlineMissedMock final : public ITaskSwitchStrategy
+{
+public:
+    enum EConfig
+    {
+        WEIGHT_API               = 0,
+        SLEEP_EVENT_API          = 1,
+        DEADLINE_MISSED_API      = 1,
+        PRIORITY_INHERITANCE_API = 0,
+        NOSLEEP_YIELD_API        = 0,
+        TIMESLICE_API            = 0
+    };
+
+    StrategyDeadlineMissedMock() : m_rr(), m_recover(false), m_missed_calls(0), m_missed_task(nullptr)
+    {}
+
+    void         AddTask(IKernelTask *task) override     { m_rr.AddTask(task); }
+    void         RemoveTask(IKernelTask *task) override  { m_rr.RemoveTask(task); }
+    IKernelTask *GetFirst() override                     { return m_rr.GetFirst(); }
+    IKernelTask *GetNext() override                      { return m_rr.GetNext(); }
+    size_t       GetSize() const override                { return m_rr.GetSize(); }
+    void         OnTaskSleep(IKernelTask *task) override { m_rr.OnTaskSleep(task); }
+    void         OnTaskWake(IKernelTask *task) override  { m_rr.OnTaskWake(task); }
+
+    bool OnTaskDeadlineMissed(IKernelTask *task) override
+    {
+        ++m_missed_calls;
+        m_missed_task = task;
+        return m_recover;
+    }
+
+    SwitchStrategyRR m_rr;
+    bool             m_recover;      //!< value returned by OnTaskDeadlineMissed()
+    uint32_t         m_missed_calls; //!< number of OnTaskDeadlineMissed() invocations
+    IKernelTask     *m_missed_task;  //!< task passed to the last OnTaskDeadlineMissed()
+};
+
+// strategy could not absorb the overrun: the kernel must fall back to the HRT hard fault
+TEST(Kernel, HrtTaskDeadlineMissedStrategyNotRecovered)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, StrategyDeadlineMissedMock, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    StrategyDeadlineMissedMock *strategy = static_cast<StrategyDeadlineMissedMock *>(kernel.GetSwitchStrategy());
+
+    strategy->m_recover = false;
+
+    kernel.Initialize();
+    kernel.AddTask(&task, 2, 1, 0);
+    kernel.Start();
+
+    // 1-st tick: duration (1) is within the deadline (1), strategy is not consulted
+    platform->ProcessTick();
+    CHECK_EQUAL(0, strategy->m_missed_calls);
+    CHECK_FALSE(platform->m_hard_fault);
+
+    // task does not Yield(): 2-nd tick goes outside the deadline
+    g_TestContext.ExpectAssert(true);
+    platform->ProcessTick();
+
+    // strategy was asked first, refused, therefore the kernel hard-failed the task
+    CHECK_EQUAL(1, strategy->m_missed_calls);
+    CHECK_TRUE(strategy->m_missed_task != NULL);
+    CHECK_EQUAL(&task, strategy->m_missed_task->GetUserTask());
+    CHECK_TRUE(platform->m_hard_fault);
+    CHECK_EQUAL(2, task.m_deadline_missed);
+}
+
+// strategy absorbed the overrun: no hard fault, OnDeadlineMissed() of the task is not called
+TEST(Kernel, HrtTaskDeadlineMissedStrategyRecovered)
+{
+    Kernel<KERNEL_DYNAMIC | KERNEL_HRT, 1, StrategyDeadlineMissedMock, PlatformTestMock> kernel;
+    TaskMock<ACCESS_USER> task;
+    PlatformTestMock *platform = static_cast<PlatformTestMock *>(kernel.GetPlatform());
+    StrategyDeadlineMissedMock *strategy = static_cast<StrategyDeadlineMissedMock *>(kernel.GetSwitchStrategy());
+
+    strategy->m_recover = true;
+
+    kernel.Initialize();
+    kernel.AddTask(&task, 2, 1, 0);
+    kernel.Start();
+
+    platform->ProcessTick();
+    CHECK_EQUAL(0, strategy->m_missed_calls);
+
+    // 2-nd tick goes outside the deadline
+    platform->ProcessTick();
+
+    CHECK_EQUAL(1, strategy->m_missed_calls);
+    CHECK_EQUAL(&task, strategy->m_missed_task->GetUserTask());
     CHECK_FALSE(platform->m_hard_fault);
     CHECK_EQUAL(0, task.m_deadline_missed);
 }

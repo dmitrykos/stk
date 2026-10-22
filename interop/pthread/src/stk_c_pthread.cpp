@@ -1149,13 +1149,13 @@ void pthread_exit(void *retval)
             (void)ctrl->done_event->Set();
             MaybeReap(ctrl); // reaper/joiner will wait for ctrl->exited before freeing anything
 
-            STK_C_ASSERT(s_BoundKernel != nullptr);
-            ToKernel(s_BoundKernel)->ScheduleTaskRemoval(&ctrl->task);
+            // switches the thread out and removes it (same as returning from the start routine), does not return
+            stk::ExitTask();
         }
     }
 
-    // Park here instead of falling back into caller code that isn't expecting to
-    // regain control (the removal above takes effect on the next scheduling round).
+    // An adopted (foreign) thread parks here instead of falling back into caller code that isn't expecting to
+    // regain control (ExitTask() above does not return).
     for (;;)
     {
         stk::Sleep(stk::WAIT_INFINITE);

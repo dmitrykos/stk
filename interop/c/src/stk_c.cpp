@@ -671,6 +671,7 @@ void          stk_sleep_ms(stk_timeout_t ms)     { stk::SleepMs(ms); }
 bool          stk_sleep_until(stk_tick_t ts)     { return stk::SleepUntil(ts); }
 void          stk_sleep_cancel(stk_tid_t tid)    { stk::SleepCancel(tid); }
 void          stk_yield(void)                    { stk::Yield(); }
+void          stk_exit_task(void)                { stk::ExitTask(); }
 
 // -----------------------------------------------------------------------------
 // Thread-Local Storage (TLS) API

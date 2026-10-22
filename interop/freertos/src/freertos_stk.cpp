@@ -1336,24 +1336,19 @@ void vTaskDelete(TaskHandle_t xTaskToDelete)
     if (t == nullptr)
         return;
 
-    const bool is_self = (static_cast<uintptr_t>(stk::GetTid()) == reinterpret_cast<uintptr_t>(t));
-
+    if (static_cast<uintptr_t>(stk::GetTid()) == reinterpret_cast<uintptr_t>(t))
+    {
+        // vTaskDelete(NULL) / self-delete does not return: the calling task is switched out and removed by the kernel
+        stk::ExitTask();
+    }
+    else
     {
         stk::sync::ScopedCriticalSection cs_;
 
         // ScheduleTaskRemoval() only marks the task: the kernel removes it on the next tick and calls OnExit(),
         // which queues the task for ReapDeletedTasks(). Do NOT free it here: the kernel still references the TCB
-        // and the stack, and a task deleting itself is still running on its own stack.
+        // and the stack.
         g_StkKernel.ScheduleTaskRemoval(t);
-    }
-
-    if (is_self)
-    {
-        // vTaskDelete(NULL) / self-delete does not return: wait for the kernel to remove the task
-        for (;;)
-        {
-            stk::Yield();
-        }
     }
 }
 

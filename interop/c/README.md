@@ -22,6 +22,8 @@ pure C API with no C++ headers required in your source files.
 - [Task Lifecycle](#task-lifecycle)
   - [Static Kernel](#static-kernel)
   - [Dynamic Kernel](#dynamic-kernel)
+  - [Adding Tasks at Runtime](#adding-tasks-at-runtime)
+  - [Leaving and Restarting a Task](#leaving-and-restarting-a-task)
   - [Task Naming and Priority](#task-naming-and-priority)
   - [Suspend and Resume](#suspend-and-resume)
 - [Timing Services](#timing-services)
@@ -30,11 +32,13 @@ pure C API with no C++ headers required in your source files.
   - [Raw System Timer](#raw-system-timer)
   - [High-Resolution Clock](#high-resolution-clock)
 - [Kernel Introspection and Control](#kernel-introspection-and-control)
+  - [Kernel State](#kernel-state)
   - [Enumerating Tasks](#enumerating-tasks)
   - [Manual Tick Injection](#manual-tick-injection)
   - [Tickless Scheduling Suspend/Resume](#tickless-scheduling-suspendresume)
   - [Platform Event Overrider](#platform-event-overrider)
   - [Dynamic Kernel/Task Cleanup](#dynamic-kerneltask-cleanup)
+  - [Access to the C++ Objects](#access-to-the-c-objects)
 - [Synchronization Primitives](#synchronization-primitives)
   - [Critical Section](#critical-section)
   - [Mutex](#mutex)
@@ -49,6 +53,7 @@ pure C API with no C++ headers required in your source files.
   - [Reader-Writer Lock](#reader-writer-lock)
   - [Barrier](#barrier)
 - [Memory: Block Pool](#memory-block-pool)
+- [Memory: Byte Pool](#memory-byte-pool)
 - [Software Timers](#software-timers)
 - [Thread-Local Storage (TLS)](#thread-local-storage-tls)
 - [Common Pitfalls](#common-pitfalls)
@@ -61,7 +66,7 @@ pure C API with no C++ headers required in your source files.
 | File | Purpose |
 |---|---|
 | `stk_c.h` | Kernel, tasks, timing, and synchronization |
-| `stk_c_memory.h` | Block memory pool |
+| `stk_c_memory.h` | Block memory pool and byte (variable-size) memory pool |
 | `stk_c_time.h` | Software timers and periodic triggers |
 
 Compile the matching `.cpp` files alongside your project:
@@ -85,6 +90,7 @@ or more typically in your project's `stk_config.h`.
 | `STK_C_KERNEL_MAX_TASKS` | `4` | Max tasks per kernel instance |
 | `STK_C_CPU_COUNT` | `1` | Number of CPU cores / kernel instances |
 | `STK_C_BLOCKPOOL_MAX` | `8` | Max concurrent block pools |
+| `STK_C_BYTEPOOL_MAX` | `8` | Max concurrent byte pools |
 | `STK_C_TIMER_MAX` | `32` | Max concurrent software timers per core |
 | `STK_C_TIMER_HANDLER_STACK_SIZE` | `256` | Stack words for the timer handler task |
 
@@ -125,8 +131,8 @@ int main(void) {
     stk_task_t *t0 = stk_task_create_privileged(task_led,    NULL, g_stack0, STACK_WORDS);
     stk_task_t *t1 = stk_task_create_privileged(task_sensor, NULL, g_stack1, STACK_WORDS);
 
-    stk_kernel_add_task(k, t0);
-    stk_kernel_add_task(k, t1);
+    STK_C_ASSERT(stk_kernel_add_task(k, t0) == STK_ADD_OK);
+    STK_C_ASSERT(stk_kernel_add_task(k, t1) == STK_ADD_OK);
 
     stk_kernel_start(k);   /* never returns for KERNEL_STATIC */
 
@@ -263,9 +269,11 @@ void my_task(void *arg) {
 
 ### Dynamic Kernel
 
-Tasks may return. The kernel calls `stk_task_destroy()` automatically when a
-task's entry function returns. You can also remove a running task from another
-task or ISR:
+Tasks may return from the entry function, or call `stk_exit_task()` from any call
+depth (it does not return; local objects are not unwound). Either way the kernel
+completes the removal on the next tick and releases the task handle
+automatically — do not call `stk_task_destroy()` on it afterwards. You can also
+remove a running task from another task or ISR:
 
 ```c
 /* Schedule removal on the next tick (safe to call from any context) */
@@ -274,6 +282,63 @@ stk_kernel_schedule_task_removal(k, target_task);
 /* Or remove a task that has already returned */
 stk_kernel_remove_task(k, finished_task);
 ```
+
+```c
+void worker(void *arg) {
+    if (!init_ok()) {
+        stk_exit_task();     /* ISR-unsafe, KERNEL_DYNAMIC only, never returns */
+    }
+    /* ... */
+}
+```
+
+### Adding Tasks at Runtime
+
+`stk_kernel_add_task()` returns a `stk_add_result_t`. It adds the task
+immediately inside a critical section (no yield, no wait); the scheduler picks
+it up on the next tick. In a `KERNEL_DYNAMIC` kernel it can be called before or
+after `stk_kernel_start()`, from a task **or from an ISR**.
+
+| Result | Meaning |
+|---|---|
+| `STK_ADD_OK` | Task was added |
+| `STK_ADD_FAIL_POOL_FULL` | No free kernel slot (`STK_C_KERNEL_MAX_TASKS`); retry after a task has exited |
+| `STK_ADD_FAIL_DUPLICATE` | The task or its stack is already added (also returned while a removed task has not finished leaving, see below) |
+| `STK_ADD_FAIL_INVALID` | NULL task, kernel not initialized, or adding is not allowed in this mode/state (HRT kernel, or static kernel after `stk_kernel_start()`) |
+
+Error handling depends on the kernel mode:
+
+- **`KERNEL_DYNAMIC`** — a failure is only *returned*, never asserted. Always check the result, otherwise the task is silently not added.
+- **Other kernels** — a failure asserts; in a release build the task is not added.
+
+On failure the kernel is unchanged and the task handle stays allocated: retry
+later or release it with `stk_task_destroy()`.
+
+```c
+stk_task_t *t = stk_task_create_privileged(worker, NULL, stack, STACK_WORDS);
+stk_add_result_t r = stk_kernel_add_task(k, t);
+if (r != STK_ADD_OK) {
+    if (r == STK_ADD_FAIL_POOL_FULL) { /* retry later */ }
+    else                             { stk_task_destroy(t); }
+}
+```
+
+Restrictions when called from an ISR:
+
+- The whole operation (stack initialization, MPU setup) runs with interrupts masked: keep the task stack modest and call from a low-priority ISR.
+- On Cortex-M the ISR priority must be numerically above (less urgent than) the SVCall priority.
+- In a tickless kernel, a task added while all tasks sleep is first scheduled when the already armed timer expires, not on the next tick.
+
+> HRT: `stk_kernel_add_task_hrt()` returns `void` and must be called **before**
+> `stk_kernel_start()`. Adding an HRT task after the start is not supported, not
+> even from an ISR.
+
+### Leaving and Restarting a Task
+
+A task that has left the kernel (returned, `stk_exit_task()`, or was removed)
+can be added again once its removal has completed, e.g. to restart a worker. Until
+then `stk_kernel_add_task()` returns `STK_ADD_FAIL_DUPLICATE`, so a restart
+loop should treat that result as "try again later".
 
 ### Task Naming and Priority
 
@@ -293,11 +358,27 @@ Both `stk_task_set_priority()` and `stk_task_set_weight()` must be called
 ### Suspend and Resume
 
 ```c
-bool was_suspended;
-stk_kernel_suspend_task(k, t, &was_suspended);   /* blocks until switch-out if self */
+stk_suspend_result_t sr = stk_kernel_suspend_task(k, t);   /* returns after resume if self */
 /* ... later ... */
-stk_kernel_resume_task(k, t);
+stk_resume_result_t  rr = stk_kernel_resume_task(k, t);
 ```
+
+| `stk_suspend_result_t` | Meaning |
+|---|---|
+| `STK_SUSPEND_DONE` | Task was runnable and is suspended now |
+| `STK_SUSPEND_DEFERRED` | Task is sleeping/blocked: it is parked when the sleep/wait ends (the wait result is preserved) |
+| `STK_SUSPEND_ALREADY` | Already suspended, or a deferred suspension is pending |
+| `STK_SUSPEND_FAIL` | Task is not bound to the kernel, or is exiting |
+
+| `stk_resume_result_t` | Meaning |
+|---|---|
+| `STK_RESUME_DONE` | Suspended task was resumed |
+| `STK_RESUME_LIFTED` | Deferred suspension was cancelled before it took effect |
+| `STK_RESUME_NOT_SUSPENDED` | Task was not suspended (no-op) |
+| `STK_RESUME_FAIL` | Task is not bound to the kernel, or is exiting |
+
+Both calls are ISR-safe. A task blocked on a synchronization object is not woken by
+`stk_kernel_resume_task()`: a kernel wait is not a suspension.
 
 > Do not hold a critical section when suspending the calling task — it will
 > deadlock.
@@ -328,11 +409,18 @@ stk_sleep_cancel(stk_task_get_id(t));   /* no-op if the task isn't sleeping */
 ### Time Conversion Helpers
 
 ```c
-int32_t res   = stk_tick_resolution();     /* µs per tick */
+uint32_t res  = stk_tick_resolution();     /* µs per tick */
 int64_t ticks = stk_ticks_from_ms(250);    /* 250 ms → ticks */
 int64_t ms    = stk_ms_from_ticks(ticks);  /* ticks → ms */
 int64_t now   = stk_time_now_ms();         /* ms since kernel start */
 int64_t t     = stk_ticks();               /* raw tick counter */
+
+/* When a value is passed straight to a `timeout` argument, clamp instead of wrapping: */
+stk_timeout_t to = stk_ticks_from_ms_clamped_to_timeout(ms);   /* ms → ticks, max STK_WAIT_INFINITE */
+
+/* With a cached resolution (no kernel service call, ISR-safe arithmetic): */
+int64_t ticks2 = stk_ticks_from_ms_r(250, res);
+int64_t ms2    = stk_ms_from_ticks_r(ticks2, res);
 ```
 
 ### Raw System Timer
@@ -360,6 +448,16 @@ int64_t us = stk_hires_time_us();
 ---
 
 ## Kernel Introspection and Control
+
+### Kernel State
+
+```c
+stk_kernel_state_t st = stk_kernel_get_state(k);   /* INACTIVE, READY, RUNNING, SUSPENDED */
+bool running          = stk_kernel_is_started(k);  /* first context switch has occurred */
+```
+
+`STK_KERNEL_STATE_SUSPENDED` is only seen in a tickless kernel between
+`stk_kernel_suspend()` and `stk_kernel_resume()`.
 
 ### Enumerating Tasks
 
@@ -435,12 +533,26 @@ struct must remain valid for the kernel's lifetime (static/global storage).
 ### Dynamic Kernel/Task Cleanup
 
 ```c
-stk_task_destroy(finished_task);   /* task must have exited or been removed */
+stk_task_destroy(task);            /* task that was never added, or whose add failed */
 stk_kernel_destroy(k);             /* kernel must not be running */
 ```
 
-Only valid for dynamically created kernels/tasks whose tasks have all exited
-or been removed.
+Only valid for dynamically created kernels/tasks. A task that has exited or been
+removed is released by the kernel itself, so `stk_task_destroy()` is for handles
+that never entered (or failed to enter) the kernel.
+
+### Access to the C++ Objects
+
+C++ translation units that link against the C binding can reach the wrapped
+objects (declared only under `__cplusplus`, not part of the C ABI):
+
+| Function | Returns |
+|---|---|
+| `stk_kernel_get_instance(core)` | `stk::IKernel *` |
+| `stk_task_get_instance(tsk)` | `stk::ITask *` |
+| `stk_mutex_get_instance`, `stk_fastmutex_get_instance`, `stk_spinlock_get_instance`, `stk_cv_get_instance`, `stk_sem_get_instance`, `stk_event_get_instance`, `stk_ef_get_instance`, `stk_pipe_get_instance`, `stk_msgq_get_instance`, `stk_rwmutex_get_instance`, `stk_barrier_get_instance` | the matching `stk::sync::*` object |
+| `stk_blockpool_get_instance`, `stk_bytepool_get_instance` | `stk::memory::BlockMemoryPool` / `BytePool` |
+| `stk_timerhost_get_instance`, `stk_timer_get_instance`, `stk_periodic_trigger_get_instance` | `stk::time::*` objects |
 
 ---
 
@@ -478,7 +590,7 @@ stk_critical_section_exit_ex(ses);
 
 ```c
 static stk_mutex_mem_t mtx_mem;
-stk_mutex_t *mtx = stk_mutex_create(&mtx_mem, sizeof(mtx_mem));
+stk_mutex_t *mtx = stk_mutex_create(&mtx_mem);
 
 stk_mutex_lock(mtx);                        /* blocks until available */
 bool ok = stk_mutex_trylock(mtx);           /* non-blocking */
@@ -487,6 +599,10 @@ stk_mutex_unlock(mtx);
 
 stk_mutex_destroy(mtx);
 ```
+
+`stk_mutex_timed_lock_ex()` returns a `stk_wait_result_t` instead of a bool, to tell a
+timeout from a cancellation. The same `_ex` form exists for FastMutex, Semaphore, Event,
+Reader-Writer Lock, Pipe and Message Queue calls.
 
 ### FastMutex
 
@@ -502,6 +618,7 @@ stk_fastmutex_t *fmtx = stk_fastmutex_create(&fmtx_mem);
 stk_fastmutex_lock(fmtx);                        /* blocks until available */
 bool ok = stk_fastmutex_trylock(fmtx);           /* non-blocking */
 bool ok = stk_fastmutex_timed_lock(fmtx, 100);   /* ticks timeout */
+stk_wait_result_t r = stk_fastmutex_timed_lock_ex(fmtx, 100);
 stk_fastmutex_unlock(fmtx);
 
 stk_fastmutex_destroy(fmtx);
@@ -513,10 +630,13 @@ Suitable for very short critical regions and ISR-to-task handoff.
 
 ```c
 static stk_spinlock_mem_t sl_mem;
-stk_spinlock_t *sl = stk_spinlock_create(&sl_mem, sizeof(sl_mem));
+stk_spinlock_t *sl = stk_spinlock_create(&sl_mem);   /* recursive */
 
 stk_spinlock_lock(sl);
 stk_spinlock_unlock(sl);
+bool ok = stk_spinlock_trylock(sl);                  /* non-blocking */
+
+stk_spinlock_destroy(sl);
 ```
 
 ### Condition Variable
@@ -525,7 +645,7 @@ Always paired with a locked mutex protecting the guarded state.
 
 ```c
 static stk_cv_mem_t cv_mem;
-stk_cv_t *cv = stk_cv_create(&cv_mem, sizeof(cv_mem));
+stk_cv_t *cv = stk_cv_create(&cv_mem);
 
 /* Waiter: */
 stk_mutex_lock(mtx);
@@ -579,12 +699,16 @@ stk_wait_result_t r = stk_cv_wait_ex_fastmutex(cv, fmtx, 100 /* ticks */);
 ```c
 static stk_sem_mem_t sem_mem;
 /* initial value = 0, max value = 1 → binary semaphore */
-stk_sem_t *sem = stk_sem_create(&sem_mem, sizeof(sem_mem), 0, 1);
+stk_sem_t *sem = stk_sem_create(&sem_mem, 0, 1);
 
 stk_sem_signal(sem);                    /* post / give — ISR-safe */
 bool ok = stk_sem_wait(sem, STK_WAIT_INFINITE); /* blocks */
 bool ok = stk_sem_trywait(sem);         /* non-blocking poll, ISR-safe */
 bool ok = stk_sem_wait(sem, 50);        /* ticks timeout */
+stk_wait_result_t r = stk_sem_wait_ex(sem, 50);   /* distinguishes timeout / cancel */
+
+/* Signal without exceeding max_count (returns false instead of overflowing): */
+bool signaled = stk_sem_trysignal(sem);  /* ISR-safe */
 
 uint16_t n = stk_sem_get_count(sem);    /* current resource counter */
 
@@ -598,7 +722,7 @@ A binary signal (signaled / non-signaled). Supports auto-reset and manual-reset 
 ```c
 static stk_event_mem_t ev_mem;
 /* false = auto-reset, true = manual-reset */
-stk_event_t *ev = stk_event_create(&ev_mem, sizeof(ev_mem), false);
+stk_event_t *ev = stk_event_create(&ev_mem, false);
 
 /* From ISR or another task: */
 bool changed = stk_event_set(ev);   /* signal — ISR-safe; true if it was non-signaled */
@@ -609,6 +733,7 @@ stk_event_pulse(ev);                /* signal then immediately reset */
 bool ok = stk_event_wait(ev, STK_WAIT_INFINITE);  /* blocks */
 bool ok = stk_event_wait(ev, 100);                /* ticks timeout */
 bool ok = stk_event_trywait(ev);                  /* non-blocking, ISR-safe */
+stk_wait_result_t r = stk_event_wait_ex(ev, 100); /* distinguishes timeout / cancel */
 
 stk_event_destroy(ev);
 ```
@@ -619,7 +744,7 @@ A 32-bit flags word. Tasks can wait for any subset (OR) or all bits (AND).
 
 ```c
 static stk_ef_mem_t ef_mem;
-stk_ef_t *ef = stk_ef_create(&ef_mem, sizeof(ef_mem), 0);
+stk_ef_t *ef = stk_ef_create(&ef_mem, 0);
 
 #define EVT_BUTTON  (1u << 0)
 #define EVT_UART_RX (1u << 1)
@@ -627,7 +752,7 @@ stk_ef_t *ef = stk_ef_create(&ef_mem, sizeof(ef_mem), 0);
 /* From ISR or another task: */
 stk_ef_set(ef, EVT_BUTTON);                 /* ISR-safe */
 
-/* Wait for any of the bits (clears them on return): */
+/* Wait for any of the bits (clears them on return unless STK_EF_OPT_NO_CLEAR is OR-ed in): */
 uint32_t fired = stk_ef_wait(ef, EVT_BUTTON | EVT_UART_RX,
                              STK_EF_OPT_WAIT_ANY, STK_WAIT_INFINITE);
 
@@ -636,6 +761,11 @@ uint32_t fired = stk_ef_wait(ef, EVT_BUTTON | EVT_UART_RX,
                              STK_EF_OPT_WAIT_ALL, STK_WAIT_INFINITE);
 
 if (stk_ef_is_error(fired)) { /* timeout or invalid flags */ }
+
+/* Non-blocking poll (ISR-safe), read and clear without waiting: */
+fired = stk_ef_trywait(ef, EVT_BUTTON, STK_EF_OPT_WAIT_ANY);
+uint32_t snapshot = stk_ef_get(ef);                 /* read only, ISR-safe */
+uint32_t before   = stk_ef_clear(ef, EVT_UART_RX);  /* returns flags before clearing, ISR-safe */
 
 stk_ef_destroy(ef);
 ```
@@ -653,7 +783,7 @@ typedef struct { uint32_t id; uint8_t data[16]; } Sample;
 static stk_pipe_mem_t s_pipe_mem;
 static uint8_t        s_pipe_buf[STK_PIPE_BUF_SIZE(PIPE_CAP, sizeof(Sample))];
 
-stk_pipe_t *pipe = stk_pipe_create(&s_pipe_mem, sizeof(s_pipe_mem),
+stk_pipe_t *pipe = stk_pipe_create(&s_pipe_mem,
                                     s_pipe_buf, sizeof(s_pipe_buf),
                                     PIPE_CAP, sizeof(Sample));
 
@@ -675,14 +805,25 @@ n = stk_pipe_read_bulk(pipe, batch, 4, STK_WAIT_INFINITE);
 n = stk_pipe_read_bulk_triggered(pipe, batch, /*trigger=*/2, /*max_count=*/4,
                                   STK_WAIT_INFINITE);
 
+/* Non-blocking bulk (ISR-safe): */
+n = stk_pipe_trywrite_bulk(pipe, batch, 4);
+n = stk_pipe_tryread_bulk(pipe, batch, 4);
+n = stk_pipe_tryread_bulk_triggered(pipe, batch, /*max_count=*/4);
+
+/* The _ex variants return stk_wait_result_t and the transferred count via an out parameter: */
+size_t done;
+stk_wait_result_t r = stk_pipe_read_bulk_ex(pipe, batch, 4, &done, 100);
+
 stk_pipe_reset(pipe);   /* discard all elements, ISR-safe */
 
 /* Query (all ISR-safe): */
 stk_pipe_get_capacity(pipe);
+stk_pipe_get_element_size(pipe);
 stk_pipe_get_count(pipe);
 stk_pipe_get_space(pipe);
 stk_pipe_is_empty(pipe);
 stk_pipe_is_full(pipe);
+stk_pipe_is_storage_valid(pipe);
 
 stk_pipe_destroy(pipe);
 ```
@@ -692,7 +833,7 @@ stk_pipe_destroy(pipe);
 
 ### Message Queue
 
-Zero-copy message queue that copies a fixed-size payload. Unlike Pipe, it
+Fixed-size message queue (the payload is copied in and out). Unlike Pipe, it
 also supports front-insertion (priority messages) and non-destructive peek.
 
 ```c
@@ -702,7 +843,7 @@ static stk_msgq_mem_t mq_mem;
 static uint8_t        mq_buf[8 * sizeof(Msg)];   /* capacity × message size, or
                                                      use STK_MSGQ_BUF_SIZE(8, sizeof(Msg)) */
 
-stk_msgq_t *mq = stk_msgq_create(&mq_mem, sizeof(mq_mem),
+stk_msgq_t *mq = stk_msgq_create(&mq_mem,
                                   mq_buf, sizeof(mq_buf),
                                   8, sizeof(Msg));
 
@@ -741,7 +882,7 @@ The implementation uses writer preference.
 
 ```c
 static stk_rwmutex_mem_t rw_mem;
-stk_rwmutex_t *rw = stk_rwmutex_create(&rw_mem, sizeof(rw_mem));
+stk_rwmutex_t *rw = stk_rwmutex_create(&rw_mem);
 
 /* Reader: */
 stk_rwmutex_read_lock(rw);
@@ -753,6 +894,12 @@ stk_rwmutex_lock(rw);
 /* ... modify shared data ... */
 stk_rwmutex_unlock(rw);
 
+/* Non-blocking and timed variants (bool; the _ex forms return stk_wait_result_t): */
+bool ok = stk_rwmutex_try_read_lock(rw);
+ok = stk_rwmutex_timed_read_lock(rw, 100);
+ok = stk_rwmutex_trylock(rw);
+ok = stk_rwmutex_timed_lock(rw, 100);
+
 stk_rwmutex_destroy(rw);
 ```
 
@@ -763,7 +910,7 @@ them together and resets itself for reuse.
 
 ```c
 static stk_barrier_mem_t bar_mem;
-stk_barrier_t *bar = stk_barrier_create(&bar_mem, sizeof(bar_mem), 3 /* task count */);
+stk_barrier_t *bar = stk_barrier_create(&bar_mem, 3 /* task count */);
 
 /* In each of the 3 participating tasks: */
 bool was_last = stk_barrier_wait(bar);   /* ISR-unsafe */
@@ -860,6 +1007,80 @@ stk_blockpool_is_empty(pool);
 
 ---
 
+## Memory: Byte Pool
+
+A variable-size, first-fit allocator with block coalescing, for payloads of
+different sizes (messages, strings) where a fixed block size would waste memory.
+Every allocation is 8-byte aligned and costs its payload (rounded up to 8) plus an
+8-byte header. Allocation and free are O(n) in the number of blocks, unlike the
+O(1) block pool.
+
+### Static storage (no heap, preferred for embedded)
+
+```c
+#include <stk_c_memory.h>
+
+/* Space for four 128-byte and one 512-byte allocation alive at the same time */
+STK_BYTEPOOL_STORAGE_DECL(g_heap,
+    STK_BYTEPOOL_REQUIRED_SIZE(128) * 4 + STK_BYTEPOOL_REQUIRED_SIZE(512));
+
+stk_bytepool_t *bp = stk_bytepool_create_static((uint8_t *)g_heap, sizeof(g_heap), "msg_pool");
+
+char *msg = (char *)stk_bytepool_timed_alloc(bp, 64, stk_ticks_from_ms(100)); /* NULL on timeout */
+if (msg) {
+    /* ... use msg ... */
+    bool ok = stk_bytepool_free(bp, msg);   /* false if NULL, foreign, misaligned or double free */
+    msg = NULL;
+}
+```
+
+`STK_BYTEPOOL_STORAGE_DECL()` declares a `uint64_t` array so the start address is
+8-byte aligned on every target. `STK_BYTEPOOL_REQUIRED_SIZE(payload)` is the pool
+space one allocation consumes; sum it over all blocks that must coexist.
+
+### Heap storage
+
+```c
+stk_bytepool_t *bp = stk_bytepool_create(1024, "msg_pool");
+if (bp == NULL || !stk_bytepool_is_storage_valid(bp)) { /* slot pool exhausted or heap allocation failed */ }
+```
+
+### Allocation
+
+```c
+void *p = stk_bytepool_alloc(bp, 64);                 /* blocks; NULL only on invalid size or cancel */
+void *p = stk_bytepool_timed_alloc(bp, 64, 100);      /* ticks timeout, NULL on timeout */
+void *p = stk_bytepool_try_alloc(bp, 64);             /* non-blocking, ISR-safe (O(n)) */
+```
+
+A request larger than `stk_bytepool_get_max_request()` fails immediately instead
+of blocking forever. A free wakes all blocked allocators, because a coalesced block may
+satisfy several of them. `stk_bytepool_timed_alloc()` is ISR-safe only with
+`STK_NO_WAIT`.
+
+### Query
+
+```c
+size_t available, largest, fragments;
+stk_bytepool_get_info(bp, &available, &largest, &fragments);  /* any pointer may be NULL;
+                                                                  fragments == 1: no external
+                                                                  fragmentation; ISR-safe, O(n) */
+stk_bytepool_get_size(bp);          /* managed area in bytes, headers included */
+stk_bytepool_get_max_request(bp);   /* largest request that can ever succeed */
+```
+
+### Destroying a pool
+
+```c
+stk_bytepool_destroy(bp);   /* frees heap storage if owned; not ISR-safe */
+bp = NULL;
+```
+
+Do not destroy a pool while a task is blocked in `stk_bytepool_alloc()` /
+`stk_bytepool_timed_alloc()`.
+
+---
+
 ## Software Timers
 
 Software timers run their callback inside a dedicated kernel task managed by
@@ -931,9 +1152,9 @@ If you prefer a polling style inside a task instead of a callback:
 
 static stk_periodic_trigger_mem_t trig_mem;
 stk_periodic_trigger_t *trig = stk_periodic_trigger_create(
-    &trig_mem, sizeof(trig_mem),
-    50,    /* period in ticks */
-    true); /* start immediately */
+    &trig_mem,
+    50,    /* period in ticks, must be > 0 */
+    true); /* started; false = stopped until stk_periodic_trigger_restart() */
 
 while (1) {
     if (stk_periodic_trigger_poll(trig)) {
@@ -988,6 +1209,15 @@ macros are also available directly.
 
 ## Common Pitfalls
 
+**Ignoring the `stk_kernel_add_task()` result** — In a `KERNEL_DYNAMIC` kernel a
+failure (`STK_ADD_FAIL_POOL_FULL`, `STK_ADD_FAIL_DUPLICATE`, ...) is only returned,
+never asserted, so an unchecked call silently leaves the task unstarted. The handle
+also stays allocated: retry or `stk_task_destroy()` it.
+
+**Calling `stk_task_destroy()` on an exited task** — A task that returned from its
+entry function, called `stk_exit_task()` or was removed is released by the kernel.
+Destroying it again is a double free.
+
 **Stack size too small** — Start with 256 words and increase if you observe
 hard faults or corrupted data. If in doubt, use a stack watermarking tool and
 add at least 20–30% margin.
@@ -1019,6 +1249,9 @@ system will deadlock.
 any task is still blocked in a call on that object. Make sure producers and
 consumers have stopped before tearing one down.
 
+**Destroying a Byte Pool with blocked tasks** — `stk_bytepool_destroy()` while a task is blocked in
+`stk_bytepool_alloc()`/`stk_bytepool_timed_alloc()` is a logic error.
+
 **`stk_kernel_suspend()`/`stk_kernel_resume()` vs `stk_kernel_suspend_task()`/
 `stk_kernel_resume_task()`** — The former pair suspends and resumes the whole
 scheduler (used for tickless idle entry/exit); the latter pair suspends and
@@ -1039,6 +1272,9 @@ Place these in `stk_config.h` before including any STK header.
 
 /* Maximum concurrent block pools */
 #define STK_C_BLOCKPOOL_MAX      4
+
+/* Maximum concurrent byte pools */
+#define STK_C_BYTEPOOL_MAX       4
 
 /* Maximum concurrent software timers per core */
 #define STK_C_TIMER_MAX          16
