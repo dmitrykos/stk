@@ -986,8 +986,9 @@ struct FrtosEventGroup
     explicit FrtosEventGroup() : m_ef(0U), m_cb_owned(true)
     {}
 
-    stk::sync::EventFlags m_ef;
-    bool                  m_cb_owned;
+    stk::sync::EventFlags              m_ef;
+    stk::sync::EventFlags::SyncContext m_sync; // rendezvous state of xEventGroupSync()
+    bool                               m_cb_owned;
 };
 
 #endif // configUSE_EVENT_GROUPS
@@ -3131,7 +3132,8 @@ TickType_t xTimerGetExpiryTime(TimerHandle_t xTimer)
 
 #if configUSE_EVENT_GROUPS
 
-// Translate STK EventFlags result -> FreeRTOS bits representation.
+// Translate legacy STK EventFlags result -> FreeRTOS bits representation (used by the Set/Clear calls;
+// the wait calls use EventFlags::WaitEx() and need no translation).
 //
 // Success path: return the matched bits directly.
 // Error path  : return the caller-supplied snapshot of the flags word taken
@@ -3240,16 +3242,19 @@ EventBits_t xEventGroupWaitBits(EventGroupHandle_t xEventGroup,
 
     stk::sync::EventFlags &ef = static_cast<FrtosEventGroup *>(xEventGroup)->m_ef;
 
-    uint32_t opts   = BuildStkFlagsOpts(xClearOnExit, xWaitForAllBits);
-    uint32_t result = ef.Wait(static_cast<uint32_t>(uxBitsToWaitFor),
-                              opts,
-                              FrtosTimeoutToStk(xTicksToWait));
+    // The EWaitResult overload reports the status and the flags word separately: 'actual' is the whole
+    // flags word captured under the same critical section as the wait outcome, before any clear-on-exit.
+    // This is what FreeRTOS returns both when the condition is met (the group's bits at that moment) and
+    // on timeout / aborted wait (the bits at the moment the wait ended), so no separate Get() is needed.
+    const uint32_t opts = BuildStkFlagsOpts(xClearOnExit, xWaitForAllBits);
+    uint32_t actual = 0U;
 
-    // On timeout, FreeRTOS documents that the return value is the flags word
-    // at the moment the timeout occurred, not zero.  ef.Get() is a volatile
-    // read that is atomic on all supported 32-bit STK targets; no CS needed.
-    const EventBits_t snapshot = static_cast<EventBits_t>(ef.Get());
-    return StkFlagsToFrtos(result, snapshot);
+    (void)ef.WaitEx(static_cast<uint32_t>(uxBitsToWaitFor),
+                    opts,
+                    FrtosTimeoutToStk(xTicksToWait),
+                    actual);
+
+    return static_cast<EventBits_t>(actual);
 }
 
 BaseType_t xEventGroupSetBitsFromISR(EventGroupHandle_t xEventGroup,
@@ -3282,47 +3287,15 @@ EventBits_t xEventGroupClearBitsFromISR(EventGroupHandle_t xEventGroup,
 // -----------------------------------------------------------------------------
 // xEventGroupSync
 //
-// Design rationale
-// ----------------
-// FreeRTOS xEventGroupSync() is a multi-task rendezvous (barrier):
+// FreeRTOS xEventGroupSync() is a multi-task rendezvous (barrier): set this task's bits, wait until ALL
+// bits in uxBitsToWaitFor are set, then clear them. When the last participant arrives, ALL blocked
+// participants are released and the bits are cleared once.
 //
-//   1. Atomically set this task's "I'm ready" bits.
-//   2. Wait (with AND semantics) until ALL bits in uxBitsToWaitFor are set.
-//   3. On success, atomically clear uxBitsToWaitFor and return the snapshot
-//      taken just before the clear.
-//
-// The set-then-wait sequence must appear atomic from every other task's point
-// of view, so that no task can wake from step 2 before every peer has
-// completed step 1.
-//
-// STK provides this guarantee naturally:
-//   - EventFlags::Set() acquires a ScopedCriticalSection, ORs the bits,
-//     calls ConditionVariable::NotifyAll() (which reschedules waiters but
-//     cannot actually run them until the CS is released), then exits the CS.
-//   - EventFlags::Wait() enters its own ScopedCriticalSection and loops,
-//     re-checking the predicate on every wakeup.
-//
-// Because both operations hold the same type of CS and the scheduler cannot
-// pre-empt inside one, the sequence "set my bit -> enter wait loop" is
-// indivisible:  a waiter woken by our Set() will observe our bits already
-// present when it re-evaluates its own predicate.
-//
-// Auto-clear policy
-// -----------------
-// The first task to find the AND predicate satisfied will attempt to clear
-// uxBitsToWaitFor.  Subsequent tasks that already passed the predicate (or
-// are woken in the same tick) receive the snapshot value that was current
-// when they sampled the flags (before any clear).  This matches FreeRTOS
-// behaviour: every unblocked task sees the full set of sync bits in its
-// return value, and the clear is performed by the internal Wait() path under
-// the critical section, making it race-free across concurrent waiters.
-//
-// If OPT_WAIT_ALL + (default) clear-on-exit are passed together to
-// EventFlags::Wait(), the STK implementation clears exactly the matched
-// bits (== uxBitsToWaitFor) when the predicate is first satisfied by each
-// waiter independently — which is safe because all tasks wait for the same
-// superset mask, and STK's "m_flags &= ~matched" inside Wait() is idempotent
-// once the bits are already 0.
+// This is implemented by stk::sync::EventFlags::Sync(), with the rendezvous state kept in the group's
+// FrtosEventGroup::m_sync (one rendezvous group per event group, as in FreeRTOS).
+// A plain Set() followed by Wait(OPT_WAIT_ALL) is not
+// equivalent: the first task to find the condition satisfied would clear the bits, and the participants
+// which were woken later would find the condition no longer satisfied and block again.
 // -----------------------------------------------------------------------------
 
 EventBits_t xEventGroupSync(EventGroupHandle_t xEventGroup,
@@ -3338,37 +3311,20 @@ EventBits_t xEventGroupSync(EventGroupHandle_t xEventGroup,
     FrtosEventGroup *eg  = static_cast<FrtosEventGroup *>(xEventGroup);
     stk::sync::EventFlags &ef = eg->m_ef;
 
-    // Step 1: Set this task's rendezvous bit(s).
+    // EventFlags::Sync() sets this task's bit(s) and waits for ALL of uxBitsToWaitFor atomically; the task
+    // which completes the rendezvous clears uxBitsToWaitFor once and releases every blocked participant.
     //
-    // uxBitsToSet == 0 is legal (observer role: task waits without contributing
-    // a bit).  Only call Set() when there is actually something to set.
-    if (uxBitsToSet != 0U)
-    {
-        uint32_t set_result = ef.Set(static_cast<uint32_t>(uxBitsToSet));
+    // uxBitsToSet == 0 is legal (observer role). The returned value is the group's flags word at the moment
+    // the rendezvous completed (before the clear), or the current flags word on timeout.
+    uint32_t actual = 0U;
 
-        // Treat an ERROR_PARAMETER return as a hard usage fault — the caller
-        // violated the API (e.g. set bit 31).
-        STK_ASSERT(!stk::sync::EventFlags::IsError(set_result));
+    (void)ef.Sync(eg->m_sync,
+                  static_cast<uint32_t>(uxBitsToSet),
+                  static_cast<uint32_t>(uxBitsToWaitFor),
+                  FrtosTimeoutToStk(xTicksToWait),
+                  actual);
 
-        if (stk::sync::EventFlags::IsError(set_result))
-            return 0U;
-    }
-
-    // Step 2 + 3: Wait for ALL bits in uxBitsToWaitFor, clear them on success.
-    //
-    // OPT_WAIT_ALL   — AND semantics: all bits must be set simultaneously.
-    // OPT_NO_CLEAR is NOT passed — matched bits are cleared atomically inside
-    // Wait() when the predicate is first satisfied, exactly matching the
-    // FreeRTOS "clear bits on exit" contract for xEventGroupSync().
-    const uint32_t opts = stk::sync::EventFlags::OPT_WAIT_ALL;
-                          // (OPT_NO_CLEAR absent -> clear on success)
-
-    uint32_t result = ef.Wait(static_cast<uint32_t>(uxBitsToWaitFor),
-                              opts,
-                              FrtosTimeoutToStk(xTicksToWait));
-
-    // On timeout or error, return 0 (matches FreeRTOS reference behaviour).
-    return StkFlagsToFrtos(result);
+    return static_cast<EventBits_t>(actual);
 }
 
 #endif // configUSE_EVENT_GROUPS

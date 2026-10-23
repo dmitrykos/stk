@@ -89,8 +89,11 @@ A 32-bit multi-flag synchronization primitive for coordinating multiple independ
 - **OR semantics** (`OPT_WAIT_ANY`): Unblocks when any one of the requested flag bits is set (default).
 - **AND semantics** (`OPT_WAIT_ALL`): Unblocks only when all requested flag bits are simultaneously set.
 - **Non-destructive read**: `Get()` returns a snapshot of the flags word without consuming any bit.
+- **Mask-style clear**: `And(mask)` atomically performs `flags &= mask` (the inverse of `Clear()`, equivalent of ThreadX `tx_event_flags_set(TX_AND)`) and returns the value before masking; it never wakes waiters since it can only remove flags.
+- **Rendezvous**: `Sync(ctx, set_flags, wait_flags, timeout, actual_flags)` sets flags and waits for a group of flags atomically (equivalent of FreeRTOS `xEventGroupSync()`). The task which completes the condition clears the group once and releases **all** participants blocked on the same caller-supplied `EventFlags::SyncContext`, so it works as a multi-task barrier; independent groups on one object use separate contexts and `EventFlags` itself carries no extra state.
 - **Selective clear**: By default matched bits are atomically cleared on a successful `Wait()`; pass `OPT_NO_CLEAR` to suppress this, allowing multiple concurrent waiters to each satisfy on the same `Set()`.
 - **Cancellable Waits**: `Wait()` returns `ERROR_CANCELED` (distinct from `ERROR_TIMEOUT`) if the wait was interrupted via `IKernel::CancelTaskWait()` before the requested flag condition was met.
+- **Status/flags separation**: `WaitEx(flags, options, timeout, actual_flags)` and `TryWaitEx(flags, options, actual_flags)` return a full `EWaitResult` (`WAIT_RESULT_SIGNAL`, `WAIT_RESULT_TIMEOUT`, `WAIT_RESULT_CANCELED`, `WAIT_RESULT_FAIL`) and report the entire flags word (taken before auto-clear) via `actual_flags`, so no bit is overloaded as an error indicator (equivalent of ThreadX `tx_event_flags_get()`). Invalid arguments and a blocking wait from an ISR are reported as `WAIT_RESULT_FAIL`.
 - **Low-Power Aware**: Waiting tasks are suspended by the kernel.
 
 ### 11. Reader-Writer Mutex (`sync::RWMutex`)
@@ -121,7 +124,7 @@ STK primitives follow strict rules for **Interrupt Service Routine (ISR)** conte
 
 The following operations are ISR-safe:
 * **sync::Event**: `Set()`, `Pulse()`, `Reset()`, `TryWait()`
-* **sync::EventFlags**: `Set()`, `Clear()`, `Get()`, `TryWait()`, `Wait(NO_WAIT)`
+* **sync::EventFlags**: `Set()`, `Clear()`, `And()`, `Get()`, `TryWait()`, `Wait(NO_WAIT)`, `TryWaitEx()`, `WaitEx(NO_WAIT)`, `Sync(NO_WAIT)`
 * **sync::Semaphore**: `TrySignal()`, `Signal()`, `TryWait()`
 * **sync::ConditionVariable**: `NotifyOne()`, `NotifyOne_CS()`, `NotifyAll()`, `NotifyAll_CS()`, `Wait(NO_WAIT)` (the `_CS` variants require the caller to already hold a critical section)
 * **sync::Pipe**: `Write(NO_WAIT)`, `WriteBulk(NO_WAIT)`, `TryWrite()`, `TryWriteBulk()`, `Read(NO_WAIT)`, `ReadBulk(NO_WAIT)`, `TryRead()`, `TryReadBulk()`, `ReadBulkTriggered(NO_WAIT)`, `TryReadBulkTriggered()`, `Reset()`
@@ -148,6 +151,7 @@ The following operations are ISR-safe:
 stk::sync::Mutex      g_Mutex;
 stk::sync::Event      g_DataReady(false); // auto-reset
 stk::sync::EventFlags g_SensorFlags;
+stk::sync::EventFlags::SyncContext g_SensorSync; // rendezvous group state, shared by its participants
 
 static const uint32_t FLAG_GPS = (1U << 0);
 static const uint32_t FLAG_IMU = (1U << 1);
@@ -183,6 +187,29 @@ void TaskFusion() {
     if (!stk::sync::EventFlags::IsError(raised)) {
         // ... process fused sensor data ...
     }
+}
+
+void TaskFusionEx() {
+    // same wait, but the status and the flags word are reported separately
+    uint32_t actual;
+    stk::EWaitResult wr = g_SensorFlags.WaitEx(FLAG_GPS | FLAG_IMU,
+                                               stk::sync::EventFlags::OPT_WAIT_ALL, 5000, actual);
+    if (wr == stk::WAIT_RESULT_SIGNAL) {
+        // 'actual' is the whole flags word taken before the matched bits were cleared
+    }
+    else if (wr == stk::WAIT_RESULT_TIMEOUT) {
+        // ... sensors did not report in time ...
+    }
+}
+
+void TaskSensorA() {
+    // rendezvous: announce arrival (FLAG_GPS) and wait until the other task arrived too (FLAG_IMU)
+    uint32_t actual;
+    g_SensorFlags.Sync(g_SensorSync, FLAG_GPS, FLAG_GPS | FLAG_IMU, stk::WAIT_INFINITE, actual);
+}
+
+void ResetImuOnly() {
+    g_SensorFlags.And(~FLAG_IMU); // keep everything except FLAG_IMU (flags &= mask)
 }
 ```
 
