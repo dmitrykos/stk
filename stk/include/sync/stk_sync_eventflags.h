@@ -69,6 +69,9 @@ namespace sync {
     }
     \endcode
 
+    \note  **Rendezvous**: \c Sync() sets flags and waits for a group of flags atomically and releases all
+           participants at once (multi-task barrier, equivalent of FreeRTOS xEventGroupSync()).
+
     \see  Event, Semaphore, ConditionVariable
     \note Only available when kernel is compiled with \a KERNEL_SYNC mode enabled.
 */
@@ -166,6 +169,20 @@ public:
     */
     uint32_t Clear(uint32_t flags);
 
+    /*! \brief     AND the flags word with a mask (equivalent of ThreadX tx_event_flags_set(TX_AND)).
+        \details   Atomically performs <tt>flags &= mask</tt>: every flag bit that is 0 in \a mask is
+                   cleared, every flag bit that is 1 in \a mask is preserved. This is the inverse of
+                   Clear(), which clears the bits that are 1 in its argument. Any \a mask value is
+                   valid, including 0 (clears all flags) and 0xFFFFFFFF (no change).
+        \param[in] mask: Bitmask of flags to \b keep.
+        \return    The flags word value \b before masking.
+        \note      Does not wake waiters: this operation can only remove flags, so it can never
+                   satisfy a pending wait condition.
+        \note      ISR-safe.
+        \see       Clear
+    */
+    uint32_t And(uint32_t mask);
+
     /*! \brief     Read the current flags word without modifying it.
         \return    Snapshot of the current 32-bit flags word.
         \note      The returned value is a point-in-time snapshot; it may be stale
@@ -204,6 +221,87 @@ public:
         \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
     */
     uint32_t Wait(uint32_t flags, uint32_t options = OPT_WAIT_ANY, Timeout timeout_ticks = WAIT_INFINITE);
+
+    /*! \brief     Wait for one or more flags to be set, reporting the outcome via EWaitResult.
+        \details   Same wait semantics as Wait(), but the status and the flags
+                   word are reported separately, so no bit of the flags word is overloaded as an
+                   error indicator (equivalent of ThreadX tx_event_flags_get() with \c actual_flags).
+        \param[in]  flags: Bitmask of flag bits to watch. Must not be 0 and must not have bit 31 set.
+        \param[in]  options: Combination of \c OPT_WAIT_ANY / \c OPT_WAIT_ALL and optionally
+                    \c OPT_NO_CLEAR.
+        \param[in]  timeout_ticks: Maximum time to wait (ticks), \c WAIT_INFINITE or \c NO_WAIT.
+        \param[out] actual_flags: Snapshot of the \b entire flags word taken when the call completed,
+                    \b before any auto-clear is applied. On \c WAIT_RESULT_SIGNAL the matched subset
+                    is <tt>actual_flags & flags</tt> (WAIT_ANY) or \a flags (WAIT_ALL). On timeout,
+                    cancellation or failure it is the current flags word at that moment.
+        \return    \c WAIT_RESULT_SIGNAL if the condition was met (matched flags cleared unless
+                   \c OPT_NO_CLEAR), otherwise the timeout / \c WAIT_RESULT_CANCELED /
+                   \c WAIT_RESULT_FAIL result of the kernel wait.
+        \note      Invalid arguments (\a flags is 0 or has bit 31 set) and a blocking wait from an ISR
+                   are reported as \c WAIT_RESULT_FAIL, and the wait is not performed. Use the
+                   legacy overload if the distinct \c ERROR_PARAMETER / \c ERROR_ISR codes are needed.
+        \warning   ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+    */
+    EWaitResult WaitEx(uint32_t flags, uint32_t options, Timeout timeout_ticks, uint32_t &actual_flags);
+
+    /*! \brief      Non-blocking flag poll with EWaitResult and full flags snapshot.
+        \param[in]  flags: Bitmask of flag bits to watch.
+        \param[in]  options: \c OPT_WAIT_ANY or \c OPT_WAIT_ALL, optionally \c OPT_NO_CLEAR.
+        \param[out] actual_flags: Snapshot of the entire flags word (see WaitEx()).
+        \return     \c WAIT_RESULT_SIGNAL if satisfied, otherwise a non-signal result.
+        \note       ISR-safe.
+    */
+    EWaitResult TryWaitEx(uint32_t flags, uint32_t options, uint32_t &actual_flags)
+    {
+        return WaitEx(flags, options, NO_WAIT, actual_flags);
+    }
+
+    /*! \brief  State of one Sync() rendezvous group, supplied by the caller.
+        \details One SyncContext object represents one rendezvous group: it must be shared by (and only
+                 by) all tasks which rendezvous together, e.g. a global or static object next to the
+                 EventFlags object. It carries the generation counter and the flags snapshot used to
+                 release all blocked participants when the rendezvous completes, so EventFlags itself
+                 needs no extra state. Independent groups on the same EventFlags object use separate
+                 contexts. The object must outlive all calls using it and must not be copied while tasks
+                 are blocked on it.
+    */
+    struct SyncContext
+    {
+        SyncContext() : m_gen(0U), m_snapshot(0U)
+        {}
+
+        uint32_t m_gen;      //!< rendezvous generation, incremented when the rendezvous completes
+        uint32_t m_snapshot; //!< flags word captured when the last rendezvous completed
+    };
+
+    /*! \brief      Atomically set flags and wait for a group of flags: a multi-task rendezvous
+                    (equivalent of FreeRTOS xEventGroupSync()).
+        \details    Sets \a set_flags, then blocks until \b all of \a wait_flags are set. The set-then-wait
+                    sequence is indivisible and, unlike a Set() followed by Wait(OPT_WAIT_ALL), it releases
+                    \b every task blocked in Sync() on the same \a ctx when the last participant arrives:
+                    the task which completes the condition clears \a wait_flags once and all blocked
+                    participants return success. (With Set() + Wait(OPT_WAIT_ALL) the first task to run
+                    would clear the flags and the other participants would never see the condition
+                    satisfied again.)
+        \param[in,out] ctx: Rendezvous group state shared by all participants of the group (see SyncContext).
+        \param[in]  set_flags: Flags to set on entry (this task's "I have arrived" bits). May be 0 (observer
+                    role: wait without contributing a bit). Must not have bit 31 set.
+        \param[in]  wait_flags: Flags which must all be set to release the group. Must not be 0 and must
+                    not have bit 31 set. All participants sharing one \a ctx must pass the same value.
+        \param[in]  timeout_ticks: Maximum time to wait (ticks), \c WAIT_INFINITE or \c NO_WAIT.
+        \param[out] actual_flags: Snapshot of the \b entire flags word taken when the rendezvous completed,
+                    \b before \a wait_flags were cleared. On timeout, cancellation or failure it is the
+                    current flags word at that moment.
+        \return     \c WAIT_RESULT_SIGNAL if the rendezvous completed, otherwise the timeout /
+                    \c WAIT_RESULT_CANCELED / \c WAIT_RESULT_FAIL result. Invalid arguments and a blocking
+                    call from an ISR are reported as \c WAIT_RESULT_FAIL and nothing is set.
+        \note       Flags set by a task which then times out stay set (they are not rolled back).
+        \note       A completion can also be caused by a plain Set() which satisfies \a wait_flags: the next
+                    woken Sync() waiter then completes the rendezvous.
+        \warning    ISR-safe only with \a timeout_ticks = \c NO_WAIT, ISR-unsafe otherwise.
+    */
+    EWaitResult Sync(SyncContext &ctx, uint32_t set_flags, uint32_t wait_flags, Timeout timeout_ticks,
+        uint32_t &actual_flags);
 
     /*! \brief     Non-blocking flag poll.
         \details   Checks immediately whether the flag condition is satisfied.
@@ -252,6 +350,11 @@ private:
             ((m_flags & flags) != 0U);
     }
 
+    // Core wait loop shared by Wait() and WaitEx() (arguments must already be validated).
+    // Returns WAIT_RESULT_SIGNAL when the predicate was satisfied, otherwise the failing result.
+    // actual_flags receives the whole flags word before auto-clear.
+    EWaitResult WaitCore(uint32_t flags, uint32_t options, Timeout timeout_ticks, uint32_t &actual_flags);
+
     volatile uint32_t m_flags; //!< 32-bit flags word (bit 31 is reserved for errors)
     ConditionVariable m_cv;    //!< woken by Set() to re-evaluate waiting tasks
 };
@@ -298,6 +401,20 @@ inline uint32_t EventFlags::Clear(uint32_t flags)
 }
 
 // ---------------------------------------------------------------------------
+// And
+// ---------------------------------------------------------------------------
+
+inline uint32_t EventFlags::And(uint32_t mask)
+{
+    const ScopedCriticalSection cs_;
+
+    const uint32_t result = m_flags;
+    m_flags &= mask;
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
 // Get
 // ---------------------------------------------------------------------------
 
@@ -311,6 +428,61 @@ inline uint32_t EventFlags::Get() const
 // ---------------------------------------------------------------------------
 // Wait
 // ---------------------------------------------------------------------------
+
+inline EWaitResult EventFlags::WaitCore(uint32_t flags, uint32_t options,
+    Timeout timeout_ticks, uint32_t &actual_flags)
+{
+    EWaitResult result = WAIT_RESULT_SIGNAL;
+
+    const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
+
+    // capture an absolute deadline once, before entering the wait loop,
+    // this prevents the timeout from being silently restarted on each
+    // spurious wakeup (e.g. a partial Set() that does not satisfy WAIT_ALL)
+    const Timeout deadline = (timed_wait ?
+        static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
+
+    ScopedCriticalSection cs_;
+
+    // spin (with blocking) until the predicate is satisfied or we time out
+    while (!IsSatisfied(flags, options))
+    {
+        Timeout remaining = deadline;
+        if (timed_wait)
+        {
+            const Timeout now = static_cast<Timeout>(GetTicks());
+            remaining = (now >= deadline ? NO_WAIT : (deadline - now));
+        }
+
+        const EWaitResult wr = m_cv.WaitEx(cs_, remaining);
+
+        if (wr != WAIT_RESULT_SIGNAL)
+        {
+            // timeout (a real deadline miss, or NO_WAIT after 'remaining' collapsed to NO_WAIT),
+            // cancellation by IKernel::CancelTaskWait() or kernel failure: stop immediately,
+            // do not reinterpret the result and do not keep spinning on the predicate
+            result = wr;
+            break;
+        }
+        // else: WAIT_RESULT_SIGNAL - a Set() woke us for re-evaluation (possibly a
+        // spurious/partial match under WAIT_ALL); loop back and re-check IsSatisfied()
+    }
+
+    // full group snapshot, taken before any auto-clear
+    actual_flags = m_flags;
+
+    if (result == WAIT_RESULT_SIGNAL)
+    {
+        // atomically clear the matched flags unless the caller opted out
+        if ((options & OPT_NO_CLEAR) == 0U)
+        {
+            const uint32_t matched = (((options & OPT_WAIT_ALL) == OPT_WAIT_ALL) ? flags : (m_flags & flags));
+            m_flags &= ~matched;
+        }
+    }
+
+    return result;
+}
 
 inline uint32_t EventFlags::Wait(uint32_t flags, uint32_t options, Timeout timeout_ticks)
 {
@@ -328,19 +500,105 @@ inline uint32_t EventFlags::Wait(uint32_t flags, uint32_t options, Timeout timeo
     }
     else
     {
+        uint32_t actual = 0U;
+        const EWaitResult wr = WaitCore(flags, options, timeout_ticks, actual);
+
+        if (wr == WAIT_RESULT_SIGNAL)
+        {
+            // predicate satisfied: report the matched flags
+            final_result = (((options & OPT_WAIT_ALL) == OPT_WAIT_ALL) ? flags : (actual & flags));
+        }
+        else if (wr == WAIT_RESULT_CANCELED)
+        {
+            final_result = ERROR_CANCELED;
+        }
+        else if (wr == WAIT_RESULT_FAIL)
+        {
+            final_result = ERROR_FAIL;
+        }
+        else
+        {
+            final_result = ERROR_TIMEOUT;
+        }
+    }
+
+    return final_result;
+}
+
+inline EWaitResult EventFlags::WaitEx(uint32_t flags, uint32_t options,
+    Timeout timeout_ticks, uint32_t &actual_flags)
+{
+    EWaitResult result = WAIT_RESULT_FAIL;
+
+    if ((flags == 0U) || ((flags & ERROR_MASK) != 0U) ||
+        (hw::IsInsideISR() && (timeout_ticks != NO_WAIT)))
+    {
+        // invalid argument or blocking wait inside an ISR: wait is not performed
+        actual_flags = m_flags;
+    }
+    else
+    {
+        result = WaitCore(flags, options, timeout_ticks, actual_flags);
+    }
+
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Sync
+// ---------------------------------------------------------------------------
+
+inline EWaitResult EventFlags::Sync(SyncContext &ctx, uint32_t set_flags, uint32_t wait_flags,
+    Timeout timeout_ticks, uint32_t &actual_flags)
+{
+    EWaitResult result = WAIT_RESULT_FAIL;
+
+    if ((wait_flags == 0U) || ((wait_flags & ERROR_MASK) != 0U) || ((set_flags & ERROR_MASK) != 0U) ||
+        (hw::IsInsideISR() && (timeout_ticks != NO_WAIT)))
+    {
+        // invalid argument or blocking call inside an ISR: nothing is set, nothing is waited for
+        actual_flags = m_flags;
+    }
+    else
+    {
         const bool timed_wait = (timeout_ticks != WAIT_INFINITE) && (timeout_ticks != NO_WAIT);
 
-        // capture an absolute deadline once, before entering the wait loop,
-        // this prevents the timeout from being silently restarted on each
-        // spurious wakeup (e.g. a partial Set() that does not satisfy WAIT_ALL)
-        const Timeout deadline = (timed_wait ? 
+        // absolute deadline captured once (see WaitCore)
+        const Timeout deadline = (timed_wait ?
             static_cast<Timeout>(GetTicks() + timeout_ticks) : timeout_ticks);
 
         ScopedCriticalSection cs_;
 
-        // spin (with blocking) until the predicate is satisfied or we time out
-        while (!IsSatisfied(flags, options))
+        // set this task's bits and remember the rendezvous generation in the same critical section:
+        // the set-then-wait sequence is indivisible for every other task
+        m_flags |= set_flags;
+        const uint32_t gen = ctx.m_gen;
+
+        for (;;)
         {
+            if (ctx.m_gen != gen)
+            {
+                // released by the task which completed the rendezvous: it has already cleared the flags,
+                // so the predicate must not be re-evaluated here
+                actual_flags = ctx.m_snapshot;
+                result = WAIT_RESULT_SIGNAL;
+                break;
+            }
+
+            if (IsSatisfied(wait_flags, OPT_WAIT_ALL))
+            {
+                // this task completes the rendezvous (last arriver, or flags satisfied by a plain Set()):
+                // publish the snapshot, clear the group flags once and release every blocked participant
+                ctx.m_snapshot = m_flags;
+                m_flags &= ~wait_flags;
+                ++ctx.m_gen;
+                m_cv.NotifyAll_CS();
+
+                actual_flags = ctx.m_snapshot;
+                result = WAIT_RESULT_SIGNAL;
+                break;
+            }
+
             Timeout remaining = deadline;
             if (timed_wait)
             {
@@ -350,46 +608,27 @@ inline uint32_t EventFlags::Wait(uint32_t flags, uint32_t options, Timeout timeo
 
             const EWaitResult wr = m_cv.WaitEx(cs_, remaining);
 
-            if (wr == WAIT_RESULT_CANCELED)
+            if (wr != WAIT_RESULT_SIGNAL)
             {
-                // cancelled by IKernel::CancelTaskWait(): stop immediately, do not
-                // reinterpret as a timeout and do not keep spinning on the predicate
-                final_result = ERROR_CANCELED;
+                // timeout, cancellation or kernel failure; a completion which raced with the deadline is
+                // still honoured: re-check the generation before giving up
+                if (ctx.m_gen != gen)
+                {
+                    actual_flags = ctx.m_snapshot;
+                    result = WAIT_RESULT_SIGNAL;
+                }
+                else
+                {
+                    actual_flags = m_flags;
+                    result = wr;
+                }
                 break;
             }
-            else if (wr == WAIT_RESULT_FAIL)
-            {
-                // kernel rejected the wait: report it as such, not as a timeout
-                final_result = ERROR_FAIL;
-                break;
-            }
-            else if (wr != WAIT_RESULT_SIGNAL)
-            {
-                // timeout (either a real deadline miss, or NO_WAIT after 'remaining'
-                // collapsed to NO_WAIT): mark failure and flag the loop to terminate
-                final_result = ERROR_TIMEOUT;
-                break;
-            }
-            // else: WAIT_RESULT_SIGNAL - a Set() woke us for re-evaluation (possibly a
-            // spurious/partial match under WAIT_ALL); loop back and re-check IsSatisfied()
-        }
-
-        // If we didn't time out or get cancelled, the predicate was satisfied successfully
-        if ((final_result != ERROR_TIMEOUT) && (final_result != ERROR_CANCELED) &&
-            (final_result != ERROR_FAIL))
-        {
-            // predicate satisfied: determine which flags matched
-            final_result = (((options & OPT_WAIT_ALL) == OPT_WAIT_ALL) ? flags : (m_flags & flags));
-
-            // atomically clear the matched flags unless the caller opted out
-            if ((options & OPT_NO_CLEAR) == 0U)
-            {
-                m_flags &= ~final_result;
-            }
+            // else: woken for re-evaluation, loop back
         }
     }
 
-    return final_result;
+    return result;
 }
 
 } // namespace sync

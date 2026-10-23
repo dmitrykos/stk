@@ -32,9 +32,14 @@ stk::sync::EventFlags g_Flags(FLAG_A);  // constructed with FLAG_A pre-set
 |--------|-----------|-------------|
 | `Set` | `uint32_t Set(uint32_t flags)` | Atomically OR-sets the specified bits; wakes **all** current waiters so each can re-evaluate its predicate. Returns the flags word **after** setting. Returns `ERROR_PARAMETER` if `flags` is 0 or has bit 31 set. ISR-safe. |
 | `Clear` | `uint32_t Clear(uint32_t flags)` | Atomically clears the specified bits. Returns the flags word **before** clearing. Returns `ERROR_PARAMETER` if `flags` is 0 or has bit 31 set. ISR-safe. |
+| `And` | `uint32_t And(uint32_t mask)` | Atomically performs `flags &= mask`: bits that are 0 in `mask` are cleared, bits that are 1 are kept (the inverse of `Clear()`, equivalent of ThreadX `tx_event_flags_set(TX_AND)`). Any mask is valid, including `0` and `0xFFFFFFFF`. Returns the flags word **before** masking. Never wakes waiters and never reports an error. ISR-safe. |
 | `Get` | `uint32_t Get() const` | Non-destructive point-in-time snapshot of the flags word. Never blocks or modifies state. ISR-safe. |
 | `Wait` | `uint32_t Wait(uint32_t flags, uint32_t options = OPT_WAIT_ANY, Timeout timeout = WAIT_INFINITE)` | Blocks until the flag condition is satisfied or the timeout expires. On success, clears matched bits unless `OPT_NO_CLEAR` is set. Returns the matched bitmask on success, or an `ERROR_*` sentinel on failure. ISR-safe only with `timeout = NO_WAIT`. |
 | `TryWait` | `uint32_t TryWait(uint32_t flags, uint32_t options = OPT_WAIT_ANY)` | Non-blocking poll; equivalent to `Wait(flags, options, NO_WAIT)`. Returns matched bitmask on success, or `ERROR_TIMEOUT` immediately if the condition is not met. Never blocks. ISR-safe. |
+| `WaitEx` | `EWaitResult WaitEx(uint32_t flags, uint32_t options, Timeout timeout, uint32_t &actual_flags)` | Same wait semantics, but the status and the flags are reported separately: returns `WAIT_RESULT_SIGNAL` / `WAIT_RESULT_TIMEOUT` / `WAIT_RESULT_CANCELED` / `WAIT_RESULT_FAIL`, and `actual_flags` receives the **entire** flags word taken when the call completed, **before** any auto-clear (also on timeout, cancel and failure). Invalid arguments (`flags` is 0 or has bit 31 set) and a blocking call from an ISR return `WAIT_RESULT_FAIL` without waiting. ISR-safe only with `timeout = NO_WAIT`. |
+| `TryWaitEx` | `EWaitResult TryWaitEx(uint32_t flags, uint32_t options, uint32_t &actual_flags)` | Non-blocking form of `WaitEx()`. ISR-safe. |
+| `Sync` | `EWaitResult Sync(SyncContext &ctx, uint32_t set_flags, uint32_t wait_flags, Timeout timeout, uint32_t &actual_flags)` | Multi-task rendezvous (equivalent of FreeRTOS `xEventGroupSync()`): sets `set_flags` (may be 0), then waits until **all** `wait_flags` are set. The task which completes the condition clears `wait_flags` once and **every** task blocked on the same `ctx` is released. `actual_flags` is the whole word before that clear. Flags set by a task which times out stay set. Invalid arguments (`wait_flags` is 0, bit 31 in either mask) and a blocking call from an ISR return `WAIT_RESULT_FAIL` and set nothing. ISR-safe only with `timeout = NO_WAIT`. |
+| `SyncContext` | `struct EventFlags::SyncContext` | State of one rendezvous group (generation counter and flags snapshot), supplied by the caller and shared by all participants of the group. Independent groups on one object use separate contexts. All participants sharing a context must pass the same `wait_flags`. |
 | `IsError` | `static bool IsError(uint32_t result)` | Returns `true` if the return value carries an error sentinel (bit 31 set). Use after every `Set()`, `Clear()`, and `Wait()` call. |
 | `~EventFlags` | (destructor) | Asserts no dangling waiters via the internal `Mutex` and `ConditionVariable` destructors in debug builds. |
 
@@ -88,6 +93,16 @@ Options may be combined: `OPT_WAIT_ALL | OPT_NO_CLEAR`.
   does not modify the flags word. It leaves no stale waiter behind and does not affect
   other waiters. If a `Set()` already woke the waiter before the cancel arrives, the
   cancel is a no-op and the wait succeeds normally.
+- `And()` can only remove flags, so it never satisfies a wait condition and does not wake
+  waiters. A partial match that a `WAIT_ALL` waiter was woken for can be withdrawn with `And()`,
+  after which the waiter keeps blocking.
+- `WaitEx()` / `TryWaitEx()` report the **whole** flags word in `actual_flags` (taken
+  before the auto-clear), so the status is never encoded in a bit of the flags word.
+- `Sync()` completes a rendezvous in one step: the completing task snapshots the word, clears
+  `wait_flags` once and bumps the context generation; blocked participants are released by the
+  generation change instead of re-evaluating the (already cleared) condition. This is what
+  `Set()` followed by `Wait(OPT_WAIT_ALL)` cannot do. Rendezvous groups with separate contexts do not
+  release each other.
 - Destroying an `EventFlags` object while tasks are waiting is a logic error; an
   assertion fires in debug builds via the internal `Mutex` and `ConditionVariable`
   destructors.
@@ -106,16 +121,17 @@ Options may be combined: `OPT_WAIT_ALL | OPT_NO_CLEAR`.
 
 `g_Flags` is **reconstructed in-place** via placement-new inside `ResetTestState()`
 before each test. `ResetTestState()` accepts an `initial_flags` parameter forwarded
-directly to the `EventFlags` constructor, so the same helper serves all 22 tests
+directly to the `EventFlags` constructor, so the same helper serves all 31 tests
 without any additional per-test setup code. It also resets the cancellation state
-(see below).
+(see below) and the rendezvous contexts.
 
-Cancellation tests (11–22) use additional shared state, all cleared by `ResetTestState()`:
+Cancellation tests (18–31) use additional shared state, all cleared by `ResetTestState()`:
 
 | Variable | Purpose |
 |----------|---------|
 | `g_Victim` / `g_VictimTid` | Task (as `ITask *` and as `TId`) whose wait is cancelled; published by task 1 just before it blocks |
 | `g_VictimResult[2]` | Value returned by `Wait()` in task 1 / task 2 (`0` = not set; `Wait()` never returns 0) |
+| `g_VictimEx` / `g_VictimActual` | `EWaitResult` and `actual_flags` returned by `WaitEx()` in task 1 (`ExCanceled` only; `99` = not set) |
 | `g_VictimElapsed[2]` | Milliseconds spent inside `Wait()` by task 1 / task 2 |
 | `g_VictimSleepElapsed` | Milliseconds task 1 spent in `Sleep(60)` after its wait ended (`NoStaleWaiter` only) |
 
@@ -123,6 +139,9 @@ Cancellation tests (11–22) use additional shared state, all cleared by `ResetT
 `g_Kernel.CancelTaskWait(g_Victim)` or via `stk::SleepCancel(g_VictimTid)`. The
 scenario is selected by the `param` of `RunTest()`; adding `CW_VIA_SLEEPCANCEL` (`100`)
 switches the cancel path to `stk::SleepCancel()`.
+
+Rendezvous tests (15–17) use `g_SyncCtx[2]`, two `EventFlags::SyncContext` objects (one per
+rendezvous group) that `ResetTestState()` re-initializes before every test.
 
 Shared flag bit definitions used across all tests:
 
@@ -137,13 +156,13 @@ static const uint32_t FLAG_D = (1U << 3);
 
 ## Platform Notes
 
-On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link eleven
+On **Cortex-M0** (`__ARM_ARCH_6M__`) the device has insufficient RAM to link eighteen
 distinct task class templates simultaneously. Test 1 (`SetWaitAny`) runs on all
-platforms; tests 2–22 are skipped on M0 under `#ifndef __ARM_ARCH_6M__`.
+platforms; tests 2–31 are skipped on M0 under `#ifndef __ARM_ARCH_6M__`.
 
 `SetWaitAny` runs on M0 because it uses a single task class template
 (`SetWaitAnyTask`) instantiated for all five task slots, fitting within the available
-memory. Tests 2–22 introduce distinct task class templates (tests 11–22 share one,
+memory. Tests 2–31 introduce distinct task class templates (tests 18–31 share one,
 `CancelWaitTask`), multiplying the
 static memory footprint beyond what M0 can accommodate.
 
@@ -298,36 +317,145 @@ behavior.
 
 ---
 
-### Tests 11–22 — `CancelWait_*`
+### Test 11 — `And`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Initial flags:** `FLAG_A | FLAG_B | FLAG_C | FLAG_D`
+
+Single-task test of `And()`, no blocking. Task 0 applies, in order: `And(FLAG_A | FLAG_C)` (partial mask,
+`B` and `D` are cleared); `And(0xFFFFFFFF)` (no change); `And(FLAG_A | FLAG_B)` where `FLAG_B` is not set
+(`And()` must not set it); `And(~FLAG_A)` after `Set(FLAG_B)` (same effect as `Clear(FLAG_A)`); `And(0)`
+(clears everything); and `And(0)` on an empty word (no-op). After every call `Get()` is checked.
+
+**Pass condition:** every call returns the word **before** masking and `Get()` shows the expected word
+(`A|C`, `A|C`, `A`, `B`, `0`, `0`); no return value is an error sentinel.
+
+---
+
+### Test 12 — `AndWaiter`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Options:** `OPT_WAIT_ALL`
+
+Task 1 waits for `FLAG_A | FLAG_B` (`OPT_WAIT_ALL`, 100 ms timeout). Task 0 sets `FLAG_A` (partial match:
+task 1 wakes, re-evaluates and blocks again), then withdraws it with `And(~FLAG_A)` and sets `FLAG_B`,
+which would complete the match if `FLAG_A` were still there.
+
+**Pass condition:** task 1 times out (`ERROR_TIMEOUT`), `And()` returned `FLAG_A`, and the final flags word is
+`FLAG_B`.
+
+---
+
+### Test 13 — `WaitEx`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Task class:** `WaitExTask`
+
+Task 1 performs four consecutive waits with
+`WaitEx(flags, options, timeout, actual_flags)`; task 0 is the producer. The `actual_flags` variable is preloaded
+with a sentinel before every call. Each step that behaves as expected sets one bit of `g_SharedCounter`:
+
+| Step | Call | Expected |
+|------|------|----------|
+| 1 | `OPT_WAIT_ANY` on `FLAG_A` while `A\|C` are set | `WAIT_RESULT_SIGNAL`; `actual_flags == A\|C` (whole word, including the unrelated `FLAG_C`); only `FLAG_A` is cleared |
+| 2 | `OPT_WAIT_ALL` on `A\|B` while `A\|B\|D` are set on top of `C` | `WAIT_RESULT_SIGNAL`; `actual_flags == A\|B\|C\|D` (taken before the auto-clear); only `A\|B` are cleared |
+| 3 | `OPT_WAIT_ANY \| OPT_NO_CLEAR` on `FLAG_D` (fast path) | `WAIT_RESULT_SIGNAL`; `actual_flags == C\|D`; nothing cleared |
+| 4 | `OPT_WAIT_ANY` on `FLAG_A`, 40 ms timeout | `WAIT_RESULT_TIMEOUT` (not `SIGNAL`/`FAIL`/`CANCELED`) after `[35, 55]` ms; `actual_flags == C\|D`; flags untouched |
+
+**Pass condition:** `counter == 0xF`
+
+---
+
+### Test 14 — `PollEx`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Initial flags:** `FLAG_C`
+
+Single-task test of `TryWaitEx(flags, options, actual_flags)` and of the argument validation of
+`WaitEx()`, no blocking. Task 0 checks seven cases:
+
+1. `TryWaitEx(FLAG_A)` while only `FLAG_C` is set: not `SIGNAL`, `actual_flags == FLAG_C`, flags untouched.
+2. After `Set(FLAG_A)`: `OPT_WAIT_ANY | OPT_NO_CLEAR` returns `SIGNAL`, `actual_flags == A|C`, both flags stay set.
+3. `OPT_WAIT_ALL` on `A|B` with `FLAG_B` missing: not `SIGNAL`, nothing consumed.
+4. Successful `OPT_WAIT_ANY` poll on `FLAG_A`: `actual_flags == A|C` (word before the auto-clear), `FLAG_A` cleared.
+5. `WaitEx(0, ..., NO_WAIT, actual)` returns `WAIT_RESULT_FAIL`; `actual_flags` is still written; flags untouched.
+6. `WaitEx(0x80000000 | FLAG_C, ..., NO_WAIT, actual)` (bit 31) returns `WAIT_RESULT_FAIL`; same checks.
+7. The legacy `TryWait(FLAG_C)` is unchanged and shares the same state: returns `FLAG_C` and clears it.
+
+**Pass condition:** all seven checks hold.
+
+---
+
+### Test 15 — `Sync`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Task class:** `SyncTask` &nbsp;|&nbsp; **Context:** `g_SyncCtx[0]`
+
+Three tasks form one rendezvous group over two rounds with the same context. Task *i* calls
+`Sync(ctx, bit_i, FLAG_A | FLAG_B | FLAG_C, _STK_EF_TEST_TIMEOUT, actual)` with its own bit (`A`, `B`, `C`). In round 1 the
+tasks arrive at 0, 10 and 30 ms, so tasks 0 and 1 are already blocked when task 2 completes the rendezvous. In
+round 2 the order is reversed (30, 10, 0 ms) and the same context is reused. This is the scenario in which
+`Set()` followed by `Wait(OPT_WAIT_ALL)` loses participants, because the first task to wake clears the flags.
+
+**Pass condition:** every task returns `WAIT_RESULT_SIGNAL` with `actual_flags == A|B|C` in both rounds
+(`counter == 0x3F`, bits 0–2 = round 1, bits 3–5 = round 2) and the final flags word is `0`.
+
+---
+
+### Test 16 — `SyncTimeout`
+**Tasks:** 0–2 only &nbsp;|&nbsp; **Task class:** `SyncTimeoutTask`
+
+Single-task test of the non-rendezvous paths of `Sync()`; each step sets one bit of `g_SharedCounter`:
+
+| Bit | Step | Expected |
+|-----|------|----------|
+| `0x1` | `Sync(ctx, FLAG_A, A\|B, 40)` with nobody else joining | `WAIT_RESULT_TIMEOUT` after `[35, 55]` ms; `actual_flags == FLAG_A`; `FLAG_A` stays set (not rolled back) |
+| `0x2` | `Sync(ctx, 0, A\|B, NO_WAIT)` while the condition is not met | `WAIT_RESULT_TIMEOUT`; `actual_flags == FLAG_A` |
+| `0x4` | `Set(FLAG_B)`, then `Sync(ctx, 0, A\|B, NO_WAIT)` | `WAIT_RESULT_SIGNAL` immediately; `actual_flags == A\|B`; the group flags are cleared |
+| `0x8` | `wait_flags == 0`, bit 31 in `set_flags`, bit 31 in `wait_flags` | `WAIT_RESULT_FAIL` each time; nothing is set |
+
+**Pass condition:** `counter == 0xF`
+
+---
+
+### Test 17 — `SyncGroups`
+**Tasks:** 0–4 (task 4 idle) &nbsp;|&nbsp; **Task class:** `SyncGroupsTask` &nbsp;|&nbsp; **Contexts:** `g_SyncCtx[0]`, `g_SyncCtx[1]`
+
+Two independent rendezvous groups on one `EventFlags` object, each with its own context:
+
+- Group X (context 0, waits for `FLAG_A | FLAG_B`): task 0 arrives at 10 ms, task 1 at 30 ms.
+- Group Y (context 1, waits for `FLAG_C | FLAG_D`): task 2 arrives at 20 ms, task 3 at 60 ms.
+
+Group X completes at ~30 ms while task 2 is already blocked in group Y. Task 2 must **not** be released by that
+completion; it stays blocked until task 3 arrives.
+
+**Pass condition:** all four tasks return `WAIT_RESULT_SIGNAL`; group X tasks return after `[25, 50]` ms with
+`actual_flags == A|B|C` (the word includes `FLAG_C`, already set by task 2); group Y tasks return after
+`[55, 85]` ms with `actual_flags == C|D` (`A` and `B` were cleared by group X); the final flags word is `0`
+(`counter == 0xF`).
+
+---
+
+### Tests 18–31 — `CancelWait_*`
 **Tasks:** 0–2 only &nbsp;|&nbsp; **Task class:** `CancelWaitTask` &nbsp;|&nbsp; **Options:** `OPT_WAIT_ANY` unless noted
 
 Verify that a blocked `Wait()` can be cancelled and returns `ERROR_CANCELED`. Task 0 is the
 canceller and checker, task 1 is the victim blocked in `Wait()` from ~10 ms, and task 2 is
 a second waiter used only by the two-waiters scenario. Task 0 cancels at ~60 ms. All
-scenarios run through `IKernel::CancelTaskWait()`; the `SleepCancel` variants (tests 18–22)
+scenarios run through `IKernel::CancelTaskWait()`; the `SleepCancel` variants (tests 25–29 and 31)
 repeat a subset through `stk::SleepCancel()` to confirm both paths behave identically.
 
 If a cancel fails, task 0 sets `FLAG_A | FLAG_B` three times so any still-blocked waiter is
 released and the test fails instead of hanging the kernel.
 
-#### Test 11 — `CancelWait_Infinite`
+#### Test 18 — `CancelWait_Infinite`
 Task 1 calls `Wait(FLAG_A, OPT_WAIT_ANY, WAIT_INFINITE)` and is cancelled by task 0.
 
 **Pass condition:** result is `ERROR_CANCELED` and elapsed time is in `[35, 75]` ms.
 
-#### Test 12 — `CancelWait_NotTimeout`
+#### Test 19 — `CancelWait_NotTimeout`
 Task 1 waits with a 300 ms timeout and is cancelled long before it expires.
 
 **Pass condition:** result is `ERROR_CANCELED` (not `ERROR_TIMEOUT`) and elapsed time is below 150 ms.
 
-#### Test 13 — `CancelWait_NoStaleWaiter`
+#### Test 20 — `CancelWait_NoStaleWaiter`
 After the cancel, task 0 calls `Set(FLAG_A)` with nobody waiting, then `TryWait(FLAG_A)` twice.
 Task 1 meanwhile sleeps 60 ms; a ghost wait entry left by the cancel would wake it early.
 
 **Pass condition:** result is `ERROR_CANCELED`; `Set()` returns `FLAG_A`; first `TryWait()` returns
 `FLAG_A`; second returns an error; task 1 slept at least 55 ms.
 
-#### Test 14 — `CancelWait_FlagsUntouched`
+#### Test 21 — `CancelWait_FlagsUntouched`
 **Initial flags:** `FLAG_B`
 
 Task 1 waits for `FLAG_A` and is cancelled. Task 0 then checks that the cancel did not modify
@@ -337,19 +465,19 @@ the flags word, and that `Set()`, `OPT_NO_CLEAR` and auto-clear still work corre
 `Set(FLAG_A)` returns `FLAG_A | FLAG_B`; a `NO_CLEAR` poll returns `FLAG_A` and leaves both bits set; a
 normal poll returns `FLAG_A`; the final word is `FLAG_B`.
 
-#### Test 15 — `CancelWait_TwoWaiters`
+#### Test 22 — `CancelWait_TwoWaiters`
 Tasks 1 and 2 both wait for `FLAG_A`; only task 1 is cancelled. Task 0 then calls `Set(FLAG_A)`.
 
 **Pass condition:** task 1 gets `ERROR_CANCELED`; task 2 gets `FLAG_A`; a following `TryWait(FLAG_A)` fails
 (task 2 consumed the flag).
 
-#### Test 16 — `CancelWait_SignalWins`
+#### Test 23 — `CancelWait_SignalWins`
 Task 0 calls `Set(FLAG_A)` and `CancelTaskWait()` back to back with no scheduling point between them.
 The waiter has already been woken, so the cancel must be a no-op.
 
 **Pass condition:** task 1 gets `FLAG_A` (not an error) and a following `TryWait(FLAG_A)` fails.
 
-#### Test 17 — `CancelWait_WaitAllPartial`
+#### Test 24 — `CancelWait_WaitAllPartial`
 **Options:** `OPT_WAIT_ALL`
 
 Task 1 waits for `FLAG_A | FLAG_B`. Task 0 sets only `FLAG_A`: task 1 wakes, finds the condition
@@ -359,18 +487,33 @@ re-evaluation wakeup and that the partial match is not consumed.
 **Pass condition:** task 1 is still blocked after the partial `Set()`; result is `ERROR_CANCELED`; elapsed
 time is in `[45, 85]` ms; `Get()` is `FLAG_A`.
 
-#### Tests 18–22 — `CancelWait_SleepCancel*`
-Same scenarios as tests 11, 13, 15, 16 and 17, but cancelled through `stk::SleepCancel(tid)`:
+#### Tests 25–29 — `CancelWait_SleepCancel*`
+Same scenarios as tests 18, 20, 22, 23 and 24, but cancelled through `stk::SleepCancel(tid)`:
 
 | # | Test | Repeats |
 |---|------|---------|
-| 18 | `CancelWait_SleepCancel` | Test 11 (`Infinite`) |
-| 19 | `CancelWait_SleepCancelNoStale` | Test 13 (`NoStaleWaiter`) |
-| 20 | `CancelWait_SleepCancelTwo` | Test 15 (`TwoWaiters`) |
-| 21 | `CancelWait_SleepCancelSignal` | Test 16 (`SignalWins`) |
-| 22 | `CancelWait_SleepCancelAllPartial` | Test 17 (`WaitAllPartial`) |
+| 25 | `CancelWait_SleepCancel` | Test 18 (`Infinite`) |
+| 26 | `CancelWait_SleepCancelNoStale` | Test 20 (`NoStaleWaiter`) |
+| 27 | `CancelWait_SleepCancelTwo` | Test 22 (`TwoWaiters`) |
+| 28 | `CancelWait_SleepCancelSignal` | Test 23 (`SignalWins`) |
+| 29 | `CancelWait_SleepCancelAllPartial` | Test 24 (`WaitAllPartial`) |
 
 **Pass condition:** same as the corresponding test above.
+
+#### Test 30 — `CancelWait_ExCanceled`
+**Initial flags:** `FLAG_B`
+
+Task 1 blocks in `WaitEx(FLAG_A, OPT_WAIT_ANY, WAIT_INFINITE, actual_flags)` (with a sentinel
+preloaded into `actual_flags`) and is cancelled by task 0.
+
+**Pass condition:** the result is `WAIT_RESULT_CANCELED` (not `WAIT_RESULT_TIMEOUT`, not `WAIT_RESULT_SIGNAL`);
+`actual_flags` was overwritten with the whole word (`FLAG_B`) even though the wait was cancelled; the flags
+word is still `FLAG_B`; elapsed time is in `[35, 75]` ms.
+
+#### Test 31 — `CancelWait_SleepCancelEx`
+Test 30 cancelled through `stk::SleepCancel(tid)`.
+
+**Pass condition:** same as test 30.
 
 ---
 
@@ -388,15 +531,24 @@ Same scenarios as tests 11, 13, 15, 16 and 17, but cancelled through `stk::Sleep
 | 8 | `MultiWaiterAny` | 0–4 | `OPT_WAIT_ANY` | `counter == 4` | Concurrent `OPT_WAIT_ANY` waiters with disjoint flag masks are all released by one `Set()` without interfering |
 | 9 | `MultiWaiterAll` | 0–4 | `OPT_WAIT_ALL` | `counter == 4` | Multiple concurrent `OPT_WAIT_ALL` waiters each receive the full mask; producer re-stocks flags after each auto-clear |
 | 10 | `InitialFlags` | 0–2 | `OPT_WAIT_ANY` | `counter == 2` | Constructor `initial_flags` pre-sets bits; first `Wait()` fast-paths immediately; auto-clear blocks the second call |
-| 11 | `CancelWait_Infinite` | 0–2 | `OPT_WAIT_ANY` | `ERROR_CANCELED`, elapsed `[35, 75]` ms | Cancel ends an infinite wait with `ERROR_CANCELED` |
-| 12 | `CancelWait_NotTimeout` | 0–2 | `OPT_WAIT_ANY` | `ERROR_CANCELED`, elapsed `< 150` ms | A cancel is not reported as a timeout and ends a timed wait early |
-| 13 | `CancelWait_NoStaleWaiter` | 0–2 | `OPT_WAIT_ANY` | `Set`/`TryWait` behave normally, victim sleep `>= 55` ms | Cancel leaves no stale wait entry that could wake the task early |
-| 14 | `CancelWait_FlagsUntouched` | 0–2 | `OPT_WAIT_ANY`, `OPT_NO_CLEAR` | flags word stays `FLAG_B`, then `Set`/peek/take as expected | Cancel does not modify the flags word; later operations are unaffected |
-| 15 | `CancelWait_TwoWaiters` | 0–2 | `OPT_WAIT_ANY` | first `ERROR_CANCELED`, second `FLAG_A`, no leftover | Cancelling one waiter leaves the other waiter intact |
-| 16 | `CancelWait_SignalWins` | 0–2 | `OPT_WAIT_ANY` | victim gets `FLAG_A`, no leftover | A `Set()` that arrived first wins over a late cancel |
-| 17 | `CancelWait_WaitAllPartial` | 0–2 | `OPT_WAIT_ALL` | still blocked after partial `Set()`, then `ERROR_CANCELED`, flags `FLAG_A` | A `WAIT_ALL` waiter is cancelable after a partial-match wakeup and keeps the partial bits |
-| 18 | `CancelWait_SleepCancel` | 0–2 | `OPT_WAIT_ANY` | as test 11 | Test 11 via `stk::SleepCancel()` |
-| 19 | `CancelWait_SleepCancelNoStale` | 0–2 | `OPT_WAIT_ANY` | as test 13 | Test 13 via `stk::SleepCancel()` |
-| 20 | `CancelWait_SleepCancelTwo` | 0–2 | `OPT_WAIT_ANY` | as test 15 | Test 15 via `stk::SleepCancel()` |
-| 21 | `CancelWait_SleepCancelSignal` | 0–2 | `OPT_WAIT_ANY` | as test 16 | Test 16 via `stk::SleepCancel()` |
-| 22 | `CancelWait_SleepCancelAllPartial` | 0–2 | `OPT_WAIT_ALL` | as test 17 | Test 17 via `stk::SleepCancel()` |
+| 11 | `And` | 0–2 | — | pre-mask return and `Get()` as expected for 6 masks | `And()` keeps masked bits, never sets bits, `0` clears all, `~flag` equals `Clear()`; returns the pre-mask word and never an error |
+| 12 | `AndWaiter` | 0–2 | `OPT_WAIT_ALL` | `ERROR_TIMEOUT`, `And()` returns `FLAG_A`, flags `FLAG_B` | `And()` withdraws a partial match; a `WAIT_ALL` waiter keeps blocking |
+| 13 | `WaitEx` | 0–2 | `ANY`, `ALL`, `NO_CLEAR` | `counter == 0xF` | `WaitEx()` reports `EWaitResult` separately and the whole pre-clear word in `actual_flags`; timeout is `WAIT_RESULT_TIMEOUT` |
+| 14 | `PollEx` | 0–2 | `ANY`, `ALL`, `NO_CLEAR` | all 7 checks hold | `TryWaitEx()` snapshot; `WAIT_RESULT_FAIL` on invalid arguments; legacy overload unchanged |
+| 15 | `Sync` | 0–2 | — | `counter == 0x3F`, flags `0` | 3-task rendezvous releases **all** participants, over 2 rounds with a reused context |
+| 16 | `SyncTimeout` | 0–2 | — | `counter == 0xF` | `Sync()` timeout (set bits stay set), `NO_WAIT`, immediate completion by `Set()`, argument validation |
+| 17 | `SyncGroups` | 0–4 | — | `counter == 0xF`, flags `0` | Independent rendezvous groups with separate contexts do not release each other |
+| 18 | `CancelWait_Infinite` | 0–2 | `OPT_WAIT_ANY` | `ERROR_CANCELED`, elapsed `[35, 75]` ms | Cancel ends an infinite wait with `ERROR_CANCELED` |
+| 19 | `CancelWait_NotTimeout` | 0–2 | `OPT_WAIT_ANY` | `ERROR_CANCELED`, elapsed `< 150` ms | A cancel is not reported as a timeout and ends a timed wait early |
+| 20 | `CancelWait_NoStaleWaiter` | 0–2 | `OPT_WAIT_ANY` | `Set`/`TryWait` behave normally, victim sleep `>= 55` ms | Cancel leaves no stale wait entry that could wake the task early |
+| 21 | `CancelWait_FlagsUntouched` | 0–2 | `OPT_WAIT_ANY`, `OPT_NO_CLEAR` | flags word stays `FLAG_B`, then `Set`/peek/take as expected | Cancel does not modify the flags word; later operations are unaffected |
+| 22 | `CancelWait_TwoWaiters` | 0–2 | `OPT_WAIT_ANY` | first `ERROR_CANCELED`, second `FLAG_A`, no leftover | Cancelling one waiter leaves the other waiter intact |
+| 23 | `CancelWait_SignalWins` | 0–2 | `OPT_WAIT_ANY` | victim gets `FLAG_A`, no leftover | A `Set()` that arrived first wins over a late cancel |
+| 24 | `CancelWait_WaitAllPartial` | 0–2 | `OPT_WAIT_ALL` | still blocked after partial `Set()`, then `ERROR_CANCELED`, flags `FLAG_A` | A `WAIT_ALL` waiter is cancelable after a partial-match wakeup and keeps the partial bits |
+| 25 | `CancelWait_SleepCancel` | 0–2 | `OPT_WAIT_ANY` | as test 18 | Test 18 via `stk::SleepCancel()` |
+| 26 | `CancelWait_SleepCancelNoStale` | 0–2 | `OPT_WAIT_ANY` | as test 20 | Test 20 via `stk::SleepCancel()` |
+| 27 | `CancelWait_SleepCancelTwo` | 0–2 | `OPT_WAIT_ANY` | as test 22 | Test 22 via `stk::SleepCancel()` |
+| 28 | `CancelWait_SleepCancelSignal` | 0–2 | `OPT_WAIT_ANY` | as test 23 | Test 23 via `stk::SleepCancel()` |
+| 29 | `CancelWait_SleepCancelAllPartial` | 0–2 | `OPT_WAIT_ALL` | as test 24 | Test 24 via `stk::SleepCancel()` |
+| 30 | `CancelWait_ExCanceled` | 0–2 | `OPT_WAIT_ANY` | `WAIT_RESULT_CANCELED`, `actual_flags == FLAG_B`, elapsed `[35, 75]` ms | Cancel of `WaitEx()` reports `WAIT_RESULT_CANCELED` and still writes the flags snapshot; flags word untouched |
+| 31 | `CancelWait_SleepCancelEx` | 0–2 | `OPT_WAIT_ANY` | as test 30 | Test 30 via `stk::SleepCancel()` |

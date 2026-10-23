@@ -1620,6 +1620,20 @@ uint32_t stk_ef_set(stk_ef_t *ef, uint32_t flags);
 */
 uint32_t stk_ef_clear(stk_ef_t *ef, uint32_t flags);
 
+/*! \brief     AND the flags word with a mask (equivalent of ThreadX tx_event_flags_set(TX_AND)).
+    \details   Atomically performs <tt>flags &= mask</tt>: every flag bit that is 0 in \a mask is
+               cleared, every flag bit that is 1 in \a mask is preserved. This is the inverse of
+               stk_ef_clear(), which clears the bits that are 1 in its argument. Any \a mask value
+               is valid, including 0 (clears all flags) and 0xFFFFFFFF (no change).
+    \param[in] ef: EventFlags handle.
+    \param[in] mask: Bitmask of flags to \b keep.
+    \return    Flags word value \b before masking.
+    \note      Does not wake waiters: this operation can only remove flags, so it can never
+               satisfy a pending wait condition.
+    \note      ISR-safe.
+*/
+uint32_t stk_ef_and(stk_ef_t *ef, uint32_t mask);
+
 /*! \brief     Read the current flags word without modifying it.
     \param[in] ef: EventFlags handle.
     \return    Point-in-time snapshot of the 32-bit flags word.
@@ -1663,6 +1677,96 @@ uint32_t stk_ef_wait(stk_ef_t *ef, uint32_t flags, uint32_t options, stk_timeout
     \note      ISR-safe.
 */
 uint32_t stk_ef_trywait(stk_ef_t *ef, uint32_t flags, uint32_t options);
+
+/*! \brief     Wait for one or more flags to be set, reporting the outcome as stk_wait_result_t.
+    \details   Same wait semantics as stk_ef_wait(), but the status and the flags word are reported
+               separately, so no bit of the flags word is overloaded as an error indicator
+               (equivalent of ThreadX tx_event_flags_get() with \c actual_flags).
+    \param[in]  ef: EventFlags handle.
+    \param[in]  flags: Bitmask of flag bits to watch. Must not be 0 and must not have bit 31 set.
+    \param[in]  options: Combination of \c STK_EF_OPT_WAIT_ANY / \c STK_EF_OPT_WAIT_ALL
+                and optionally \c STK_EF_OPT_NO_CLEAR.
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking poll.
+    \param[out] actual_flags: Snapshot of the \b entire flags word taken when the call completed,
+                \b before any auto-clear is applied. On \c STK_WAIT_RESULT_SIGNAL the matched subset
+                is <tt>*actual_flags & flags</tt> (WAIT_ANY) or \a flags (WAIT_ALL). On timeout,
+                cancellation or failure it is the current flags word at that moment. May be \c NULL
+                if the snapshot is not needed.
+    \return    \c STK_WAIT_RESULT_SIGNAL if the condition was met (matched flags cleared unless
+               \c STK_EF_OPT_NO_CLEAR), otherwise \c STK_WAIT_RESULT_TIMEOUT,
+               \c STK_WAIT_RESULT_CANCELED or \c STK_WAIT_RESULT_FAIL.
+    \note      Invalid arguments (\a flags is 0 or has bit 31 set) and a blocking wait from an ISR
+               are reported as \c STK_WAIT_RESULT_FAIL, and the wait is not performed. Use
+               stk_ef_wait() if the distinct \c STK_EF_ERROR_PARAMETER / \c STK_EF_ERROR_ISR codes
+               are needed.
+    \note      If OS tick rate is 1 kHz then 1 tick = 1 ms. Use \c stk_ticks_from_ms()
+               to convert a millisecond value to ticks for best portability across
+               different tick rates.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_ef_wait_ex(stk_ef_t *ef, uint32_t flags, uint32_t options, stk_timeout_t timeout,
+                                 uint32_t *actual_flags);
+
+/*! \brief      Non-blocking flag poll with stk_wait_result_t and full flags snapshot.
+    \param[in]  ef: EventFlags handle.
+    \param[in]  flags: Bitmask of flag bits to watch.
+    \param[in]  options: \c STK_EF_OPT_WAIT_ANY or \c STK_EF_OPT_WAIT_ALL, optionally
+                OR-ed with \c STK_EF_OPT_NO_CLEAR.
+    \param[out] actual_flags: Snapshot of the entire flags word (see stk_ef_wait_ex()). May be \c NULL.
+    \return     \c STK_WAIT_RESULT_SIGNAL if satisfied, otherwise a non-signal result.
+    \note       ISR-safe.
+*/
+stk_wait_result_t stk_ef_trywait_ex(stk_ef_t *ef, uint32_t flags, uint32_t options, uint32_t *actual_flags);
+
+/*! \brief     A memory size (multiples of stk_word_t) required for a rendezvous context of stk_ef_sync().
+*/
+#define STK_EF_SYNC_CTX_IMPL_SIZE (2U)
+
+/*! \brief     Opaque memory container for a rendezvous context.
+*/
+typedef struct stk_ef_sync_ctx_mem_t {
+    stk_word_t data[STK_EF_SYNC_CTX_IMPL_SIZE] __stk_c_aligned;
+} stk_ef_sync_ctx_mem_t;
+
+/*! \brief     Opaque handle to a rendezvous context.
+    \details   One context represents one rendezvous group: it is shared by all tasks which call
+               stk_ef_sync() together (e.g. a global next to the EventFlags object).
+*/
+typedef struct stk_ef_sync_ctx_t stk_ef_sync_ctx_t;
+
+/*! \brief     Create a rendezvous context (using provided memory).
+    \param[in] membuf: Memory container. It must outlive all calls using the context.
+    \return    Rendezvous context handle.
+*/
+stk_ef_sync_ctx_t *stk_ef_sync_ctx_create(stk_ef_sync_ctx_mem_t *const membuf);
+
+/*! \brief     Destroy a rendezvous context.
+    \param[in] ctx: Rendezvous context handle. No task may be blocked on it.
+*/
+void stk_ef_sync_ctx_destroy(stk_ef_sync_ctx_t *ctx);
+
+/*! \brief     Atomically set flags and wait for a group of flags: a multi-task rendezvous
+               (equivalent of FreeRTOS xEventGroupSync()).
+    \details   Sets \a set_flags, then blocks until \b all of \a wait_flags are set. Unlike
+               stk_ef_set() followed by stk_ef_wait(STK_EF_OPT_WAIT_ALL), the task which completes the
+               condition clears \a wait_flags once and \b every task blocked on the same \a ctx is released.
+    \param[in]  ef: EventFlags handle.
+    \param[in]  ctx: Rendezvous context shared by all participants of the group.
+    \param[in]  set_flags: Flags to set on entry. May be 0. Must not have bit 31 set.
+    \param[in]  wait_flags: Flags which must all be set to release the group. Must not be 0 and must
+                not have bit 31 set. All participants sharing one \a ctx must pass the same value.
+    \param[in]  timeout: Maximum time to wait in OS ticks or \a STK_WAIT_INFINITE.
+                Use \c STK_NO_WAIT for a non-blocking attempt.
+    \param[out] actual_flags: Snapshot of the entire flags word when the rendezvous completed, before
+                \a wait_flags were cleared (current flags word on timeout / cancellation / failure).
+                May be \c NULL.
+    \return    \c STK_WAIT_RESULT_SIGNAL if the rendezvous completed, otherwise
+               \c STK_WAIT_RESULT_TIMEOUT, \c STK_WAIT_RESULT_CANCELED or \c STK_WAIT_RESULT_FAIL.
+    \warning   ISR-safe only with timeout = \c STK_NO_WAIT, ISR-unsafe otherwise.
+*/
+stk_wait_result_t stk_ef_sync(stk_ef_t *ef, stk_ef_sync_ctx_t *ctx, uint32_t set_flags, uint32_t wait_flags,
+                              stk_timeout_t timeout, uint32_t *actual_flags);
 
 #ifdef __cplusplus
 namespace stk { namespace sync { class EventFlags; } }

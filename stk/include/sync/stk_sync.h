@@ -26,7 +26,7 @@
     | Primitive             | ISR Safe Methods                                                                                                                                   |
     | :-------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
     | **Event**             | \c Set(), \c Pulse(), \c Reset(), \c TryWait()                                                                                                     |
-    | **EventFlags**        | \c Set(), \c Clear(), \c Get(), \c TryWait(), \c Wait(NO_WAIT)                                                                                     |
+    | **EventFlags**        | \c Set(), \c Clear(), \c And(), \c Get(), \c TryWait(), \c Wait(NO_WAIT), \c TryWaitEx(), \c WaitEx(NO_WAIT), \c Sync(NO_WAIT)                     |
     | **Semaphore**         | \c Signal(), \c TryWait()                                                                                                                          |
     | **SpinLock**          | \c None                                                                                                                                            |
     | **Mutex**             | \c None                                                                                                                                            |

@@ -698,6 +698,50 @@ static __stk_forceinline uint32_t StkFlagsResultToCmsis(uint32_t result)
     return cmsis_result;
 }
 
+// Helper: wait on an STK EventFlags object with CMSIS semantics.
+//
+// Uses EventFlags::WaitEx(), which reports the status and the flags word
+// separately: on success the result is the WHOLE flags word as it was before the matched bits were
+// cleared, which is what osEventFlagsWait()/osThreadFlagsWait() are specified to return.
+// Argument and ISR checks are done here because the overload folds them into WAIT_RESULT_FAIL.
+static uint32_t CmsisFlagsWait(stk::sync::EventFlags &ef, uint32_t flags, uint32_t options, uint32_t timeout)
+{
+    uint32_t result;
+    const stk::Timeout stk_timeout = CmsisTimeoutToStk(timeout);
+
+    if ((flags == 0U) || ((flags & osFlagsError) != 0U))
+    {
+        result = osFlagsErrorParameter;
+    }
+    else if (IsIrqContext() && (stk_timeout != stk::NO_WAIT))
+    {
+        result = osFlagsErrorISR;
+    }
+    else
+    {
+        uint32_t actual = 0U;
+
+        switch (ef.WaitEx(flags, CmsisFlagsOptionsToStk(options), stk_timeout, actual))
+        {
+        case stk::WAIT_RESULT_SIGNAL:
+            result = actual;
+            break;
+
+        case stk::WAIT_RESULT_TIMEOUT:
+            result = osFlagsErrorTimeout;
+            break;
+
+        case stk::WAIT_RESULT_CANCELED: // CMSIS has no "canceled" flags status
+        case stk::WAIT_RESULT_FAIL:
+        default:
+            result = osFlagsErrorUnknown;
+            break;
+        }
+    }
+
+    return result;
+}
+
 
 // ===========================================================================
 // ==== Kernel Management Functions ====
@@ -1629,8 +1673,7 @@ uint32_t osThreadFlagsWait(uint32_t flags, uint32_t options, uint32_t timeout)
         else
         {
             StkThread *th = static_cast<StkThread *>(self);
-            result = StkFlagsResultToCmsis(th->m_thread_flags.Wait(flags,
-                CmsisFlagsOptionsToStk(options), CmsisTimeoutToStk(timeout)));
+            result = CmsisFlagsWait(th->m_thread_flags, flags, options, timeout);
         }
     }
 
@@ -1939,8 +1982,7 @@ uint32_t osEventFlagsWait(osEventFlagsId_t ef_id, uint32_t flags, uint32_t optio
     }
     else
     {
-        result = StkFlagsResultToCmsis(static_cast<StkEventFlags *>(ef_id)->m_ef.Wait(flags,
-            CmsisFlagsOptionsToStk(options), CmsisTimeoutToStk(timeout)));
+        result = CmsisFlagsWait(static_cast<StkEventFlags *>(ef_id)->m_ef, flags, options, timeout);
     }
 
     return result;

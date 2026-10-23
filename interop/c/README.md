@@ -602,7 +602,7 @@ stk_mutex_destroy(mtx);
 
 `stk_mutex_timed_lock_ex()` returns a `stk_wait_result_t` instead of a bool, to tell a
 timeout from a cancellation. The same `_ex` form exists for FastMutex, Semaphore, Event,
-Reader-Writer Lock, Pipe and Message Queue calls.
+EventFlags, Reader-Writer Lock, Pipe and Message Queue calls.
 
 ### FastMutex
 
@@ -767,8 +767,63 @@ fired = stk_ef_trywait(ef, EVT_BUTTON, STK_EF_OPT_WAIT_ANY);
 uint32_t snapshot = stk_ef_get(ef);                 /* read only, ISR-safe */
 uint32_t before   = stk_ef_clear(ef, EVT_UART_RX);  /* returns flags before clearing, ISR-safe */
 
+/* Keep only the masked bits (flags &= mask), the inverse of stk_ef_clear(); returns flags before masking.
+   Any mask is valid (0 clears everything). Never wakes waiters. ISR-safe. */
+before = stk_ef_and(ef, EVT_BUTTON);
+
 stk_ef_destroy(ef);
 ```
+
+`stk_ef_wait()` reports errors as sentinels in bit 31 of the returned word, so a status and the flags share
+one value. `stk_ef_wait_ex()` and `stk_ef_trywait_ex()` return a `stk_wait_result_t` and give the flags
+separately through an out parameter (pass `NULL` if the snapshot is not needed):
+
+```c
+uint32_t actual;
+stk_wait_result_t r = stk_ef_wait_ex(ef, EVT_BUTTON | EVT_UART_RX,
+                                     STK_EF_OPT_WAIT_ANY, 100 /* ticks */, &actual);
+
+if (r == STK_WAIT_RESULT_SIGNAL)
+{
+    /* actual is the WHOLE flags word taken before auto-clear;
+       matched bits: actual & (EVT_BUTTON | EVT_UART_RX) for WAIT_ANY, the requested mask for WAIT_ALL */
+}
+else if (r == STK_WAIT_RESULT_TIMEOUT)  { /* condition not met in time */ }
+else if (r == STK_WAIT_RESULT_CANCELED) { /* wait was cancelled by another task */ }
+else                                    { /* STK_WAIT_RESULT_FAIL: flags is 0 / has bit 31 set, or blocking wait from ISR */ }
+
+r = stk_ef_trywait_ex(ef, EVT_BUTTON, STK_EF_OPT_WAIT_ANY, &actual);  /* non-blocking, ISR-safe */
+```
+
+Unlike `stk_ef_wait()`, the `_ex` forms do not distinguish invalid arguments from an ISR misuse (both are
+`STK_WAIT_RESULT_FAIL`).
+
+`stk_ef_sync()` is a multi-task rendezvous (barrier): it sets this task's bits and waits until **all** of
+`wait_flags` are set. The task which completes the condition clears `wait_flags` once and **every** task
+blocked on the same rendezvous context is released, which a `stk_ef_set()` followed by
+`stk_ef_wait(STK_EF_OPT_WAIT_ALL)` cannot do (the first task to run would clear the bits and the others
+would block again). The context (`stk_ef_sync_ctx_t`) holds the state of one rendezvous group and is shared
+by all of its participants:
+
+```c
+#define EVT_A (1u << 0)
+#define EVT_B (1u << 1)
+
+static stk_ef_sync_ctx_mem_t sync_mem;
+stk_ef_sync_ctx_t *sync = stk_ef_sync_ctx_create(&sync_mem);   /* shared by task A and task B */
+
+/* Task A: */
+uint32_t actual;
+stk_wait_result_t r = stk_ef_sync(ef, sync, EVT_A, EVT_A | EVT_B, STK_WAIT_INFINITE, &actual);
+/* Task B: */
+r = stk_ef_sync(ef, sync, EVT_B, EVT_A | EVT_B, STK_WAIT_INFINITE, &actual);
+/* both return STK_WAIT_RESULT_SIGNAL once both have arrived */
+
+stk_ef_sync_ctx_destroy(sync);
+```
+
+All participants sharing one context must pass the same `wait_flags`; independent groups on the same
+EventFlags object use separate contexts.
 
 ### Pipe
 
